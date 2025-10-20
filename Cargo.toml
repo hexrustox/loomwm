@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bitflags = "2.10.0"
+smithay = { version = "0.7.0", default-features = false, features = [
+  "backend_winit",
+  "wayland_frontend",
+  "desktop",
+] }
