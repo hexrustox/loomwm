@@ -15,7 +15,7 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         mkShell = import ./nix/shell.nix pkgs;
-        override = import ./nix/override.nix;
+        override = import ./nix/override.nix pkgs;
       in
       {
         devShells.default = mkShell (
@@ -37,7 +37,7 @@
                 rust-analyzer
                 codebook
               ]
-              ++ override.buildInputs pkgs;
+              ++ override.buildInputs;
           }
         );
       }

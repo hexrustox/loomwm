@@ -1,8 +1,10 @@
 services:
   dev:
     container_name: $CONTAINER_NAME
-    # volumes:
-    #   - ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:ro
-    # environment:
-    #   - XDG_RUNTIME_DIR
-    #   - WAYLAND_DISPLAY
+    volumes:
+      - ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:ro
+    environment:
+      - XDG_RUNTIME_DIR
+      - WAYLAND_DISPLAY
+    devices:
+      - /dev/dri
