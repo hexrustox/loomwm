@@ -32,19 +32,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     crate::winit::init_winit(&mut event_loop, &mut data)?;
 
-    let mut args = std::env::args().skip(1);
-    let flag = args.next();
-    let arg = args.next();
-
-    match (flag.as_deref(), arg) {
-        (Some("-c") | Some("--command"), Some(command)) => {
-            std::process::Command::new(command).spawn().ok();
-        }
-        _ => {
-            std::process::Command::new("hello-wayland").spawn().ok();
-        }
-    }
-
     event_loop.run(None, &mut data, move |_| {
         // Smallvil is running
     })?;

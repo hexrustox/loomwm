@@ -1,7 +1,7 @@
 use smithay::{
     backend::input::{
         AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent,
-        KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent,
+        KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent,
     },
     input::{
         keyboard::FilterResult,
@@ -10,6 +10,7 @@ use smithay::{
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::SERIAL_COUNTER,
 };
+use xkbcommon::xkb::Keysym;
 
 use crate::state::Smallvil;
 
@@ -26,7 +27,19 @@ impl Smallvil {
                     event.state(),
                     serial,
                     time,
-                    |_, _, _| FilterResult::Forward,
+                    |_, _, keysym| {
+                        if event.state() == KeyState::Released || {
+                            let boo = keysym.modified_sym() == Keysym::Return;
+                            if boo {
+                                std::process::Command::new("hello-wayland").spawn().ok();
+                            }
+                            boo
+                        } {
+                            FilterResult::Intercept(())
+                        } else {
+                            FilterResult::Forward
+                        }
+                    },
                 );
             }
             InputEvent::PointerMotion { .. } => {}
@@ -102,12 +115,12 @@ impl Smallvil {
             InputEvent::PointerAxis { event, .. } => {
                 let source = event.source();
 
-                let horizontal_amount = event
-                    .amount(Axis::Horizontal)
-                    .unwrap_or_else(|| event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.);
-                let vertical_amount = event
-                    .amount(Axis::Vertical)
-                    .unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.);
+                let horizontal_amount = event.amount(Axis::Horizontal).unwrap_or_else(|| {
+                    event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.
+                });
+                let vertical_amount = event.amount(Axis::Vertical).unwrap_or_else(|| {
+                    event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.
+                });
                 let horizontal_amount_discrete = event.amount_v120(Axis::Horizontal);
                 let vertical_amount_discrete = event.amount_v120(Axis::Vertical);
 
