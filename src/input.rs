@@ -27,13 +27,20 @@ impl Smallvil {
                     event.state(),
                     serial,
                     time,
-                    |_, _, keysym| {
+                    |this, _, keysym| {
                         if event.state() == KeyState::Released || {
-                            let boo = keysym.modified_sym() == Keysym::Return;
-                            if boo {
+                            let keysym = keysym.modified_sym();
+                            if keysym == Keysym::Return {
                                 std::process::Command::new("hello-wayland").spawn().ok();
+                                true
+                            } else if keysym == Keysym::Delete {
+                                if let Some(last) = this.space.elements().last() {
+                                    last.toplevel().unwrap().send_close();
+                                }
+                                true
+                            } else {
+                                false
                             }
-                            boo
                         } {
                             FilterResult::Intercept(())
                         } else {
