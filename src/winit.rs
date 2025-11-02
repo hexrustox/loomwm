@@ -3,14 +3,15 @@ use std::time::Duration;
 use smithay::{
     backend::{
         renderer::{
-            damage::OutputDamageTracker, element::surface::WaylandSurfaceRenderElement,
+            damage::OutputDamageTracker,
+            element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
             gles::GlesRenderer,
         },
         winit::{self, WinitEvent},
     },
     output::{Mode, Output, PhysicalProperties, Subpixel},
     reexports::calloop::EventLoop,
-    utils::{Rectangle, Transform},
+    utils::{Scale, Transform},
 };
 
 use crate::{CalloopData, Smallvil};
@@ -74,30 +75,37 @@ pub fn init_winit(
                 }
                 WinitEvent::Input(event) => state.process_input_event(event),
                 WinitEvent::Redraw => {
-                    let size = backend.window_size();
-                    let damage = Rectangle::from_size(size);
-
-                    {
+                    let res = {
+                        let age = backend.buffer_age().unwrap_or_default();
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
-                        smithay::desktop::space::render_output::<
-                            _,
-                            WaylandSurfaceRenderElement<GlesRenderer>,
-                            _,
-                            _,
-                        >(
-                            &output,
-                            renderer,
-                            &mut framebuffer,
-                            1.0,
-                            0,
-                            [&state.space],
-                            &[],
-                            &mut damage_tracker,
-                            [0.1, 0.1, 0.1, 1.0],
-                        )
-                        .unwrap();
+
+                        let mut vec = vec![];
+                        let output_scale = output.current_scale().fractional_scale();
+
+                        for window in state.space.elements() {
+                            let loc: smithay::utils::Point<i32, smithay::utils::Physical> = state
+                                .space
+                                .element_location(window)
+                                .unwrap()
+                                .to_physical_precise_round(output_scale);
+                            vec.extend(
+                                window
+                                    .render_elements::<WaylandSurfaceRenderElement<GlesRenderer>>(
+                                        renderer,
+                                        loc,
+                                        Scale::from(output_scale),
+                                        1.0,
+                                    ),
+                            );
+                        }
+
+                        damage_tracker
+                            .render_output(renderer, &mut framebuffer, age, &vec, [0.1; 4])
+                            .unwrap()
+                    };
+                    if let Some(damage) = res.damage {
+                        backend.submit(Some(damage)).unwrap();
                     }
-                    backend.submit(Some(&[damage])).unwrap();
 
                     state.space.elements().for_each(|window| {
                         window.send_frame(
