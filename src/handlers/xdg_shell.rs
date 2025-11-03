@@ -46,7 +46,7 @@ impl XdgShellHandler for Smallvil {
             serial,
         );
 
-        self.windows.map_element(window, (0, 0), false);
+        self.windows.map_element(window, (0, 0), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -57,13 +57,19 @@ impl XdgShellHandler for Smallvil {
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         self.windows
             .unmap_element(LookForWindowBy::Surface(surface.wl_surface()));
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = SERIAL_COUNTER.next_serial();
+
         if let Some(w) = self.windows.elements().last() {
-            let serial = SERIAL_COUNTER.next_serial();
-            self.seat.get_keyboard().unwrap().set_focus(
+            let w = w.clone();
+            keyboard.set_focus(
                 self,
                 Some(w.toplevel().unwrap().wl_surface().clone()),
                 serial,
             );
+            self.windows.raise_element(&w, true);
+        } else {
+            keyboard.set_focus(self, None, serial);
         }
     }
 
