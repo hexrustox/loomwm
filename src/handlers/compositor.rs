@@ -35,7 +35,7 @@ impl CompositorHandler for Smallvil {
                 root = parent;
             }
             if let Some(window) = self
-                .space
+                .windows
                 .elements()
                 .find(|w| w.toplevel().unwrap().wl_surface() == &root)
             {
@@ -43,8 +43,8 @@ impl CompositorHandler for Smallvil {
             }
         };
 
-        xdg_shell::handle_commit(&mut self.popups, &self.space, surface);
-        resize_grab::handle_commit(&mut self.space, surface);
+        xdg_shell::handle_commit(&mut self.popups, &self.windows, surface);
+        resize_grab::handle_commit(&mut self.windows, surface);
     }
 }
 

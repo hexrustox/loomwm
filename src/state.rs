@@ -22,7 +22,7 @@ use smithay::{
     },
 };
 
-use crate::CalloopData;
+use crate::{CalloopData, window::MyWindowWrapper};
 
 pub struct Smallvil {
     pub start_time: std::time::Instant,
@@ -42,6 +42,8 @@ pub struct Smallvil {
     pub popups: PopupManager,
 
     pub seat: Seat<Self>,
+
+    pub windows: MyWindowWrapper,
 }
 
 impl Smallvil {
@@ -97,6 +99,8 @@ impl Smallvil {
             data_device_state,
             popups,
             seat,
+
+            windows: MyWindowWrapper::new(),
         }
     }
 
@@ -149,7 +153,7 @@ impl Smallvil {
         &self,
         pos: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.space
+        self.windows
             .element_under(pos)
             .and_then(|(window, location)| {
                 window

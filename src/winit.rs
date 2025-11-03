@@ -2,11 +2,7 @@ use std::time::Duration;
 
 use smithay::{
     backend::{
-        renderer::{
-            damage::OutputDamageTracker,
-            element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
-            gles::GlesRenderer,
-        },
+        renderer::{damage::OutputDamageTracker, gles::GlesRenderer},
         winit::{self, WinitEvent},
     },
     output::{Mode, Output, PhysicalProperties, Subpixel},
@@ -79,35 +75,29 @@ pub fn init_winit(
                         let age = backend.buffer_age().unwrap_or_default();
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
-                        let mut vec = vec![];
                         let output_scale = output.current_scale().fractional_scale();
+                        let scale = Scale::from(output_scale);
 
-                        for window in state.space.elements() {
-                            let loc: smithay::utils::Point<i32, smithay::utils::Physical> = state
-                                .space
-                                .element_location(window)
-                                .unwrap()
-                                .to_physical_precise_round(output_scale);
-                            vec.extend(
-                                window
-                                    .render_elements::<WaylandSurfaceRenderElement<GlesRenderer>>(
-                                        renderer,
-                                        loc,
-                                        Scale::from(output_scale),
-                                        1.0,
-                                    ),
-                            );
-                        }
-
+                        let render_elements = state.windows.render_elements::<GlesRenderer>(
+                            renderer,
+                            &state.space.output_geometry(&output).unwrap(),
+                            scale,
+                        );
                         damage_tracker
-                            .render_output(renderer, &mut framebuffer, age, &vec, [0.1; 4])
+                            .render_output(
+                                renderer,
+                                &mut framebuffer,
+                                age,
+                                &render_elements,
+                                [0.1; 4],
+                            )
                             .unwrap()
                     };
                     if let Some(damage) = res.damage {
                         backend.submit(Some(damage)).unwrap();
                     }
 
-                    state.space.elements().for_each(|window| {
+                    state.windows.elements().for_each(|window| {
                         window.send_frame(
                             &output,
                             state.start_time.elapsed(),

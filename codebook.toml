@@ -1,0 +1,11 @@
+words = [
+    "alacritty",
+    "bbox",
+    "keysym",
+    "shm",
+    "smithay",
+    "toplevel",
+    "unconstrain",
+    "winit",
+    "xdg",
+]

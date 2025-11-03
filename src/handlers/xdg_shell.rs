@@ -1,7 +1,7 @@
 use smithay::{
     delegate_xdg_shell,
     desktop::{
-        PopupKind, PopupManager, Space, Window, find_popup_root_surface, get_popup_toplevel_coords,
+        PopupKind, PopupManager, Window, find_popup_root_surface, get_popup_toplevel_coords,
     },
     input::{
         Seat,
@@ -27,6 +27,7 @@ use smithay::{
 use crate::{
     Smallvil,
     grabs::{MoveSurfaceGrab, ResizeSurfaceGrab},
+    window::MyWindowWrapper,
 };
 
 impl XdgShellHandler for Smallvil {
@@ -36,7 +37,7 @@ impl XdgShellHandler for Smallvil {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface);
-        self.space.map_element(window, (0, 0), false);
+        self.windows.map_element(window, (0, 0), false);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -68,12 +69,12 @@ impl XdgShellHandler for Smallvil {
             let pointer = seat.get_pointer().unwrap();
 
             let window = self
-                .space
+                .windows
                 .elements()
                 .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
                 .unwrap()
                 .clone();
-            let initial_window_location = self.space.element_location(&window).unwrap();
+            let initial_window_location = self.windows.element_location(&window).unwrap();
 
             let grab = MoveSurfaceGrab {
                 start_data,
@@ -100,12 +101,12 @@ impl XdgShellHandler for Smallvil {
             let pointer = seat.get_pointer().unwrap();
 
             let window = self
-                .space
+                .windows
                 .elements()
                 .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
                 .unwrap()
                 .clone();
-            let initial_window_location = self.space.element_location(&window).unwrap();
+            let initial_window_location = self.windows.element_location(&window).unwrap();
             let initial_window_size = window.geometry().size;
 
             surface.with_pending_state(|state| {
@@ -157,9 +158,9 @@ fn check_grab(
 }
 
 /// Should be called on `WlSurface::commit`
-pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {
+pub fn handle_commit(popups: &mut PopupManager, windows: &MyWindowWrapper, surface: &WlSurface) {
     // Handle toplevel commits.
-    if let Some(window) = space
+    if let Some(window) = windows
         .elements()
         .find(|w| w.toplevel().unwrap().wl_surface() == surface)
         .cloned()
@@ -201,7 +202,7 @@ impl Smallvil {
             return;
         };
         let Some(window) = self
-            .space
+            .windows
             .elements()
             .find(|w| w.toplevel().unwrap().wl_surface() == &root)
         else {
@@ -210,7 +211,7 @@ impl Smallvil {
 
         let output = self.space.outputs().next().unwrap();
         let output_geo = self.space.output_geometry(output).unwrap();
-        let window_geo = self.space.element_geometry(window).unwrap();
+        let window_geo = self.windows.element_geometry(window).unwrap();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.

@@ -34,8 +34,8 @@ impl Smallvil {
                                 std::process::Command::new("alacritty").spawn().ok();
                                 true
                             } else if keysym == Keysym::Delete {
-                                if let Some(last) = this.space.elements().last() {
-                                    last.toplevel().unwrap().send_close();
+                                if let Some(w) = this.windows.elements().last() {
+                                    w.toplevel().unwrap().send_close();
                                 }
                                 true
                             } else {
@@ -86,21 +86,21 @@ impl Smallvil {
 
                 if ButtonState::Pressed == button_state && !pointer.is_grabbed() {
                     if let Some((window, _loc)) = self
-                        .space
+                        .windows
                         .element_under(pointer.current_location())
                         .map(|(w, l)| (w.clone(), l))
                     {
-                        self.space.raise_element(&window, true);
+                        self.windows.raise_element(&window, true);
                         keyboard.set_focus(
                             self,
                             Some(window.toplevel().unwrap().wl_surface().clone()),
                             serial,
                         );
-                        self.space.elements().for_each(|window| {
+                        self.windows.elements().for_each(|window| {
                             window.toplevel().unwrap().send_pending_configure();
                         });
                     } else {
-                        self.space.elements().for_each(|window| {
+                        self.windows.elements().for_each(|window| {
                             window.set_activated(false);
                             window.toplevel().unwrap().send_pending_configure();
                         });
