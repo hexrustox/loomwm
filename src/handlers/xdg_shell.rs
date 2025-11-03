@@ -14,7 +14,7 @@ use smithay::{
             protocol::{wl_seat, wl_surface::WlSurface},
         },
     },
-    utils::{Rectangle, Serial},
+    utils::{Rectangle, SERIAL_COUNTER, Serial},
     wayland::{
         compositor::with_states,
         shell::xdg::{
@@ -27,7 +27,7 @@ use smithay::{
 use crate::{
     Smallvil,
     grabs::{MoveSurfaceGrab, ResizeSurfaceGrab},
-    window::MyWindowWrapper,
+    window::{LookForWindowBy, MyWindowWrapper},
 };
 
 impl XdgShellHandler for Smallvil {
@@ -37,12 +37,34 @@ impl XdgShellHandler for Smallvil {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface);
+
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = SERIAL_COUNTER.next_serial();
+        keyboard.set_focus(
+            self,
+            Some(window.toplevel().unwrap().wl_surface().clone()),
+            serial,
+        );
+
         self.windows.map_element(window, (0, 0), false);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
         self.unconstrain_popup(&surface);
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
+    }
+
+    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
+        self.windows
+            .unmap_element(LookForWindowBy::Surface(surface.wl_surface()));
+        if let Some(w) = self.windows.elements().last() {
+            let serial = SERIAL_COUNTER.next_serial();
+            self.seat.get_keyboard().unwrap().set_focus(
+                self,
+                Some(w.toplevel().unwrap().wl_surface().clone()),
+                serial,
+            );
+        }
     }
 
     fn reposition_request(

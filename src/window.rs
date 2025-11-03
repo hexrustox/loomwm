@@ -4,6 +4,7 @@ use smithay::{
         element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
     },
     desktop::{Window, space::SpaceElement},
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Rectangle, Scale},
 };
 
@@ -129,6 +130,22 @@ impl MyWindowWrapper {
             .map(|e| e.geometry())
     }
 
+    pub fn unmap_element(&mut self, look_for: LookForWindowBy) -> Option<MyWindow> {
+        self.elements
+            .iter()
+            .position(|inner| match look_for {
+                LookForWindowBy::Window(w) => inner.element == *w,
+                LookForWindowBy::Surface(s) => inner.element.toplevel().unwrap().wl_surface() == s,
+            })
+            .map(|pos| {
+                // let elem =
+                self.elements.remove(pos)
+                // for output in elem.outputs.keys() {
+                //     elem.element.output_leave(output);
+                // }
+            })
+    }
+
     pub fn render_elements_for_region<R: Renderer + ImportAll, S: Into<Scale<f64>>>(
         &self,
         renderer: &mut R,
@@ -181,4 +198,9 @@ impl Default for MyWindowWrapper {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub enum LookForWindowBy<'a> {
+    Window(&'a Window),
+    Surface(&'a WlSurface),
 }

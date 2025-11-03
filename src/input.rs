@@ -34,7 +34,13 @@ impl Smallvil {
                                 std::process::Command::new("alacritty").spawn().ok();
                                 true
                             } else if keysym == Keysym::Delete {
-                                if let Some(w) = this.windows.elements().last() {
+                                if let Some(focus) =
+                                    this.seat.get_keyboard().unwrap().current_focus()
+                                    && let Some(w) = this
+                                        .windows
+                                        .elements()
+                                        .find(|w| *w.toplevel().unwrap().wl_surface() == focus)
+                                {
                                     w.toplevel().unwrap().send_close();
                                 }
                                 true
