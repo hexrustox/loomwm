@@ -31,7 +31,7 @@ impl Smallvil {
                         if event.state() == KeyState::Released || {
                             let keysym = keysym.modified_sym();
                             if keysym == Keysym::Return {
-                                std::process::Command::new("hello-wayland").spawn().ok();
+                                std::process::Command::new("alacritty").spawn().ok();
                                 true
                             } else if keysym == Keysym::Delete {
                                 if let Some(last) = this.space.elements().last() {

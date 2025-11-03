@@ -30,14 +30,20 @@
                 gcc
                 rustc
                 cargo
-                cargo-deny
-                cargo-edit
+              ]
+              ++ override.buildInputs or [ ];
+            packages =
+              with pkgs;
+              [
                 rustfmt
                 clippy
                 rust-analyzer
+                cargo-deny
+                cargo-edit
+                cargo-machete
                 codebook
               ]
-              ++ override.buildInputs;
+              ++ override.packages or [ ];
           }
         );
       }

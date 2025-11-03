@@ -23,6 +23,6 @@ in
     lib.makeSearchPathOutput "lib" "lib/vdpau" libvdpau
   }";
   packages = with pkgs; [
-    hello-wayland
+    alacritty
   ];
 }
