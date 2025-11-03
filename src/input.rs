@@ -28,14 +28,18 @@ impl Smallvil {
                     serial,
                     time,
                     |this, _, keysym| {
-                        if event.state() == KeyState::Released || {
+                        let res = {
+                            let press = event.state() == KeyState::Pressed;
                             let keysym = keysym.modified_sym();
                             if keysym == Keysym::Return {
-                                std::process::Command::new("alacritty").spawn().ok();
+                                if press {
+                                    std::process::Command::new("alacritty").spawn().ok();
+                                }
                                 true
                             } else if keysym == Keysym::Delete {
-                                if let Some(focus) =
-                                    this.seat.get_keyboard().unwrap().current_focus()
+                                if press
+                                    && let Some(focus) =
+                                        this.seat.get_keyboard().unwrap().current_focus()
                                     && let Some(w) = this
                                         .windows
                                         .elements()
@@ -47,7 +51,8 @@ impl Smallvil {
                             } else {
                                 false
                             }
-                        } {
+                        };
+                        if res {
                             FilterResult::Intercept(())
                         } else {
                             FilterResult::Forward
