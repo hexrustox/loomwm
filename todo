@@ -1,0 +1,27 @@
+Floating window
+Tiling window
+	- Customisable layout
+Virtual workspace
+Window rules
+Customisable hotkey bindings, action:
+	- Move focus to window
+	- Move/swap window
+	- Resize window
+	- Close window
+	- Move workspace focus
+	- Move window from/to workspace
+	- Swap workspace
+	- Toggle show, hide flaoting windows
+	- Toggle flating, fullscreen
+	- Undo & redo
+	- Exec program
+	- *Assistant
+	- Move focus to monitor (optional)
+	- Move/swap workspace to monitor (optional)
+Multi monitor support (optional)
+	- Hot plug-in
+	- Adjust monitor properties conditionally
+Customisable touchpad gestures
+Window border
+	- Border radius
+Hot reload config file
