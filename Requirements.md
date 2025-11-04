@@ -1,0 +1,59 @@
+## Requirements Capture
+
+### Market Research
+
+An analysis of existing solutions and community feedback was performed.
+
+*   **Previous Solutions:**
+    *   **Sway:** Highly respected for their simplicity, stability, and powerful tiling logic. However, their configuration can have a steep learning curve, and they lack native support for floating window animations and some modern aesthetics.
+    *   **Hyprland:** A modern Wayland compositor known for its animations, dynamic tiling, and extensive customization options. It is very popular but its rapid development cycle can sometimes lead to instability.
+*   **Social Media Analysis:**
+    *   Users often praise window managers that allow for **"hot-reloading"** of configuration files, as it dramatically speeds up the tweaking process.
+    *   There is a clear demand for intuitive yet powerful **touchpad gesture** support on laptops.
+
+### User Evaluation
+
+According to this [youtube video](https://www.youtube.com/watch?v=aeifzxaDOVo), a tiling window manager has the following advantages.
+ 
+*   **Maximise Screen Usage:** Window(s) are automatically resized and moved to fit the size of the monitor to use the entireity of the screen.
+*   **Keyboard Centric Control:** Every action can be done with a keyboard shortcut(s) which is more efficient than using the mouse.
+
+## Project Specification
+
+### Functional Requirements
+
+| ID     | Requirement                                | Description & Justification                                                                                                                                                                                                                             |
+| :----- | :----------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **F-001** | **Floating Window Management**             | The system MUST allow users to manually position and resize windows, freeing them from the tiling layout.                                      |
+| **F-002** | **Tiling Window Management**               | The system MUST automatically arrange windows in a non-overlapping grid.                                                                                     |
+| **F-003** | **Customizable Tiling Layouts**            | The system MUST provide users with the ability to define and save custom tiling layouts.                                                                        |
+| **F-004** | **Virtual Workspace Management**           | The system MUST support multiple virtual workspaces to allow users to organize their windows into separate sets of tasks.                                                                                              |
+| **F-005** | **Window Rules**                           | The system MUST allow users to define rules based on window properties (e.g., application name, title, class) to automatically set their state (floating/tiled), size, position, or assign them to a specific workspace. |
+| **F-006** | **Customizable Hotkey Bindings & Actions** | The system MUST provide a comprehensive set of actions that can be bound to custom hotkeys.                                                                                                                       |
+| **F-006.1** | *Action: Move Focus*                       | The system MUST provide an action to move keyboard focus between windows.                                                                                                                                             |
+| **F-006.2** | *Action: Move/Swap Window*                 | The system MUST provide actions to move the currently focused window to a different position in the layout or swap its position with another window.                                                                    |
+| **F-006.3** | *Action: Resize Window*                    | The system MUST provide actions to resize the currently focused window within the tiling layout.                                                                                                                      |
+| **F-006.4** | *Action: Close Window*                     | The system MUST provide an action to close the currently focused window.                                                                                                                                                                                 |
+| **F-006.5** | *Action: Workspace Navigation*             | The system MUST provide actions to switch focus between different virtual workspaces.                                                                                                                                                                    |
+| **F-006.6** | *Action: Move Window to Workspace*         | The system MUST provide an action to move the currently focused window to a different virtual workspace.                                                                                                              |
+| **F-006.7** | *Action: Swap Workspaces*                  | The system MUST provide an action to swap the entire contents of the current workspace with another one.                                                                                                                                                 |
+| **F-006.8** | *Action: Toggle Window State*              | The system MUST provide actions to toggle a window between floating and tiled states, and between normal and fullscreen modes.                                                                                                                            |
+| **F-006.9** | *Action: Undo & Redo*                      | The system MUST provide actions to undo and redo the last window layout change (e.g., move, swap, resize).                                                                                                            |
+| **F-006.10** | *Action: Execute Program*                  | The system MUST provide an action to execute a specified program.                                                                                                                                                                                         |
+| **F-006.11** | *Action: Assistant*                        | The system MUST provide an action to run an AI model to automatically organise window(s) in the tiling/floating layout based on user habit.                                                                                                                         |
+| **F-007** | **Multi-Monitor Support (Optional)**       | The system SHOULD support multiple monitors.                                                                                                                                                                                                             |
+| **F-007.1** | *Feature: Hot-plug*                        | The system SHOULD handle monitors being connected or disconnected at runtime without requiring a restart.                                                                                                                                               |
+| **F-007.2** | *Feature: Monitor Actions*                 | The system SHOULD provide actions to move focus between monitors and move workspaces to other monitors.                                                                                                                                                  |
+| **F-008** | **Customizable Touchpad Gestures**         | The system SHOULD allow users to bind custom actions (e.g., switch workspace, move focus) to multi-finger touchpad gestures.                                                                                           |
+| **F-009** | **Customizable Window Border**             | The system MUST allow users to customize the appearance of the window border, including its thickness and color. The system MUST support rounded corners (border radius).                                              |
+| **F-010** | **Hot Reload Configuration File**          | The system MUST allow users to apply changes to the configuration file without restarting the window manager.                                                                                                        |
+
+### Non-Functional Requirements
+
+| ID     | Requirement               | Description                                                                                                                                                                                                                             |
+| :----- | :------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **NFP-001** | **Performance**           | All window operations (focus change, move, resize, workspace switch) MUST be executed with minimal perceptible delay to ensure a smooth and responsive user experience.                                                    |
+| **NFP-002** | **Configurability**       | All aspects of the window manager's behavior and appearance MUST be configurable via a human-readable text file. The configuration syntax should be clear and well-documented.                                           |
+| **NFP-003** | **Reliability**           | The window manager MUST be stable and not crash under normal usage conditions. It should handle unexpected events (e.g., application crashes) gracefully.                                                                                 |
+| **NFP-004** | **Resource Efficiency**   | The window manager MUST have a low memory and CPU footprint to ensure it does not impact the performance of other running applications.                                                                                                   |
+| **NFP-005** | **Compatibility**         | The system MUST implement the core Wayland protocols and interoperate correctly with common toolkits and applications (e.g., GTK, Qt).                                                                        |
