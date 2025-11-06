@@ -20,7 +20,7 @@ An analysis of existing solutions and community feedback was performed.
 
 According to this [youtube video](https://www.youtube.com/watch?v=aeifzxaDOVo), a tiling window manager has the following advantages.
  
-*   **Maximise Screen Usage:** Window(s) are automatically resized and moved to fit the size of the monitor to use the entireity of the screen.
+*   **Maximize Screen Usage:** Window(s) are automatically resized and moved to fit the size of the monitor to use the entireity of the screen.
 *   **Keyboard Centric Control:** Every action can be done with a keyboard shortcut(s) which is more efficient than using the mouse.
 
 ## Project Requirements
