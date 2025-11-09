@@ -22,7 +22,11 @@ use smithay::{
     },
 };
 
-use crate::{CalloopData, window::MyWindowWrapper};
+use crate::{
+    CalloopData,
+    layout::{LayoutNode, LayoutTree},
+    window::MyWindowWrapper,
+};
 
 pub struct Smallvil {
     pub start_time: std::time::Instant,
@@ -44,6 +48,8 @@ pub struct Smallvil {
     pub seat: Seat<Self>,
 
     pub windows: MyWindowWrapper,
+    // temp
+    pub layout: LayoutTree,
 }
 
 impl Smallvil {
@@ -101,6 +107,18 @@ impl Smallvil {
             seat,
 
             windows: MyWindowWrapper::new(),
+            layout: LayoutTree::Horizontal(vec![
+                LayoutNode::Window,
+                LayoutNode::SubTree(LayoutTree::Vertical(vec![
+                    LayoutNode::Window,
+                    LayoutNode::Window,
+                    LayoutNode::Window,
+                    LayoutNode::Window,
+                    LayoutNode::Window,
+                    LayoutNode::Window,
+                    LayoutNode::Window,
+                ])),
+            ]),
         }
     }
 

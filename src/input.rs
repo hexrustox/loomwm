@@ -31,12 +31,12 @@ impl Smallvil {
                         let res = {
                             let press = event.state() == KeyState::Pressed;
                             let keysym = keysym.modified_sym();
-                            if keysym == Keysym::Return {
+                            if keysym == Keysym::F1 {
                                 if press {
                                     std::process::Command::new("alacritty").spawn().ok();
                                 }
                                 true
-                            } else if keysym == Keysym::Delete {
+                            } else if keysym == Keysym::F2 {
                                 if press
                                     && let Some(focus) =
                                         this.seat.get_keyboard().unwrap().current_focus()

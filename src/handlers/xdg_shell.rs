@@ -26,7 +26,7 @@ use smithay::{
 
 use crate::{
     Smallvil,
-    grabs::{MoveSurfaceGrab, ResizeSurfaceGrab},
+    layout::get_layout,
     window::{LookForWindowBy, MyWindowWrapper},
 };
 
@@ -47,6 +47,21 @@ impl XdgShellHandler for Smallvil {
         );
 
         self.windows.map_element(window, (0, 0), true);
+
+        let output = self.space.outputs().next().unwrap();
+        let layouts = get_layout(
+            Rectangle::new(
+                output.current_location(),
+                output
+                    .current_mode()
+                    .unwrap()
+                    .size
+                    .to_logical(output.current_scale().integer_scale()),
+            ),
+            self.windows.elements().len(),
+            &self.layout,
+        );
+        self.windows.set_element_layout(&layouts);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -71,6 +86,21 @@ impl XdgShellHandler for Smallvil {
         } else {
             keyboard.set_focus(self, None, serial);
         }
+
+        let output = self.space.outputs().next().unwrap();
+        let layouts = get_layout(
+            Rectangle::new(
+                output.current_location(),
+                output
+                    .current_mode()
+                    .unwrap()
+                    .size
+                    .to_logical(output.current_scale().integer_scale()),
+            ),
+            self.windows.elements().len(),
+            &self.layout,
+        );
+        self.windows.set_element_layout(&layouts);
     }
 
     fn reposition_request(
@@ -89,29 +119,29 @@ impl XdgShellHandler for Smallvil {
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
-        let seat = Seat::from_resource(&seat).unwrap();
+        // let seat = Seat::from_resource(&seat).unwrap();
 
-        let wl_surface = surface.wl_surface();
+        // let wl_surface = surface.wl_surface();
 
-        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
-            let pointer = seat.get_pointer().unwrap();
+        // if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
+        //     let pointer = seat.get_pointer().unwrap();
 
-            let window = self
-                .windows
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
-                .unwrap()
-                .clone();
-            let initial_window_location = self.windows.element_location(&window).unwrap();
+        //     let window = self
+        //         .windows
+        //         .elements()
+        //         .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
+        //         .unwrap()
+        //         .clone();
+        //     let initial_window_location = self.windows.element_location(&window).unwrap();
 
-            let grab = MoveSurfaceGrab {
-                start_data,
-                window,
-                initial_window_location,
-            };
+        //     let grab = MoveSurfaceGrab {
+        //         start_data,
+        //         window,
+        //         initial_window_location,
+        //     };
 
-            pointer.set_grab(self, grab, serial, Focus::Clear);
-        }
+        //     pointer.set_grab(self, grab, serial, Focus::Clear);
+        // }
     }
 
     fn resize_request(
@@ -121,37 +151,37 @@ impl XdgShellHandler for Smallvil {
         serial: Serial,
         edges: xdg_toplevel::ResizeEdge,
     ) {
-        let seat = Seat::from_resource(&seat).unwrap();
+        // let seat = Seat::from_resource(&seat).unwrap();
 
-        let wl_surface = surface.wl_surface();
+        // let wl_surface = surface.wl_surface();
 
-        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
-            let pointer = seat.get_pointer().unwrap();
+        // if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
+        //     let pointer = seat.get_pointer().unwrap();
 
-            let window = self
-                .windows
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
-                .unwrap()
-                .clone();
-            let initial_window_location = self.windows.element_location(&window).unwrap();
-            let initial_window_size = window.geometry().size;
+        //     let window = self
+        //         .windows
+        //         .elements()
+        //         .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
+        //         .unwrap()
+        //         .clone();
+        //     let initial_window_location = self.windows.element_location(&window).unwrap();
+        //     let initial_window_size = window.geometry().size;
 
-            surface.with_pending_state(|state| {
-                state.states.set(xdg_toplevel::State::Resizing);
-            });
+        //     surface.with_pending_state(|state| {
+        //         state.states.set(xdg_toplevel::State::Resizing);
+        //     });
 
-            surface.send_pending_configure();
+        //     surface.send_pending_configure();
 
-            let grab = ResizeSurfaceGrab::start(
-                start_data,
-                window,
-                edges.into(),
-                Rectangle::new(initial_window_location, initial_window_size),
-            );
+        //     let grab = ResizeSurfaceGrab::start(
+        //         start_data,
+        //         window,
+        //         edges.into(),
+        //         Rectangle::new(initial_window_location, initial_window_size),
+        //     );
 
-            pointer.set_grab(self, grab, serial, Focus::Clear);
-        }
+        //     pointer.set_grab(self, grab, serial, Focus::Clear);
+        // }
     }
 
     fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {

@@ -146,6 +146,19 @@ impl MyWindowWrapper {
             })
     }
 
+    pub fn set_element_layout(&mut self, layouts: &[Rectangle<i32, Logical>]) {
+        let mut iter = layouts.iter();
+        for w in &mut self.elements {
+            let rect = iter.next().unwrap();
+            w.location = rect.loc;
+            let xdg = w.element.toplevel().unwrap();
+            xdg.with_pending_state(|state| {
+                state.size.replace(rect.size);
+            });
+            xdg.send_pending_configure();
+        }
+    }
+
     pub fn render_elements_for_region<R: Renderer + ImportAll, S: Into<Scale<f64>>>(
         &self,
         renderer: &mut R,

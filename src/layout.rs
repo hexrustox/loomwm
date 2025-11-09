@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
-use smithay::utils::Rectangle;
+use smithay::utils::{Logical, Rectangle};
 
-pub type BBox = Rectangle<i32, i32>;
+pub type BBox = Rectangle<i32, Logical>;
 
 pub enum LayoutTree {
     Horizontal(Vec<LayoutNode>),
