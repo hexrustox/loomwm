@@ -1,3 +1,7 @@
+This project aims to develop a Wayland compositor that integrates dynamic and manual tiling.
+Its core innovation will be an AI-assisted organization feature that automatically arranges windows based on user context and habits, while still allowing for full manual override. 
+Complemented by hot-reloading configurations, customizable keybinds and touchpad gestures, and productivity features like floating windows, virtual workspace etc.
+
 ## Requirements Capture
 
 ### Market Research
@@ -5,9 +9,10 @@
 An analysis of existing solutions and community feedback was performed.
 
 *   **Previous Solutions:**
-    *   **Sway:** Highly respected for their simplicity, stability, and powerful tiling logic. However, their configuration can have a steep learning curve, and they lack native support for floating window animations and some modern aesthetics.
+    *   **Sway:** Highly respected for their simplicity, stability, and powerful tiling logic. However, their configuration can have a steep learning curve, and they lack native support some modern aesthetics.
     *   **Hyprland:** A modern Wayland compositor known for its animations, dynamic tiling, and extensive customization options. It is very popular but its rapid development cycle can sometimes lead to instability.
 *   **Social Media Analysis:**
+    *   There is a [discussion](https://bbs.archlinux.org/viewtopic.php?id=92687) on users' preference on dynamiuc vs manual tiling.
     *   Users often praise window managers that allow for **"hot-reloading"** of configuration files, as it dramatically speeds up the tweaking process.
     *   There is a clear demand for intuitive yet powerful **touchpad gesture** support on laptops.
 
@@ -15,10 +20,10 @@ An analysis of existing solutions and community feedback was performed.
 
 According to this [youtube video](https://www.youtube.com/watch?v=aeifzxaDOVo), a tiling window manager has the following advantages.
  
-*   **Maximise Screen Usage:** Window(s) are automatically resized and moved to fit the size of the monitor to use the entireity of the screen.
+*   **Maximize Screen Usage:** Window(s) are automatically resized and moved to fit the size of the monitor to use the entireity of the screen.
 *   **Keyboard Centric Control:** Every action can be done with a keyboard shortcut(s) which is more efficient than using the mouse.
 
-## Project Specification
+## Project Requirements
 
 ### Functional Requirements
 
@@ -56,4 +61,4 @@ According to this [youtube video](https://www.youtube.com/watch?v=aeifzxaDOVo), 
 | **2** | **Configurability**       | All aspects of the window manager's behavior and appearance MUST be configurable via a human-readable text file. The configuration syntax should be clear and well-documented.                                                           |
 | **3** | **Reliability**           | The window manager MUST be stable and not crash under normal usage conditions. It should handle unexpected events (e.g., application crashes) gracefully.                                                                                |
 | **4** | **Resource Efficiency**   | The window manager MUST have a low memory and CPU footprint to ensure it does not impact the performance of other running applications.                                                                                                  |
-| **5** | **Compatibility**         | The system MUST implement the core Wayland protocols and interoperate correctly with common toolkits and applications (e.g., GTK, Qt).                                                                                                   |
+| **5** | **Compatibility**         | The system MUST implement the core Wayland protocols and interoperate correctly with common toolkits and applications.                                                                                                                   |
