@@ -1,7 +1,3 @@
-This project aims to develop a Wayland compositor that integrates dynamic and manual tiling.
-Its core innovation will be an AI-assisted organization feature that automatically arranges windows based on user context and habits, while still allowing for full manual override. 
-Complemented by hot-reloading configurations, customizable keybinds and touchpad gestures, and productivity features like floating windows, virtual workspace etc.
-
 ## Requirements Capture
 
 ### Market Research
@@ -9,28 +5,22 @@ Complemented by hot-reloading configurations, customizable keybinds and touchpad
 An analysis of existing solutions and community feedback was performed.
 
 *   **Previous Solutions:**
-    *   **Sway:** Highly respected for their simplicity, stability, and powerful tiling logic. However, their configuration can have a steep learning curve, and they lack native support some modern aesthetics.
-    *   **Hyprland:** A modern Wayland compositor known for its animations, dynamic tiling, and extensive customization options. It is very popular but its rapid development cycle can sometimes lead to instability.
-*   **Social Media Analysis:**
-    *   There is a [discussion](https://bbs.archlinux.org/viewtopic.php?id=92687) on users' preference on dynamiuc vs manual tiling.
-    *   Users often praise window managers that allow for **"hot-reloading"** of configuration files, as it dramatically speeds up the tweaking process.
-    *   There is a clear demand for intuitive yet powerful **touchpad gesture** support on laptops.
-
-### User Evaluation
-
-According to this [youtube video](https://www.youtube.com/watch?v=aeifzxaDOVo), a tiling window manager has the following advantages.
- 
-*   **Maximize Screen Usage:** Window(s) are automatically resized and moved to fit the size of the monitor to use the entireity of the screen.
-*   **Keyboard Centric Control:** Every action can be done with a keyboard shortcut(s) which is more efficient than using the mouse.
+    *   **Japokwm**: Dynamic Wayland tiling compositor based around creating layouts, allow users to create any layout with a 3-dimensional Array. 
+        However the configuration file needs to be written in Lua (a scripting language) which causes unnecessary complexity for both the user and the program.
+        The custom layout also have no way of forcing the windows to utilize all the screen space.
+    *   **River**: Dynamic tiling Wayland compositor with flexible runtime configuration. 
+        Rather than having the tiled layout logic built into the compositor process, river uses a custom Wayland protocol and separate "layout generator" process.
+        This gives the user maximum flexibility but having to call an external process everytime the layout needs to be updated may have some overhead.
+    *   None of the existing solutions rearrange the sequence of the windows but only the layout of them.
 
 ## Project Requirements
 
 ### Functional Requirements
 
-| ID     | Requirement                                | Description & Justification                                                                                                                                                                                                                             |
+| ID     | Requirement                                | Description                                                                                                                                                                                                                             |
 | :----- | :----------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **1** | **Floating Window Management**             | The system MUST allow users to manually position and resize windows, freeing them from the tiling layout.                                                                                                                                                |
-| **2** | **Tiling Window Management**               | The system MUST automatically arrange windows in a non-overlapping grid.                                                                                                                                                                                 |
+| **2** | **Tiling Window Management**               | The system MUST automatically arrange windows in a non-overlapping grid and let user customize the layout of the columns and rows both in real time and in the configuration file.                                                                                                                                                                                 |
 | **3** | **Customizable Tiling Layouts**            | The system MUST provide users with the ability to define and save custom tiling layouts.                                                                                                                                                                 |
 | **4** | **Virtual Workspace Management**           | The system MUST support multiple virtual workspaces to allow users to organize their windows into separate sets of tasks.                                                                                                                                |
 | **5** | **Window Rules**                           | The system MUST allow users to define rules based on window properties (e.g., application name, title, class) to automatically set their state (floating/tiled), size, position, or assign them to a specific workspace.                                 |
