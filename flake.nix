@@ -14,8 +14,19 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        mkShell = import ./nix/shell.nix pkgs;
-        override = import ./nix/override.nix pkgs;
+        lib = pkgs.lib;
+
+        mkShell = pkgs.mkShell.override {
+          stdenv = pkgs.stdenvNoCC.override {
+            cc = null;
+            preHook = "";
+            allowedRequisites = null;
+            initialPath = [ pkgs.coreutils ];
+            shell = lib.getExe pkgs.bash;
+            extraNativeBuildInputs = [ ];
+          };
+        };
+        override = import ./override/flake.nix pkgs;
       in
       {
         devShells.default = mkShell (

@@ -1,8 +1,9 @@
 include:
-  - ./docker/override.yml
+  - ./override/compose.yml
 services:
   dev:
-    build: ./docker
+    build: .
+    container_name: $CONTAINER_NAME
     volumes:
       - ${PWD}:${PWD}
       - nix-dir:/nix

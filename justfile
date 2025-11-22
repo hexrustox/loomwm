@@ -1,4 +1,5 @@
 set dotenv-load
+set shell := ["bash", "-uc"]
 
 default: up dev
 
@@ -13,9 +14,6 @@ dev:
 
 down:
     podman stop $CONTAINER_NAME -t 0 && podman compose down
-
-rm:
-    podman container rm $CONTAINER_NAME
 
 lsp:
     @podman exec -i $CONTAINER_NAME nix develop --command rust-analyzer
