@@ -22,11 +22,7 @@ use smithay::{
     },
 };
 
-use crate::{
-    CalloopData,
-    layout::{LayoutNode, LayoutTree},
-    window::MyWindowWrapper,
-};
+use crate::CalloopData;
 
 pub struct Smallvil {
     pub start_time: std::time::Instant,
@@ -46,10 +42,6 @@ pub struct Smallvil {
     pub popups: PopupManager,
 
     pub seat: Seat<Self>,
-
-    pub windows: MyWindowWrapper,
-    // temp
-    pub layout: LayoutTree,
 }
 
 impl Smallvil {
@@ -105,20 +97,6 @@ impl Smallvil {
             data_device_state,
             popups,
             seat,
-
-            windows: MyWindowWrapper::new(),
-            layout: LayoutTree::Horizontal(vec![
-                LayoutNode::Window,
-                LayoutNode::SubTree(LayoutTree::Vertical(vec![
-                    LayoutNode::Window,
-                    LayoutNode::Window,
-                    LayoutNode::Window,
-                    LayoutNode::Window,
-                    LayoutNode::Window,
-                    LayoutNode::Window,
-                    LayoutNode::Window,
-                ])),
-            ]),
         }
     }
 
@@ -167,18 +145,18 @@ impl Smallvil {
         socket_name
     }
 
-    pub fn surface_under(
-        &self,
-        pos: Point<f64, Logical>,
-    ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.windows
-            .element_under(pos)
-            .and_then(|(window, location)| {
-                window
-                    .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-                    .map(|(s, p)| (s, (p + location).to_f64()))
-            })
-    }
+    // pub fn surface_under(
+    //     &self,
+    //     pos: Point<f64, Logical>,
+    // ) -> Option<(WlSurface, Point<f64, Logical>)> {
+    //     self.windows
+    //         .element_under(pos)
+    //         .and_then(|(window, location)| {
+    //             window
+    //                 .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+    //                 .map(|(s, p)| (s, (p + location).to_f64()))
+    //         })
+    // }
 }
 
 #[derive(Default)]

@@ -19,7 +19,7 @@ pub fn init_winit(
     let display_handle = &mut data.display_handle;
     let state = &mut data.state;
 
-    let (mut backend, winit) = winit::init()?;
+    let (mut backend, winit) = winit::init::<GlesRenderer>()?;
 
     let mode = Mode {
         size: backend.window_size(),
@@ -78,33 +78,33 @@ pub fn init_winit(
                         let output_scale = output.current_scale().fractional_scale();
                         let scale = Scale::from(output_scale);
 
-                        let render_elements = state.windows.render_elements::<GlesRenderer>(
-                            renderer,
-                            &state.space.output_geometry(&output).unwrap(),
-                            scale,
-                        );
-                        damage_tracker
-                            .render_output(
-                                renderer,
-                                &mut framebuffer,
-                                age,
-                                &render_elements,
-                                [0.1; 4],
-                            )
-                            .unwrap()
+                        // let render_elements = state.windows.render_elements::<GlesRenderer>(
+                        //     renderer,
+                        //     &state.space.output_geometry(&output).unwrap(),
+                        //     scale,
+                        // );
+                        // damage_tracker
+                        //     .render_output(
+                        //         renderer,
+                        //         &mut framebuffer,
+                        //         age,
+                        //         &render_element,
+                        //         [0.1; 4],
+                        //     )
+                        //     .unwrap()
                     };
-                    if let Some(damage) = res.damage {
-                        backend.submit(Some(damage)).unwrap();
-                    }
+                    // if let Some(damage) = res.damage {
+                    //     backend.submit(Some(damage)).unwrap();
+                    // }
 
-                    state.windows.elements().for_each(|window| {
-                        window.send_frame(
-                            &output,
-                            state.start_time.elapsed(),
-                            Some(Duration::ZERO),
-                            |_, _| Some(output.clone()),
-                        )
-                    });
+                    // state.windows.elements().for_each(|window| {
+                    //     window.send_frame(
+                    //         &output,
+                    //         state.start_time.elapsed(),
+                    //         Some(Duration::ZERO),
+                    //         |_, _| Some(output.clone()),
+                    //     )
+                    // });
 
                     state.space.refresh();
                     state.popups.cleanup();

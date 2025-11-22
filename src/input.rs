@@ -31,26 +31,7 @@ impl Smallvil {
                         let res = {
                             let press = event.state() == KeyState::Pressed;
                             let keysym = keysym.modified_sym();
-                            if keysym == Keysym::F1 {
-                                if press {
-                                    std::process::Command::new("alacritty").spawn().ok();
-                                }
-                                true
-                            } else if keysym == Keysym::F2 {
-                                if press
-                                    && let Some(focus) =
-                                        this.seat.get_keyboard().unwrap().current_focus()
-                                    && let Some(w) = this
-                                        .windows
-                                        .elements()
-                                        .find(|w| *w.toplevel().unwrap().wl_surface() == focus)
-                                {
-                                    w.toplevel().unwrap().send_close();
-                                }
-                                true
-                            } else {
-                                false
-                            }
+                            false
                         };
                         if res {
                             FilterResult::Intercept(())
@@ -72,17 +53,17 @@ impl Smallvil {
 
                 let pointer = self.seat.get_pointer().unwrap();
 
-                let under = self.surface_under(pos);
+                // let under = self.surface_under(pos);
 
-                pointer.motion(
-                    self,
-                    under,
-                    &MotionEvent {
-                        location: pos,
-                        serial,
-                        time: event.time_msec(),
-                    },
-                );
+                // pointer.motion(
+                //     self,
+                //     under,
+                //     &MotionEvent {
+                //         location: pos,
+                //         serial,
+                //         time: event.time_msec(),
+                //     },
+                // );
                 pointer.frame(self);
             }
             InputEvent::PointerButton { event, .. } => {
@@ -95,29 +76,29 @@ impl Smallvil {
 
                 let button_state = event.state();
 
-                if ButtonState::Pressed == button_state && !pointer.is_grabbed() {
-                    if let Some((window, _loc)) = self
-                        .windows
-                        .element_under(pointer.current_location())
-                        .map(|(w, l)| (w.clone(), l))
-                    {
-                        self.windows.raise_element(&window, true);
-                        keyboard.set_focus(
-                            self,
-                            Some(window.toplevel().unwrap().wl_surface().clone()),
-                            serial,
-                        );
-                        self.windows.elements().for_each(|window| {
-                            window.toplevel().unwrap().send_pending_configure();
-                        });
-                    } else {
-                        self.windows.elements().for_each(|window| {
-                            window.set_activated(false);
-                            window.toplevel().unwrap().send_pending_configure();
-                        });
-                        keyboard.set_focus(self, Option::<WlSurface>::None, serial);
-                    }
-                };
+                // if ButtonState::Pressed == button_state && !pointer.is_grabbed() {
+                //     if let Some((window, _loc)) = self
+                //         .windows
+                //         .element_under(pointer.current_location())
+                //         .map(|(w, l)| (w.clone(), l))
+                //     {
+                //         self.windows.raise_element(&window, true);
+                //         keyboard.set_focus(
+                //             self,
+                //             Some(window.toplevel().unwrap().wl_surface().clone()),
+                //             serial,
+                //         );
+                //         self.windows.elements().for_each(|window| {
+                //             window.toplevel().unwrap().send_pending_configure();
+                //         });
+                //     } else {
+                //         self.windows.elements().for_each(|window| {
+                //             window.set_activated(false);
+                //             window.toplevel().unwrap().send_pending_configure();
+                //         });
+                //         keyboard.set_focus(self, Option::<WlSurface>::None, serial);
+                //     }
+                // };
 
                 pointer.button(
                     self,

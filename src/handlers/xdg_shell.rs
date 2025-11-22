@@ -24,11 +24,7 @@ use smithay::{
     },
 };
 
-use crate::{
-    Smallvil,
-    layout::get_layout,
-    window::{LookForWindowBy, MyWindowWrapper},
-};
+use crate::Smallvil;
 
 impl XdgShellHandler for Smallvil {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -45,23 +41,6 @@ impl XdgShellHandler for Smallvil {
             Some(window.toplevel().unwrap().wl_surface().clone()),
             serial,
         );
-
-        self.windows.map_element(window, (0, 0), true);
-
-        let output = self.space.outputs().next().unwrap();
-        let layouts = get_layout(
-            Rectangle::new(
-                output.current_location(),
-                output
-                    .current_mode()
-                    .unwrap()
-                    .size
-                    .to_logical(output.current_scale().integer_scale()),
-            ),
-            self.windows.elements().len(),
-            &self.layout,
-        );
-        self.windows.set_element_layout(&layouts);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -69,39 +48,7 @@ impl XdgShellHandler for Smallvil {
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
     }
 
-    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        self.windows
-            .unmap_element(LookForWindowBy::Surface(surface.wl_surface()));
-        let keyboard = self.seat.get_keyboard().unwrap();
-        let serial = SERIAL_COUNTER.next_serial();
-
-        if let Some(w) = self.windows.elements().last() {
-            let w = w.clone();
-            keyboard.set_focus(
-                self,
-                Some(w.toplevel().unwrap().wl_surface().clone()),
-                serial,
-            );
-            self.windows.raise_element(&w, true);
-        } else {
-            keyboard.set_focus(self, None, serial);
-        }
-
-        let output = self.space.outputs().next().unwrap();
-        let layouts = get_layout(
-            Rectangle::new(
-                output.current_location(),
-                output
-                    .current_mode()
-                    .unwrap()
-                    .size
-                    .to_logical(output.current_scale().integer_scale()),
-            ),
-            self.windows.elements().len(),
-            &self.layout,
-        );
-        self.windows.set_element_layout(&layouts);
-    }
+    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {}
 
     fn reposition_request(
         &mut self,
@@ -215,70 +162,69 @@ fn check_grab(
     Some(start_data)
 }
 
-/// Should be called on `WlSurface::commit`
-pub fn handle_commit(popups: &mut PopupManager, windows: &MyWindowWrapper, surface: &WlSurface) {
-    // Handle toplevel commits.
-    if let Some(window) = windows
-        .elements()
-        .find(|w| w.toplevel().unwrap().wl_surface() == surface)
-        .cloned()
-    {
-        let initial_configure_sent = with_states(surface, |states| {
-            states
-                .data_map
-                .get::<XdgToplevelSurfaceData>()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .initial_configure_sent
-        });
+// pub fn handle_commit(popups: &mut PopupManager, windows: &MyWindowWrapper, surface: &WlSurface) {
+//     // Handle toplevel commits.
+//     if let Some(window) = windows
+//         .elements()
+//         .find(|w| w.toplevel().unwrap().wl_surface() == surface)
+//         .cloned()
+//     {
+//         let initial_configure_sent = with_states(surface, |states| {
+//             states
+//                 .data_map
+//                 .get::<XdgToplevelSurfaceData>()
+//                 .unwrap()
+//                 .lock()
+//                 .unwrap()
+//                 .initial_configure_sent
+//         });
 
-        if !initial_configure_sent {
-            window.toplevel().unwrap().send_configure();
-        }
-    }
+//         if !initial_configure_sent {
+//             window.toplevel().unwrap().send_configure();
+//         }
+//     }
 
-    // Handle popup commits.
-    popups.commit(surface);
-    if let Some(popup) = popups.find_popup(surface) {
-        match popup {
-            PopupKind::Xdg(ref xdg) => {
-                if !xdg.is_initial_configure_sent() {
-                    // NOTE: This should never fail as the initial configure is always
-                    // allowed.
-                    xdg.send_configure().expect("initial configure failed");
-                }
-            }
-            PopupKind::InputMethod(ref _input_method) => {}
-        }
-    }
-}
+//     // Handle popup commits.
+//     popups.commit(surface);
+//     if let Some(popup) = popups.find_popup(surface) {
+//         match popup {
+//             PopupKind::Xdg(ref xdg) => {
+//                 if !xdg.is_initial_configure_sent() {
+//                     // NOTE: This should never fail as the initial configure is always
+//                     // allowed.
+//                     xdg.send_configure().expect("initial configure failed");
+//                 }
+//             }
+//             PopupKind::InputMethod(ref _input_method) => {}
+//         }
+//     }
+// }
 
 impl Smallvil {
     fn unconstrain_popup(&self, popup: &PopupSurface) {
         let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
             return;
         };
-        let Some(window) = self
-            .windows
-            .elements()
-            .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-        else {
-            return;
-        };
+        // let Some(window) = self
+        //     .windows
+        //     .elements()
+        //     .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+        // else {
+        //     return;
+        // };
 
-        let output = self.space.outputs().next().unwrap();
-        let output_geo = self.space.output_geometry(output).unwrap();
-        let window_geo = self.windows.element_geometry(window).unwrap();
+        // let output = self.space.outputs().next().unwrap();
+        // let output_geo = self.space.output_geometry(output).unwrap();
+        // let window_geo = self.windows.element_geometry(window).unwrap();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.
-        let mut target = output_geo;
-        target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
-        target.loc -= window_geo.loc;
+        // let mut target = output_geo;
+        // target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
+        // target.loc -= window_geo.loc;
 
-        popup.with_pending_state(|state| {
-            state.geometry = state.positioner.get_unconstrained_geometry(target);
-        });
+        // popup.with_pending_state(|state| {
+        //     state.geometry = state.positioner.get_unconstrained_geometry(target);
+        // });
     }
 }

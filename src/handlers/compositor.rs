@@ -34,17 +34,17 @@ impl CompositorHandler for Smallvil {
             while let Some(parent) = get_parent(&root) {
                 root = parent;
             }
-            if let Some(window) = self
-                .windows
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-            {
-                window.on_commit();
-            }
+            // if let Some(window) = self
+            //     .windows
+            //     .elements()
+            //     .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+            // {
+            //     window.on_commit();
+            // }
         };
 
-        xdg_shell::handle_commit(&mut self.popups, &self.windows, surface);
-        resize_grab::handle_commit(&mut self.windows, surface);
+        // xdg_shell::handle_commit(&mut self.popups, &self.windows, surface);
+        // resize_grab::handle_commit(&mut self.windows, surface);
     }
 }
 
