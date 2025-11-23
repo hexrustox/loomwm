@@ -1,4 +1,11 @@
-use crate::{Smallvil, grabs::resize_grab, state::ClientState};
+use std::collections::hash_map::Entry;
+
+use crate::{
+    Smallvil,
+    grabs::resize_grab,
+    state::ClientState,
+    window::{mapped::MappedWindow, unmapped::UnmappedWindow},
+};
 use smithay::{
     backend::renderer::utils::on_commit_buffer_handler,
     delegate_compositor, delegate_shm,
@@ -29,22 +36,34 @@ impl CompositorHandler for Smallvil {
 
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
-        if !is_sync_subsurface(surface) {
-            let mut root = surface.clone();
-            while let Some(parent) = get_parent(&root) {
-                root = parent;
-            }
-            // if let Some(window) = self
-            //     .windows
-            //     .elements()
-            //     .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-            // {
-            //     window.on_commit();
-            // }
-        };
 
-        // xdg_shell::handle_commit(&mut self.popups, &self.windows, surface);
-        // resize_grab::handle_commit(&mut self.windows, surface);
+        if is_sync_subsurface(surface) {
+            return;
+        }
+
+        let mut root_surface = surface.clone();
+        while let Some(parent) = get_parent(&root_surface) {
+            root_surface = parent;
+        }
+
+        if *surface == root_surface {
+            //
+            if let Entry::Occupied(entry) = self.unmapped_windows.entry(surface.clone()) {
+                if entry.get().is_mapped() {
+                    let UnmappedWindow { window, state } = entry.remove();
+                    window.on_commit();
+
+                    let mapped = MappedWindow::new(window);
+                    self.layout.add_window(mapped);
+                } else {
+                    let window = entry.get();
+                    if !window.is_configured() {
+                        let toplevel = window.toplevel().clone();
+                        self.queue_initial_configure(toplevel);
+                    }
+                }
+            }
+        }
     }
 }
 

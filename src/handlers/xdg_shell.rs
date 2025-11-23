@@ -24,7 +24,10 @@ use smithay::{
     },
 };
 
-use crate::Smallvil;
+use crate::{
+    Smallvil,
+    window::unmapped::{UnmappedWindow, UnmappedWindowConfigureState},
+};
 
 impl XdgShellHandler for Smallvil {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -32,15 +35,9 @@ impl XdgShellHandler for Smallvil {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        let window = Window::new_wayland_window(surface);
-
-        let keyboard = self.seat.get_keyboard().unwrap();
-        let serial = SERIAL_COUNTER.next_serial();
-        keyboard.set_focus(
-            self,
-            Some(window.toplevel().unwrap().wl_surface().clone()),
-            serial,
-        );
+        let wl_surface = surface.wl_surface().clone();
+        let window = UnmappedWindow::new(Window::new_wayland_window(surface));
+        self.unmapped_windows.insert(wl_surface, window);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -226,5 +223,32 @@ impl Smallvil {
         // popup.with_pending_state(|state| {
         //     state.geometry = state.positioner.get_unconstrained_geometry(target);
         // });
+    }
+
+    pub fn send_initial_configure(&mut self, toplevel: &ToplevelSurface) {
+        let Some(unmapped) = self.unmapped_windows.get_mut(toplevel.wl_surface()) else {
+            return;
+        };
+
+        let UnmappedWindow { window, state } = unmapped;
+
+        *state = UnmappedWindowConfigureState::Configured;
+        toplevel.send_configure();
+    }
+
+    pub fn queue_initial_configure(&self, toplevel: ToplevelSurface) {
+        // Send the initial configure in an idle, in case the client sent some more info after the
+        // initial commit.
+        self.event_loop.insert_idle(move |data| {
+            if !toplevel.alive() {
+                return;
+            }
+
+            if let Some(unmapped) = data.state.unmapped_windows.get(toplevel.wl_surface())
+                && !unmapped.is_configured()
+            {
+                data.state.send_initial_configure(&toplevel);
+            }
+        });
     }
 }

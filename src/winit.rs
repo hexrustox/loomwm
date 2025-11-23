@@ -1,65 +1,53 @@
-use std::time::Duration;
-
 use smithay::{
     backend::{
         renderer::{damage::OutputDamageTracker, gles::GlesRenderer},
-        winit::{self, WinitEvent},
+        winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     output::{Mode, Output, PhysicalProperties, Subpixel},
-    reexports::calloop::EventLoop,
+    reexports::{
+        calloop::LoopHandle,
+        winit::{dpi::LogicalSize, window::Window},
+    },
     utils::{Scale, Transform},
 };
 
-use crate::{CalloopData, Smallvil};
+use crate::{CallLoopData, Smallvil};
 
-pub fn init_winit(
-    event_loop: &mut EventLoop<CalloopData>,
-    data: &mut CalloopData,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let display_handle = &mut data.display_handle;
-    let state = &mut data.state;
+pub struct Winit {
+    output: Output,
+    backend: WinitGraphicsBackend<GlesRenderer>,
+    damage_tracker: OutputDamageTracker,
+}
 
-    let (mut backend, winit) = winit::init::<GlesRenderer>()?;
+impl Winit {
+    pub fn new(event_loop: LoopHandle<CallLoopData>) -> Result<Self, winit::Error> {
+        let builder = Window::default_attributes().with_inner_size(LogicalSize::new(1280.0, 800.0));
+        let (backend, winit) = winit::init_from_attributes(builder)?;
 
-    let mode = Mode {
-        size: backend.window_size(),
-        refresh: 60_000,
-    };
+        let output = Output::new(
+            "winit".to_string(),
+            PhysicalProperties {
+                size: (0, 0).into(),
+                subpixel: Subpixel::Unknown,
+                make: "Smithay".into(),
+                model: "Winit".into(),
+            },
+        );
 
-    let output = Output::new(
-        "winit".to_string(),
-        PhysicalProperties {
-            size: (0, 0).into(),
-            subpixel: Subpixel::Unknown,
-            make: "Smithay".into(),
-            model: "Winit".into(),
-        },
-    );
-    let _global = output.create_global::<Smallvil>(display_handle);
-    output.change_current_state(
-        Some(mode),
-        Some(Transform::Flipped180),
-        None,
-        Some((0, 0).into()),
-    );
-    output.set_preferred(mode);
+        let mode = Mode {
+            size: backend.window_size(),
+            refresh: 60_000,
+        };
+        output.change_current_state(Some(mode), Some(Transform::Flipped180), None, None);
+        output.set_preferred(mode);
 
-    state.space.map_output(&output, (0, 0));
+        let damage_tracker = OutputDamageTracker::from_output(&output);
 
-    let mut damage_tracker = OutputDamageTracker::from_output(&output);
-
-    unsafe {
-        std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
-    }
-    event_loop
-        .handle()
-        .insert_source(winit, move |event, _, data| {
-            let display = &mut data.display_handle;
-            let state = &mut data.state;
-
-            match event {
+        event_loop
+            .insert_source(winit, move |event, _, data| match event {
                 WinitEvent::Resized { size, .. } => {
-                    output.change_current_state(
+                    let winit = &data.backend;
+                    winit.output.change_current_state(
                         Some(Mode {
                             size,
                             refresh: 60_000,
@@ -69,56 +57,55 @@ pub fn init_winit(
                         None,
                     );
                 }
-                WinitEvent::Input(event) => state.process_input_event(event),
+                WinitEvent::Input(event) => data.state.process_input_event(event),
+                WinitEvent::Focus(_) => (),
                 WinitEvent::Redraw => {
+                    let display = &mut data.state.display_handle;
+                    let backend = &mut data.backend.backend;
+                    let output = &data.backend.output;
+
                     let res = {
                         let age = backend.buffer_age().unwrap_or_default();
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
-
                         let output_scale = output.current_scale().fractional_scale();
                         let scale = Scale::from(output_scale);
-
-                        // let render_elements = state.windows.render_elements::<GlesRenderer>(
-                        //     renderer,
-                        //     &state.space.output_geometry(&output).unwrap(),
-                        //     scale,
-                        // );
-                        // damage_tracker
-                        //     .render_output(
-                        //         renderer,
-                        //         &mut framebuffer,
-                        //         age,
-                        //         &render_element,
-                        //         [0.1; 4],
-                        //     )
-                        //     .unwrap()
+                        let els = data.state.layout.render_elements::<GlesRenderer>(
+                            renderer,
+                            scale,
+                            1.0,
+                            output,
+                            data.state.start_time.elapsed(),
+                        );
+                        data.backend
+                            .damage_tracker
+                            .render_output(renderer, &mut framebuffer, age, &els, [0.1; 4])
+                            .unwrap()
                     };
-                    // if let Some(damage) = res.damage {
-                    //     backend.submit(Some(damage)).unwrap();
-                    // }
-
-                    // state.windows.elements().for_each(|window| {
-                    //     window.send_frame(
-                    //         &output,
-                    //         state.start_time.elapsed(),
-                    //         Some(Duration::ZERO),
-                    //         |_, _| Some(output.clone()),
-                    //     )
-                    // });
-
-                    state.space.refresh();
-                    state.popups.cleanup();
+                    if let Some(damage) = res.damage {
+                        backend.submit(Some(damage)).unwrap();
+                    }
+                    data.state.space.refresh();
+                    data.state.popups.cleanup();
                     let _ = display.flush_clients();
-
                     // Ask for redraw to schedule new frame.
                     backend.window().request_redraw();
                 }
-                WinitEvent::CloseRequested => {
-                    state.loop_signal.stop();
-                }
-                _ => (),
-            };
-        })?;
+                WinitEvent::CloseRequested => data.state.loop_signal.stop(),
+            })
+            .unwrap();
 
-    Ok(())
+        Ok(Self {
+            output,
+            backend,
+            damage_tracker,
+        })
+    }
+
+    pub fn init(&mut self, state: &mut Smallvil) {
+        unsafe {
+            std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
+        }
+
+        state.add_output(self.output.clone());
+    }
 }

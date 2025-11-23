@@ -1,10 +1,14 @@
-use std::{ffi::OsString, sync::Arc};
+use std::{collections::HashMap, ffi::OsString, sync::Arc};
 
+use anyhow::anyhow;
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
     input::{Seat, SeatState},
+    output::Output,
     reexports::{
-        calloop::{EventLoop, Interest, LoopSignal, Mode, PostAction, generic::Generic},
+        calloop::{
+            EventLoop, Interest, LoopHandle, LoopSignal, Mode, PostAction, generic::Generic,
+        },
         wayland_server::{
             Display, DisplayHandle,
             backend::{ClientData, ClientId, DisconnectReason},
@@ -22,7 +26,7 @@ use smithay::{
     },
 };
 
-use crate::CalloopData;
+use crate::{CallLoopData, layout::Layout, window::unmapped::UnmappedWindow};
 
 pub struct Smallvil {
     pub start_time: std::time::Instant,
@@ -31,6 +35,7 @@ pub struct Smallvil {
 
     pub space: Space<Window>,
     pub loop_signal: LoopSignal,
+    pub event_loop: LoopHandle<'static, CallLoopData>,
 
     // Smithay State
     pub compositor_state: CompositorState,
@@ -40,12 +45,18 @@ pub struct Smallvil {
     pub seat_state: SeatState<Smallvil>,
     pub data_device_state: DataDeviceState,
     pub popups: PopupManager,
-
     pub seat: Seat<Self>,
+
+    pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
+    pub layout: Layout,
 }
 
 impl Smallvil {
-    pub fn new(event_loop: &mut EventLoop<CalloopData>, display: Display<Self>) -> Self {
+    pub fn new(
+        event_loop: LoopHandle<'static, CallLoopData>,
+        loop_signal: LoopSignal,
+        display: Display<Self>,
+    ) -> Self {
         let start_time = std::time::Instant::now();
 
         let dh = display.handle();
@@ -76,18 +87,51 @@ impl Smallvil {
         // Outputs become views of a part of the Space and can be rendered via Space::render_output.
         let space = Space::default();
 
-        let socket_name = Self::init_wayland_listener(display, event_loop);
+        let socket_name = {
+            // Creates a new listening socket, automatically choosing the next available `wayland` socket name.
+            let listening_socket = ListeningSocketSource::new_auto().unwrap();
 
-        // Get the loop signal, used to stop the event loop
-        let loop_signal = event_loop.get_signal();
+            // Get the name of the listening socket.
+            // Clients will connect to this socket.
+            let socket_name = listening_socket.socket_name().to_os_string();
+
+            event_loop
+                .insert_source(listening_socket, move |client_stream, _, data| {
+                    // Inside the callback, you should insert the client into the display.
+                    //
+                    // You may also associate some data with the client when inserting the client.
+                    data.state
+                        .display_handle
+                        .insert_client(client_stream, Arc::new(ClientState::default()))
+                        .unwrap();
+                })
+                .expect("Failed to init the wayland event source.");
+
+            // You also need to add the display itself to the event loop, so that client events will be processed by wayland-server.
+            event_loop
+                .insert_source(
+                    Generic::new(display, Interest::READ, Mode::Level),
+                    |_, display, data| {
+                        // Safety: we don't drop the display
+                        unsafe {
+                            display.get_mut().dispatch_clients(&mut data.state).unwrap();
+                        }
+                        Ok(PostAction::Continue)
+                    },
+                )
+                .unwrap();
+
+            socket_name
+        };
 
         Self {
             start_time,
+            socket_name,
             display_handle: dh,
 
             space,
             loop_signal,
-            socket_name,
+            event_loop,
 
             compositor_state,
             xdg_shell_state,
@@ -97,52 +141,10 @@ impl Smallvil {
             data_device_state,
             popups,
             seat,
+
+            unmapped_windows: HashMap::new(),
+            layout: Layout::new(),
         }
-    }
-
-    fn init_wayland_listener(
-        display: Display<Smallvil>,
-        event_loop: &mut EventLoop<CalloopData>,
-    ) -> OsString {
-        // Creates a new listening socket, automatically choosing the next available `wayland` socket name.
-        let listening_socket = ListeningSocketSource::new_auto().unwrap();
-
-        // Get the name of the listening socket.
-        // Clients will connect to this socket.
-        let socket_name = listening_socket.socket_name().to_os_string();
-
-        let loop_handle = event_loop.handle();
-
-        loop_handle
-            .insert_source(listening_socket, move |client_stream, _, state| {
-                // Inside the callback, you should insert the client into the display.
-                //
-                // You may also associate some data with the client when inserting the client.
-                state
-                    .display_handle
-                    .insert_client(client_stream, Arc::new(ClientState::default()))
-                    .unwrap();
-            })
-            .expect("Failed to init the wayland event source.");
-
-        // You also need to add the display itself to the event loop, so that client events will be processed by wayland-server.
-        loop_handle
-            .insert_source(
-                Generic::new(display, Interest::READ, Mode::Level),
-                |_, display, state| {
-                    // Safety: we don't drop the display
-                    unsafe {
-                        display
-                            .get_mut()
-                            .dispatch_clients(&mut state.state)
-                            .unwrap();
-                    }
-                    Ok(PostAction::Continue)
-                },
-            )
-            .unwrap();
-
-        socket_name
     }
 
     // pub fn surface_under(
@@ -157,6 +159,12 @@ impl Smallvil {
     //                 .map(|(s, p)| (s, (p + location).to_f64()))
     //         })
     // }
+
+    pub fn add_output(&mut self, output: Output) {
+        let _global = output.create_global::<Smallvil>(&self.display_handle);
+        self.space.map_output(&output, (0, 0));
+        self.layout.add_output(output);
+    }
 }
 
 #[derive(Default)]

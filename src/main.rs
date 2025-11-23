@@ -4,34 +4,31 @@ mod handlers;
 
 mod grabs;
 mod input;
+mod layout;
 mod state;
 mod window;
 mod winit;
 
-use smithay::reexports::{
-    calloop::EventLoop,
-    wayland_server::{Display, DisplayHandle},
-};
-pub use state::Smallvil;
+use anyhow::anyhow;
+use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
+use state::Smallvil;
 
-pub struct CalloopData {
+use crate::winit::Winit;
+
+pub struct CallLoopData {
     state: Smallvil,
-    display_handle: DisplayHandle,
+    backend: Winit,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
+fn main() -> anyhow::Result<()> {
+    let mut event_loop: EventLoop<CallLoopData> = EventLoop::try_new()?;
 
     let display: Display<Smallvil> = Display::new()?;
-    let display_handle = display.handle();
-    let state = Smallvil::new(&mut event_loop, display);
+    let mut state = Smallvil::new(event_loop.handle(), event_loop.get_signal(), display);
+    let mut backend = Winit::new(event_loop.handle()).map_err(|e| anyhow!("{e}"))?;
+    backend.init(&mut state);
 
-    let mut data = CalloopData {
-        state,
-        display_handle,
-    };
-
-    crate::winit::init_winit(&mut event_loop, &mut data)?;
+    let mut data = CallLoopData { state, backend };
 
     event_loop.run(None, &mut data, move |_| {
         // Smallvil is running

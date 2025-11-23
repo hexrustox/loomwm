@@ -31,7 +31,14 @@ impl Smallvil {
                         let res = {
                             let press = event.state() == KeyState::Pressed;
                             let keysym = keysym.modified_sym();
-                            false
+                            if keysym == Keysym::Return {
+                                if press {
+                                    std::process::Command::new("alacritty").spawn().ok();
+                                }
+                                true
+                            } else {
+                                false
+                            }
                         };
                         if res {
                             FilterResult::Intercept(())
