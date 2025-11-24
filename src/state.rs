@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::OsString, sync::Arc};
 
 use smithay::{
-    desktop::{PopupManager, Space, Window},
+    desktop::{PopupManager, Space, Window, WindowSurfaceType},
     input::{Seat, SeatState},
     output::Output,
     reexports::{
@@ -12,7 +12,7 @@ use smithay::{
             protocol::wl_surface::WlSurface,
         },
     },
-    utils::SERIAL_COUNTER,
+    utils::{Logical, Point, SERIAL_COUNTER},
     wayland::{
         compositor::{CompositorClientState, CompositorState},
         output::OutputManagerState,
@@ -144,19 +144,6 @@ impl Smallvil {
         }
     }
 
-    // pub fn surface_under(
-    //     &self,
-    //     pos: Point<f64, Logical>,
-    // ) -> Option<(WlSurface, Point<f64, Logical>)> {
-    //     self.windows
-    //         .element_under(pos)
-    //         .and_then(|(window, location)| {
-    //             window
-    //                 .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-    //                 .map(|(s, p)| (s, (p + location).to_f64()))
-    //         })
-    // }
-
     pub fn add_output(&mut self, output: Output) {
         let _global = output.create_global::<Smallvil>(&self.display_handle);
         self.space.map_output(&output, (0, 0));
@@ -168,15 +155,29 @@ impl Smallvil {
             if let Some(focus) = handler.current_focus()
                 && let Some(window) = self.layout.find_window(&focus)
             {
-                window.unset_focus();
+                window.window.unset_focus();
             }
 
             let serial = SERIAL_COUNTER.next_serial();
             handler.set_focus(self, Some(surface.wl_surface().clone()), serial);
             if let Some(window) = self.layout.find_window(surface.wl_surface()) {
-                window.set_focus();
+                window.window.set_focus();
             }
         }
+    }
+
+    pub fn surface_under(
+        &self,
+        pos: Point<f64, Logical>,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
+        self.layout
+            .window_under(pos)
+            .and_then(|(window, location)| {
+                window
+                    .window
+                    .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+                    .map(|(s, p)| (s, (p + location).to_f64()))
+            })
     }
 }
 

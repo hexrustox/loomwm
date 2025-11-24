@@ -30,8 +30,10 @@ impl PointerGrab<Smallvil> for MoveSurfaceGrab {
 
         let delta = event.location - self.start_data.location;
         let new_location = self.initial_window_location.to_f64() + delta;
-        // data.windows
-        //     .map_element(self.window.clone(), new_location.to_i32_round(), true);
+        data.layout
+            .find_window(self.window.toplevel().unwrap().wl_surface())
+            .unwrap()
+            .position = new_location.to_i32_round();
     }
 
     fn relative_motion(

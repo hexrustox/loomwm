@@ -46,7 +46,7 @@ impl XdgShellHandler for Smallvil {
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
     }
 
-    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {}
+    // fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {}
 
     fn reposition_request(
         &mut self,
@@ -64,24 +64,24 @@ impl XdgShellHandler for Smallvil {
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
-        // let seat = Seat::from_resource(&seat).unwrap();
+        let seat = Seat::from_resource(&seat).unwrap();
 
-        // let wl_surface = surface.wl_surface();
+        let wl_surface = surface.wl_surface();
 
-        // if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
-        //     let pointer = seat.get_pointer().unwrap();
+        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
+            let pointer = seat.get_pointer().unwrap();
 
-        //     let window = self.layout.find_window(surface.wl_surface());
-        //     let initial_window_location = self.windows.element_location(&window).unwrap();
+            let tile = self.layout.find_window(surface.wl_surface()).unwrap();
+            let initial_window_location = tile.position;
 
-        //     let grab = MoveSurfaceGrab {
-        //         start_data,
-        //         window: window.unwrap().window,
-        //         initial_window_location,
-        //     };
+            let grab = MoveSurfaceGrab {
+                start_data,
+                window: tile.window.window.clone(),
+                initial_window_location,
+            };
 
-        //     pointer.set_grab(self, grab, serial, Focus::Clear);
-        // }
+            pointer.set_grab(self, grab, serial, Focus::Clear);
+        }
     }
 
     fn resize_request(

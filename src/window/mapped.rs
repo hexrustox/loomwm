@@ -28,6 +28,10 @@ impl MappedWindow {
         self.window.toplevel().expect("No X11 support")
     }
 
+    pub fn bbox(&self) -> Rectangle<i32, Logical> {
+        self.window.bbox()
+    }
+
     pub fn geometry(&self) -> Rectangle<i32, Logical> {
         self.window.geometry()
     }

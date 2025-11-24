@@ -2,6 +2,7 @@ use std::{mem, time::Duration};
 
 use smithay::{
     backend::renderer::element::surface::WaylandSurfaceRenderElement,
+    desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale},
@@ -60,7 +61,7 @@ impl Layout {
         }
     }
 
-    pub fn find_window(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn find_window(&mut self, surface: &WlSurface) -> Option<&mut Tile> {
         match &mut self.monitor_set {
             MonitorSet::Normal { monitors, .. } => {
                 for mon in monitors {
@@ -72,6 +73,26 @@ impl Layout {
                 }
             }
             MonitorSet::NoOutputs { workspaces } => todo!(),
+        }
+        None
+    }
+
+    pub fn window_under<P: Into<Point<f64, Logical>>>(
+        &self,
+        point: P,
+    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
+        let point = point.into();
+        match &self.monitor_set {
+            MonitorSet::Normal { monitors, .. } => {
+                for mon in monitors {
+                    for ws in &mon.workspaces {
+                        if let Some(window) = ws.window_under(point) {
+                            return Some(window);
+                        }
+                    }
+                }
+            }
+            MonitorSet::NoOutputs { workspaces } => {}
         }
         None
     }
@@ -139,13 +160,21 @@ impl Workspace {
         }
     }
 
-    pub fn find_window(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn find_window(&mut self, surface: &WlSurface) -> Option<&mut Tile> {
         for tile in &mut self.floating.tiles {
             if tile.window.toplevel().wl_surface() == surface {
-                return Some(&mut tile.window);
+                return Some(tile);
             }
         }
         None
+    }
+
+    pub fn window_under(
+        &self,
+        point: Point<f64, Logical>,
+    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
+        let point = point.into();
+        self.floating.window_under(point)
     }
 
     pub fn render_elements<R: MyRenderer>(
@@ -165,6 +194,27 @@ pub struct FloatingSpace {
 }
 
 impl FloatingSpace {
+    pub fn window_under(
+        &self,
+        point: Point<f64, Logical>,
+    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
+        self.tiles
+            .iter()
+            .rev()
+            .filter(|t| t.window.bbox().to_f64().contains(point))
+            .find_map(|t| {
+                let render_location = t.render_location();
+                if t.window
+                    .window
+                    .is_in_input_region(&(point - render_location.to_f64()))
+                {
+                    Some((&t.window, render_location))
+                } else {
+                    None
+                }
+            })
+    }
+
     pub fn render_elements<R: MyRenderer>(
         &self,
         renderer: &mut R,
@@ -174,6 +224,7 @@ impl FloatingSpace {
     ) -> Vec<WaylandSurfaceRenderElement<R>> {
         self.tiles
             .iter()
+            .rev()
             .flat_map(|t| t.render_element(renderer, scale, output, time))
             .collect()
     }
@@ -181,8 +232,8 @@ impl FloatingSpace {
 
 #[derive(Debug)]
 pub struct Tile {
-    window: MappedWindow,
-    position: Point<i32, Logical>,
+    pub window: MappedWindow,
+    pub position: Point<i32, Logical>,
 }
 
 impl Tile {
@@ -193,6 +244,10 @@ impl Tile {
         }
     }
 
+    pub fn render_location(&self) -> Point<i32, Logical> {
+        self.position - self.window.geometry().loc
+    }
+
     pub fn render_element<R: MyRenderer>(
         &self,
         renderer: &mut R,
@@ -200,10 +255,9 @@ impl Tile {
         output: &Output,
         time: Duration,
     ) -> Vec<WaylandSurfaceRenderElement<R>> {
-        let location = self.position - self.window.geometry().loc;
         self.window.render_element(
             renderer,
-            location.to_physical_precise_round(scale),
+            self.render_location().to_physical_precise_round(scale),
             scale,
             output,
             time,

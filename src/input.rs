@@ -7,7 +7,6 @@ use smithay::{
         keyboard::FilterResult,
         pointer::{AxisFrame, ButtonEvent, MotionEvent},
     },
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::SERIAL_COUNTER,
 };
 use xkbcommon::xkb::Keysym;
@@ -27,7 +26,7 @@ impl Smallvil {
                     event.state(),
                     serial,
                     time,
-                    |this, _, keysym| {
+                    |state, _, keysym| {
                         let res = {
                             let press = event.state() == KeyState::Pressed;
                             let keysym = keysym.modified_sym();
@@ -60,22 +59,21 @@ impl Smallvil {
 
                 let pointer = self.seat.get_pointer().unwrap();
 
-                // let under = self.surface_under(pos);
+                let under = self.surface_under(pos);
 
-                // pointer.motion(
-                //     self,
-                //     under,
-                //     &MotionEvent {
-                //         location: pos,
-                //         serial,
-                //         time: event.time_msec(),
-                //     },
-                // );
+                pointer.motion(
+                    self,
+                    under,
+                    &MotionEvent {
+                        location: pos,
+                        serial,
+                        time: event.time_msec(),
+                    },
+                );
                 pointer.frame(self);
             }
             InputEvent::PointerButton { event, .. } => {
                 let pointer = self.seat.get_pointer().unwrap();
-                let keyboard = self.seat.get_keyboard().unwrap();
 
                 let serial = SERIAL_COUNTER.next_serial();
 
@@ -83,29 +81,17 @@ impl Smallvil {
 
                 let button_state = event.state();
 
-                // if ButtonState::Pressed == button_state && !pointer.is_grabbed() {
-                //     if let Some((window, _loc)) = self
-                //         .windows
-                //         .element_under(pointer.current_location())
-                //         .map(|(w, l)| (w.clone(), l))
-                //     {
-                //         self.windows.raise_element(&window, true);
-                //         keyboard.set_focus(
-                //             self,
-                //             Some(window.toplevel().unwrap().wl_surface().clone()),
-                //             serial,
-                //         );
-                //         self.windows.elements().for_each(|window| {
-                //             window.toplevel().unwrap().send_pending_configure();
-                //         });
-                //     } else {
-                //         self.windows.elements().for_each(|window| {
-                //             window.set_activated(false);
-                //             window.toplevel().unwrap().send_pending_configure();
-                //         });
-                //         keyboard.set_focus(self, Option::<WlSurface>::None, serial);
-                //     }
-                // };
+                if ButtonState::Pressed == button_state && !pointer.is_grabbed() {
+                    //
+                    if let Some((window, _loc)) =
+                        self.layout.window_under(pointer.current_location())
+                    {
+                        // self.windows.raise_element(&window, true);
+                        let surface = window.toplevel().wl_surface().clone();
+                        let tile = self.layout.find_window(&surface);
+                        tile.unwrap().window.set_focus();
+                    }
+                };
 
                 pointer.button(
                     self,
