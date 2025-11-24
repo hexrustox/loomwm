@@ -4,12 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.100"
-bitflags = "2.10.0"
 smithay = { version = "0.7.0", default-features = false, features = [
   "backend_winit",
   "wayland_frontend",
   "desktop",
 ] }
-test-case = "3.3.1"
-xkbcommon = "0.8"

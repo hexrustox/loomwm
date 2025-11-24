@@ -22,7 +22,9 @@ in
   LD_LIBRARY_PATH = "${lib.makeLibraryPath (mesa-drivers ++ ld)}:${
     lib.makeSearchPathOutput "lib" "lib/vdpau" libvdpau
   }";
+
   packages = with pkgs; [
+    opencode
     alacritty
   ];
 }
