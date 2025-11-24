@@ -1,15 +1,12 @@
 use std::{mem, time::Duration};
 
 use smithay::{
-    backend::renderer::{
-        ImportAll, Renderer, Texture,
-        element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
-    },
+    backend::renderer::element::surface::WaylandSurfaceRenderElement,
     output::Output,
     utils::{Logical, Point, Scale},
 };
 
-use crate::window::mapped::MappedWindow;
+use crate::{types::MyRenderer, window::mapped::MappedWindow};
 
 pub struct Layout {
     monitor_set: MonitorSet,
@@ -35,55 +32,49 @@ impl Layout {
                     workspaces,
                     active_workspace: 0,
                 }],
+                active_monitor: 0,
             },
         }
     }
 
     pub fn add_window(&mut self, window: MappedWindow) {
         match &mut self.monitor_set {
-            MonitorSet::Normal { monitors } => {
-                let ws = &mut monitors[0].workspaces;
-                if ws.is_empty() {
-                    ws.push(Workspace::new());
+            MonitorSet::Normal {
+                monitors,
+                active_monitor,
+            } => {
+                if let Some(monitor) = monitors.get_mut(*active_monitor) {
+                    let workspace = if monitor.workspaces.is_empty() {
+                        monitor.workspaces.push(Workspace::new());
+                        monitor.workspaces.last_mut()
+                    } else {
+                        monitor.workspaces.get_mut(monitor.active_workspace)
+                    }
+                    .unwrap();
+                    workspace.floating.tiles.push(Tile::new(window, (0, 0)));
                 }
-                ws[0].floating.tiles.push(Tile {
-                    window,
-                    position: Point::new(0, 0),
-                });
             }
             MonitorSet::NoOutputs { workspaces } => todo!(),
         }
     }
 
-    pub fn render_elements<R: Renderer + ImportAll>(
+    pub fn render_elements<R: MyRenderer>(
         &self,
         renderer: &mut R,
         scale: Scale<f64>,
-        alpha: f32,
-        output: &Output,
         time: Duration,
-    ) -> Vec<WaylandSurfaceRenderElement<R>>
-    where
-        R::TextureId: Clone + Texture + 'static,
-    {
+    ) -> Vec<WaylandSurfaceRenderElement<R>> {
         let mut vec = Vec::new();
 
         match &self.monitor_set {
-            MonitorSet::Normal { monitors } => {
-                let ws = &monitors[0].workspaces;
-                if !ws.is_empty() {
-                    for t in &ws[0].floating.tiles {
-                        let location = t.position - t.window.window.geometry().loc;
-                        vec.extend(t.window.window.render_elements(
-                            renderer,
-                            location.to_physical_precise_round(scale),
-                            scale,
-                            alpha,
-                        ));
-                        t.window
-                            .window
-                            .send_frame(output, time, None, |_, _| Some(output.clone()));
-                    }
+            MonitorSet::Normal {
+                monitors,
+                active_monitor,
+            } => {
+                if let Some(monitor) = monitors.get(*active_monitor)
+                    && let Some(workspace) = monitor.workspaces.get(monitor.active_workspace)
+                {
+                    vec.extend(workspace.render_elements(renderer, scale, &monitor.output, time));
                 }
             }
             MonitorSet::NoOutputs { workspaces } => {}
@@ -94,8 +85,13 @@ impl Layout {
 }
 
 enum MonitorSet {
-    Normal { monitors: Vec<Monitor> },
-    NoOutputs { workspaces: Vec<Workspace> },
+    Normal {
+        monitors: Vec<Monitor>,
+        active_monitor: usize,
+    },
+    NoOutputs {
+        workspaces: Vec<Workspace>,
+    },
 }
 
 impl Default for MonitorSet {
@@ -122,13 +118,64 @@ impl Workspace {
             floating: FloatingSpace { tiles: Vec::new() },
         }
     }
+
+    pub fn render_elements<R: MyRenderer>(
+        &self,
+        renderer: &mut R,
+        scale: Scale<f64>,
+        output: &Output,
+        time: Duration,
+    ) -> Vec<WaylandSurfaceRenderElement<R>> {
+        self.floating.render_elements(renderer, scale, output, time)
+    }
 }
 
 pub struct FloatingSpace {
     tiles: Vec<Tile>,
 }
 
+impl FloatingSpace {
+    pub fn render_elements<R: MyRenderer>(
+        &self,
+        renderer: &mut R,
+        scale: Scale<f64>,
+        output: &Output,
+        time: Duration,
+    ) -> Vec<WaylandSurfaceRenderElement<R>> {
+        self.tiles
+            .iter()
+            .flat_map(|t| t.render_element(renderer, scale, output, time))
+            .collect()
+    }
+}
+
 pub struct Tile {
     window: MappedWindow,
     position: Point<i32, Logical>,
+}
+
+impl Tile {
+    pub fn new<T: Into<Point<i32, Logical>>>(window: MappedWindow, position: T) -> Self {
+        Self {
+            window,
+            position: position.into(),
+        }
+    }
+
+    pub fn render_element<R: MyRenderer>(
+        &self,
+        renderer: &mut R,
+        scale: Scale<f64>,
+        output: &Output,
+        time: Duration,
+    ) -> Vec<WaylandSurfaceRenderElement<R>> {
+        let location = self.position - self.window.geometry().loc;
+        self.window.render_element(
+            renderer,
+            location.to_physical_precise_round(scale),
+            scale,
+            output,
+            time,
+        )
+    }
 }

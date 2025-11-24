@@ -69,16 +69,14 @@ impl Winit {
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
                         let output_scale = output.current_scale().fractional_scale();
                         let scale = Scale::from(output_scale);
-                        let els = data.state.layout.render_elements::<GlesRenderer>(
+                        let elements = data.state.layout.render_elements::<GlesRenderer>(
                             renderer,
                             scale,
-                            1.0,
-                            output,
                             data.state.start_time.elapsed(),
                         );
                         data.backend
                             .damage_tracker
-                            .render_output(renderer, &mut framebuffer, age, &els, [0.1; 4])
+                            .render_output(renderer, &mut framebuffer, age, &elements, [0.1; 4])
                             .unwrap()
                     };
                     if let Some(damage) = res.damage {

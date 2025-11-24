@@ -6,6 +6,7 @@ mod grabs;
 mod input;
 mod layout;
 mod state;
+mod types;
 mod window;
 mod winit;
 
