@@ -32,6 +32,18 @@ impl MappedWindow {
         self.window.geometry()
     }
 
+    pub fn set_focus(&mut self) {
+        self.window.set_activated(true);
+        self.toplevel().send_pending_configure();
+        self.is_focused = true;
+    }
+
+    pub fn unset_focus(&mut self) {
+        self.window.set_activated(false);
+        self.toplevel().send_pending_configure();
+        self.is_focused = false;
+    }
+
     pub fn render_element<R: MyRenderer>(
         &self,
         renderer: &mut R,

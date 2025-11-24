@@ -12,11 +12,12 @@ use smithay::{
             protocol::wl_surface::WlSurface,
         },
     },
+    utils::SERIAL_COUNTER,
     wayland::{
         compositor::{CompositorClientState, CompositorState},
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
-        shell::xdg::XdgShellState,
+        shell::xdg::{ToplevelSurface, XdgShellState},
         shm::ShmState,
         socket::ListeningSocketSource,
     },
@@ -160,6 +161,22 @@ impl Smallvil {
         let _global = output.create_global::<Smallvil>(&self.display_handle);
         self.space.map_output(&output, (0, 0));
         self.layout.add_output(output);
+    }
+
+    pub fn focus_window(&mut self, surface: &ToplevelSurface) {
+        if let Some(handler) = self.seat.get_keyboard() {
+            if let Some(focus) = handler.current_focus()
+                && let Some(window) = self.layout.find_window(&focus)
+            {
+                window.unset_focus();
+            }
+
+            let serial = SERIAL_COUNTER.next_serial();
+            handler.set_focus(self, Some(surface.wl_surface().clone()), serial);
+            if let Some(window) = self.layout.find_window(surface.wl_surface()) {
+                window.set_focus();
+            }
+        }
     }
 }
 

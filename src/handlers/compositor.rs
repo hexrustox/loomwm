@@ -54,7 +54,9 @@ impl CompositorHandler for Smallvil {
                     window.on_commit();
 
                     let mapped = MappedWindow::new(window);
+                    let toplevel = mapped.toplevel().clone();
                     self.layout.add_window(mapped);
+                    self.focus_window(&toplevel);
                 } else {
                     let window = entry.get();
                     if !window.is_configured() {

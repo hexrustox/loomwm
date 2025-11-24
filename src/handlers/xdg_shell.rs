@@ -26,6 +26,7 @@ use smithay::{
 
 use crate::{
     Smallvil,
+    grabs::{MoveSurfaceGrab, ResizeSurfaceGrab},
     window::unmapped::{UnmappedWindow, UnmappedWindowConfigureState},
 };
 
@@ -70,17 +71,12 @@ impl XdgShellHandler for Smallvil {
         // if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
         //     let pointer = seat.get_pointer().unwrap();
 
-        //     let window = self
-        //         .windows
-        //         .elements()
-        //         .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
-        //         .unwrap()
-        //         .clone();
+        //     let window = self.layout.find_window(surface.wl_surface());
         //     let initial_window_location = self.windows.element_location(&window).unwrap();
 
         //     let grab = MoveSurfaceGrab {
         //         start_data,
-        //         window,
+        //         window: window.unwrap().window,
         //         initial_window_location,
         //     };
 

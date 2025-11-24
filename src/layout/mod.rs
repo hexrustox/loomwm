@@ -3,7 +3,9 @@ use std::{mem, time::Duration};
 use smithay::{
     backend::renderer::element::surface::WaylandSurfaceRenderElement,
     output::Output,
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale},
+    wayland::shell::xdg::ToplevelSurface,
 };
 
 use crate::{types::MyRenderer, window::mapped::MappedWindow};
@@ -58,6 +60,22 @@ impl Layout {
         }
     }
 
+    pub fn find_window(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        match &mut self.monitor_set {
+            MonitorSet::Normal { monitors, .. } => {
+                for mon in monitors {
+                    for ws in &mut mon.workspaces {
+                        if let Some(tile) = ws.find_window(surface) {
+                            return Some(tile);
+                        }
+                    }
+                }
+            }
+            MonitorSet::NoOutputs { workspaces } => todo!(),
+        }
+        None
+    }
+
     pub fn render_elements<R: MyRenderer>(
         &self,
         renderer: &mut R,
@@ -102,12 +120,14 @@ impl Default for MonitorSet {
     }
 }
 
+#[derive(Debug)]
 pub struct Monitor {
     pub output: Output,
     pub workspaces: Vec<Workspace>,
     pub active_workspace: usize,
 }
 
+#[derive(Debug)]
 pub struct Workspace {
     floating: FloatingSpace,
 }
@@ -117,6 +137,15 @@ impl Workspace {
         Self {
             floating: FloatingSpace { tiles: Vec::new() },
         }
+    }
+
+    pub fn find_window(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        for tile in &mut self.floating.tiles {
+            if tile.window.toplevel().wl_surface() == surface {
+                return Some(&mut tile.window);
+            }
+        }
+        None
     }
 
     pub fn render_elements<R: MyRenderer>(
@@ -130,6 +159,7 @@ impl Workspace {
     }
 }
 
+#[derive(Debug)]
 pub struct FloatingSpace {
     tiles: Vec<Tile>,
 }
@@ -149,6 +179,7 @@ impl FloatingSpace {
     }
 }
 
+#[derive(Debug)]
 pub struct Tile {
     window: MappedWindow,
     position: Point<i32, Logical>,
