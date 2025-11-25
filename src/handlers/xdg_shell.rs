@@ -1,5 +1,6 @@
 use smithay::{
     delegate_xdg_shell,
+    desktop::Window,
     wayland::shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
     },
@@ -12,7 +13,10 @@ impl XdgShellHandler for WMState {
         &mut self.xdg_shell_state
     }
 
-    fn new_toplevel(&mut self, surface: ToplevelSurface) {}
+    fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        let window = Window::new_wayland_window(surface);
+        self.windows.push(window);
+    }
 
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {}
 

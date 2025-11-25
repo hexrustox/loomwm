@@ -1,4 +1,5 @@
 use smithay::{
+    backend::renderer::utils::on_commit_buffer_handler,
     delegate_compositor, delegate_shm,
     reexports::wayland_server::{
         Client,
@@ -7,7 +8,11 @@ use smithay::{
     },
     wayland::{
         buffer::BufferHandler,
-        compositor::{CompositorClientState, CompositorHandler, CompositorState},
+        compositor::{
+            CompositorClientState, CompositorHandler, CompositorState, get_parent,
+            is_sync_subsurface, with_states,
+        },
+        shell::xdg::XdgToplevelSurfaceData,
         shm::{ShmHandler, ShmState},
     },
 };
@@ -23,7 +28,43 @@ impl CompositorHandler for WMState {
         &client.get_data::<ClientState>().unwrap().compositor_state
     }
 
-    fn commit(&mut self, surface: &WlSurface) {}
+    fn commit(&mut self, surface: &WlSurface) {
+        on_commit_buffer_handler::<Self>(surface);
+        if !is_sync_subsurface(surface) {
+            let mut root = surface.clone();
+            while let Some(parent) = get_parent(&root) {
+                root = parent;
+            }
+            if let Some(window) = self
+                .windows
+                .iter()
+                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+            {
+                window.on_commit();
+            }
+        };
+
+        if let Some(window) = self
+            .windows
+            .iter()
+            .find(|w| w.toplevel().unwrap().wl_surface() == surface)
+            .cloned()
+        {
+            let initial_configure_sent = with_states(surface, |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .initial_configure_sent
+            });
+
+            if !initial_configure_sent {
+                window.toplevel().unwrap().send_configure();
+            }
+        }
+    }
 }
 
 #[derive(Default)]

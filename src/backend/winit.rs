@@ -1,13 +1,15 @@
 use smithay::{
     backend::{
         renderer::{
-            damage::OutputDamageTracker, element::surface::WaylandSurfaceRenderElement,
+            damage::OutputDamageTracker,
+            element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
             gles::GlesRenderer,
         },
         winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     output::{Mode, Output, PhysicalProperties, Subpixel},
     reexports::calloop::LoopHandle,
+    utils::Transform,
 };
 
 use crate::state::WMState;
@@ -36,7 +38,7 @@ impl Winit {
             size: backend.window_size(),
             refresh: 60_000,
         };
-        output.change_current_state(Some(mode), None, None, None);
+        output.change_current_state(Some(mode), Some(Transform::Flipped180), None, None);
         output.set_preferred(mode);
 
         let damage_tracker = OutputDamageTracker::from_output(&output);
@@ -52,22 +54,30 @@ impl Winit {
                         None,
                     );
                 }
-                Input(event) => {}
+                Input(_) => {}
                 Redraw => {
                     let winit = &mut state.backend.winit().unwrap();
-                    let age = winit.backend.buffer_age().unwrap_or(0);
+                    let output = &winit.output;
                     let backend = &mut winit.backend;
+
                     let result = {
+                        let age = backend.buffer_age().unwrap_or(0);
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
-                        winit
-                            .damage_tracker
-                            .render_output::<WaylandSurfaceRenderElement<_>, _>(
-                                renderer,
-                                &mut framebuffer,
-                                age,
-                                &[],
-                                [0.1, 0.1, 0.1, 1.0],
-                            )
+
+                        let scale = output.current_scale().fractional_scale().into();
+                        let elements: Vec<WaylandSurfaceRenderElement<_>> = state
+                            .windows
+                            .iter()
+                            .flat_map(|w| w.render_elements(renderer, (0, 0).into(), scale, 1.0))
+                            .collect();
+
+                        winit.damage_tracker.render_output(
+                            renderer,
+                            &mut framebuffer,
+                            age,
+                            &elements,
+                            [0.1, 0.1, 0.1, 1.0],
+                        )
                     };
 
                     if let Ok(render_output) = result {

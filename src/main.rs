@@ -26,6 +26,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         env::set_var("WAYLAND_DISPLAY", &state.socket_name);
     }
 
+    std::process::Command::new("alacritty").spawn().ok();
+
     event_loop.run(None, &mut state, |_| {})?;
 
     Ok(())
