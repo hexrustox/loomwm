@@ -8,7 +8,7 @@ use smithay::{
     utils::Transform,
 };
 
-use crate::state::WMState;
+use crate::{state::WMState, utils::get_monotonic_time};
 
 pub struct Winit {
     output: Output,
@@ -50,7 +50,7 @@ impl Winit {
                         None,
                     );
                 }
-                Input(_) => {}
+                Input(event) => state.process_input_event(event),
                 Redraw => {
                     let winit = &mut state.backend.winit().unwrap();
                     let output = &winit.output;
@@ -74,6 +74,11 @@ impl Winit {
 
                     if let Ok(render_output) = result {
                         backend.submit(render_output.damage.map(|v| &**v)).unwrap();
+                        state.windows.iter().for_each(|w| {
+                            w.send_frame(output, get_monotonic_time(), None, |_, _| {
+                                Some(output.clone())
+                            });
+                        });
                     }
 
                     state.popups.cleanup();

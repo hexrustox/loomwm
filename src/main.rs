@@ -9,7 +9,9 @@ use crate::{
 
 mod backend;
 mod handlers;
+mod input;
 mod state;
+mod utils;
 mod window;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
