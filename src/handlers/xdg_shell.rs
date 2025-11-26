@@ -15,7 +15,7 @@ impl XdgShellHandler for WMState {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface);
-        self.windows.push(window);
+        self.windows.new_window(window);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {}

@@ -1,7 +1,7 @@
 use std::{ffi::OsString, sync::Arc};
 
 use smithay::{
-    desktop::{PopupManager, Window},
+    desktop::PopupManager,
     input::{Seat, SeatState},
     reexports::{
         calloop::{Interest, LoopHandle, LoopSignal, Mode, PostAction, generic::Generic},
@@ -14,7 +14,7 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, handlers::ClientState};
+use crate::{backend::Backend, handlers::ClientState, window::WindowRecord};
 
 pub struct WMState {
     pub socket_name: OsString,
@@ -34,7 +34,7 @@ pub struct WMState {
 
     pub backend: Backend,
 
-    pub windows: Vec<Window>,
+    pub windows: WindowRecord,
 }
 
 impl WMState {
@@ -106,7 +106,7 @@ impl WMState {
 
             backend,
 
-            windows: Vec::new(),
+            windows: WindowRecord::default(),
         }
     }
 }

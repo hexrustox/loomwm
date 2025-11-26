@@ -1,10 +1,6 @@
 use smithay::{
     backend::{
-        renderer::{
-            damage::OutputDamageTracker,
-            element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
-            gles::GlesRenderer,
-        },
+        renderer::{damage::OutputDamageTracker, gles::GlesRenderer},
         winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     output::{Mode, Output, PhysicalProperties, Subpixel},
@@ -65,11 +61,7 @@ impl Winit {
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
                         let scale = output.current_scale().fractional_scale().into();
-                        let elements: Vec<WaylandSurfaceRenderElement<_>> = state
-                            .windows
-                            .iter()
-                            .flat_map(|w| w.render_elements(renderer, (0, 0).into(), scale, 1.0))
-                            .collect();
+                        let elements = state.windows.render_elements(renderer, scale);
 
                         winit.damage_tracker.render_output(
                             renderer,

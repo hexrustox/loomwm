@@ -10,6 +10,7 @@ use crate::{
 mod backend;
 mod handlers;
 mod state;
+mod window;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut event_loop: EventLoop<WMState> = EventLoop::try_new()?;
