@@ -59,14 +59,11 @@ impl WMState {
                 let button = event.button_code();
                 let button_state = event.state();
 
-                if button_state == ButtonState::Pressed {
-                    if let Some((window, _)) = self.windows.window_under(pointer.current_location())
-                    {
-                        self.focus_window(
-                            window.toplevel().unwrap().wl_surface().clone(),
-                            Some(serial),
-                        );
-                    }
+                if button_state == ButtonState::Pressed
+                    && let Some((window, _)) = self.windows.window_under(pointer.current_location())
+                {
+                    let surface = window.toplevel().unwrap().wl_surface().clone();
+                    self.focus_window(&surface, Some(serial));
                 }
 
                 pointer.button(
@@ -97,22 +94,19 @@ impl WMState {
             })
     }
 
-    pub fn focus_window(&mut self, surface: WlSurface, serial: Option<Serial>) {
+    pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
-        self.windows.iter().for_each(|w| {
-            w.set_activated(false);
-        });
-        if let Some(w) = self
-            .windows
-            .iter()
-            .find(|w| *w.toplevel().unwrap().wl_surface() == surface)
+        if let Some(surface) = keyboard.current_focus()
+            && let Some(mapped) = self.windows.mapped_windows.get(&surface)
         {
-            w.set_activated(true);
+            mapped.inner.set_activated(false);
+            mapped.toplevel().send_pending_configure();
         }
-        keyboard.set_focus(self, Some(surface), serial);
-        self.windows.iter().for_each(|w| {
-            w.toplevel().unwrap().send_pending_configure();
-        });
+        keyboard.set_focus(self, Some(surface.clone()), serial);
+        if let Some(mapped) = self.windows.mapped_windows.get(surface) {
+            mapped.inner.set_activated(true);
+            mapped.toplevel().send_pending_configure();
+        }
     }
 }

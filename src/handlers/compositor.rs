@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use smithay::{
     backend::renderer::utils::on_commit_buffer_handler,
     delegate_compositor, delegate_shm,
@@ -10,14 +12,17 @@ use smithay::{
         buffer::BufferHandler,
         compositor::{
             CompositorClientState, CompositorHandler, CompositorState, get_parent,
-            is_sync_subsurface, with_states,
+            is_sync_subsurface,
         },
-        shell::xdg::XdgToplevelSurfaceData,
         shm::{ShmHandler, ShmState},
     },
 };
 
-use crate::state::WMState;
+use crate::{
+    state::WMState,
+    utils::is_mapped,
+    window::{MappedWindow, UnmappedWindowConfigurationState},
+};
 
 impl CompositorHandler for WMState {
     fn compositor_state(&mut self) -> &mut CompositorState {
@@ -30,39 +35,45 @@ impl CompositorHandler for WMState {
 
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
-        if !is_sync_subsurface(surface) {
-            let mut root = surface.clone();
-            while let Some(parent) = get_parent(&root) {
-                root = parent;
-            }
-            if let Some(window) = self
-                .windows
-                .iter()
-                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-            {
-                window.on_commit();
-            }
-        };
+        if is_sync_subsurface(surface) {
+            return;
+        }
 
-        if let Some(window) = self
-            .windows
-            .iter()
-            .find(|w| w.toplevel().unwrap().wl_surface() == surface)
-            .cloned()
-        {
-            let initial_configure_sent = with_states(surface, |states| {
-                states
-                    .data_map
-                    .get::<XdgToplevelSurfaceData>()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .initial_configure_sent
-            });
+        let mut root_surface = surface.clone();
+        while let Some(parent) = get_parent(&root_surface) {
+            root_surface = parent;
+        }
 
-            if !initial_configure_sent {
-                window.toplevel().unwrap().send_configure();
+        if let Entry::Occupied(entry) = self.windows.unmapped_windows.entry(root_surface) {
+            if is_mapped(surface) {
+                let unmapped = entry.remove();
+                unmapped.inner.on_commit();
+                self.windows.mapped_windows.insert(
+                    unmapped.toplevel().wl_surface().clone(),
+                    MappedWindow::new(unmapped.inner),
+                );
+            } else {
+                let unmapped = entry.get();
+                let toplevel = unmapped.toplevel().clone();
+                self.event_loop.insert_idle(move |state| {
+                    if !toplevel.alive() {
+                        return;
+                    }
+
+                    if let Some(unmapped) = state
+                        .windows
+                        .unmapped_windows
+                        .get_mut(toplevel.wl_surface())
+                        && !unmapped.configured()
+                    {
+                        unmapped.state = UnmappedWindowConfigurationState::Configured;
+                        toplevel.send_configure();
+                    }
+                });
             }
+        } else if let Some(mapped) = self.windows.mapped_windows.get(surface) {
+            mapped.inner.on_commit();
+            // assume window surface will not be unmapped
         }
     }
 }

@@ -74,10 +74,11 @@ impl Winit {
 
                     if let Ok(render_output) = result {
                         backend.submit(render_output.damage.map(|v| &**v)).unwrap();
-                        state.windows.iter().for_each(|w| {
-                            w.send_frame(output, get_monotonic_time(), None, |_, _| {
-                                Some(output.clone())
-                            });
+                        state.windows.mapped_windows.values().for_each(|w| {
+                            w.inner
+                                .send_frame(output, get_monotonic_time(), None, |_, _| {
+                                    Some(output.clone())
+                                });
                         });
                     }
 
