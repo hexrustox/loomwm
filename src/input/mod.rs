@@ -14,6 +14,8 @@ use smithay::{
 
 use crate::state::WMState;
 
+pub mod move_grab;
+
 impl WMState {
     pub fn process_input_event<T: InputBackend>(&mut self, event: InputEvent<T>) {
         use InputEvent::*;

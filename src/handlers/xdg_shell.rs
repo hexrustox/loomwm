@@ -1,12 +1,21 @@
 use smithay::{
     delegate_xdg_shell,
     desktop::Window,
+    input::{
+        Seat,
+        pointer::{Focus, GrabStartData as PointerGrabStartData},
+    },
+    reexports::wayland_server::{
+        Resource,
+        protocol::{wl_seat::WlSeat, wl_surface::WlSurface},
+    },
+    utils::Serial,
     wayland::shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
     },
 };
 
-use crate::state::WMState;
+use crate::{input::move_grab::MoveGrab, state::WMState, window::MappedWindow};
 
 impl XdgShellHandler for WMState {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -35,6 +44,46 @@ impl XdgShellHandler for WMState {
         token: u32,
     ) {
     }
+
+    fn move_request(&mut self, surface: ToplevelSurface, seat: WlSeat, serial: Serial) {
+        let seat = Seat::from_resource(&seat).unwrap();
+
+        let wl_surface = surface.wl_surface();
+
+        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
+            let pointer = seat.get_pointer().unwrap();
+
+            let window = self.windows.mapped_windows.get(wl_surface);
+            if let Some(MappedWindow {
+                inner, location, ..
+            }) = window
+            {
+                let grab = MoveGrab::new(start_data, inner.clone(), location.to_f64());
+                pointer.set_grab(self, grab, serial, Focus::Clear);
+            }
+        }
+    }
 }
 
 delegate_xdg_shell!(WMState);
+
+fn check_grab(
+    seat: &Seat<WMState>,
+    surface: &WlSurface,
+    serial: Serial,
+) -> Option<PointerGrabStartData<WMState>> {
+    let pointer = seat.get_pointer()?;
+
+    if !pointer.has_grab(serial) {
+        return None;
+    }
+
+    let start_data = pointer.grab_start_data()?;
+
+    let (focus, _) = start_data.focus.as_ref()?;
+    if !focus.id().same_client_as(&surface.id()) {
+        return None;
+    }
+
+    Some(start_data)
+}

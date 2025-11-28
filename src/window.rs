@@ -29,20 +29,17 @@ impl WindowRecord {
         point: T,
     ) -> Option<(&Window, Point<i32, Logical>)> {
         let point = point.into();
-        self.mapped_windows
-            .iter()
-            .filter(|(_, w)| w.inner.bbox().to_f64().contains(point))
-            .find_map(|(_, e)| {
-                // we need to offset the point to the location where the surface is actually drawn
-                let render_location = e.render_location();
-                if e.inner
-                    .is_in_input_region(&(point - render_location.to_f64()))
-                {
-                    Some((&e.inner, render_location))
-                } else {
-                    None
-                }
-            })
+        self.mapped_windows.iter().find_map(|(_, e)| {
+            // we need to offset the point to the location where the surface is actually drawn
+            let render_location = e.render_location();
+            if e.inner
+                .is_in_input_region(&(point - render_location.to_f64()))
+            {
+                Some((&e.inner, render_location))
+            } else {
+                None
+            }
+        })
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
@@ -98,7 +95,7 @@ pub enum UnmappedWindowConfigurationState {
 #[derive(Debug)]
 pub struct MappedWindow {
     pub inner: Window,
-    location: Point<i32, Logical>,
+    pub location: Point<i32, Logical>,
 }
 
 impl MappedWindow {
