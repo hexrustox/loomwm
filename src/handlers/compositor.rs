@@ -19,12 +19,12 @@ use smithay::{
 };
 
 use crate::{
-    state::WMState,
+    state::WaylandState,
     utils::is_mapped,
     window::{MappedWindow, UnmappedWindowConfigurationState},
 };
 
-impl CompositorHandler for WMState {
+impl CompositorHandler for WaylandState {
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.compositor_state
     }
@@ -61,6 +61,7 @@ impl CompositorHandler for WMState {
                     }
 
                     if let Some(unmapped) = state
+                        .compositor
                         .windows
                         .unmapped_windows
                         .get_mut(toplevel.wl_surface())
@@ -85,15 +86,15 @@ pub struct ClientState {
 
 impl ClientData for ClientState {}
 
-impl BufferHandler for WMState {
+impl BufferHandler for WaylandState {
     fn buffer_destroyed(&mut self, buffer: &WlBuffer) {}
 }
 
-impl ShmHandler for WMState {
+impl ShmHandler for WaylandState {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
     }
 }
 
-delegate_compositor!(WMState);
-delegate_shm!(WMState);
+delegate_compositor!(WaylandState);
+delegate_shm!(WaylandState);

@@ -12,11 +12,11 @@ use smithay::{
     utils::{Logical, Point, SERIAL_COUNTER, Serial},
 };
 
-use crate::state::WMState;
+use crate::state::WaylandState;
 
 pub mod move_grab;
 
-impl WMState {
+impl WaylandState {
     pub fn process_input_event<T: InputBackend>(&mut self, event: InputEvent<T>) {
         use InputEvent::*;
         match event {
@@ -34,8 +34,11 @@ impl WMState {
                 );
             }
             PointerMotionAbsolute { event } => {
-                let pos = event.position();
-                let pos = Point::<f64, Logical>::new(pos.x, pos.y);
+                let output = self.space.outputs().next().unwrap();
+
+                let output_geo = self.space.output_geometry(output).unwrap();
+
+                let pos = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
 
                 let serial = SERIAL_COUNTER.next_serial();
 

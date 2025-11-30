@@ -14,14 +14,14 @@ use smithay::{
     },
 };
 
-use crate::state::WMState;
+use crate::state::WaylandState;
 
 mod compositor;
 mod xdg_shell;
 
 pub use compositor::ClientState;
 
-impl SeatHandler for WMState {
+impl SeatHandler for WaylandState {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
@@ -37,22 +37,22 @@ impl SeatHandler for WMState {
     }
 }
 
-delegate_seat!(WMState);
+delegate_seat!(WaylandState);
 
-impl SelectionHandler for WMState {
+impl SelectionHandler for WaylandState {
     type SelectionUserData = ();
 }
 
-impl ClientDndGrabHandler for WMState {}
-impl ServerDndGrabHandler for WMState {}
+impl ClientDndGrabHandler for WaylandState {}
+impl ServerDndGrabHandler for WaylandState {}
 
-impl DataDeviceHandler for WMState {
+impl DataDeviceHandler for WaylandState {
     fn data_device_state(&self) -> &DataDeviceState {
         &self.data_device_state
     }
 }
 
-delegate_data_device!(WMState);
+delegate_data_device!(WaylandState);
 
-impl OutputHandler for WMState {}
-delegate_output!(WMState);
+impl OutputHandler for WaylandState {}
+delegate_output!(WaylandState);

@@ -8,7 +8,7 @@ use smithay::{
     utils::Transform,
 };
 
-use crate::{state::WMState, utils::get_monotonic_time};
+use crate::{AppState, state::WaylandState, utils::get_monotonic_time};
 
 pub struct Winit {
     output: Output,
@@ -17,7 +17,7 @@ pub struct Winit {
 }
 
 impl Winit {
-    pub fn new(event_loop: LoopHandle<WMState>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(event_loop: LoopHandle<AppState>) -> Result<Self, Box<dyn std::error::Error>> {
         let (backend, winit) = winit::init()?;
 
         let output = Output::new(
@@ -50,7 +50,7 @@ impl Winit {
                         None,
                     );
                 }
-                Input(event) => state.process_input_event(event),
+                Input(event) => state.compositor.process_input_event(event),
                 Redraw => {
                     let winit = &mut state.backend.winit().unwrap();
                     let output = &winit.output;
@@ -61,7 +61,7 @@ impl Winit {
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
                         let scale = output.current_scale().fractional_scale().into();
-                        let elements = state.windows.render_elements(renderer, scale);
+                        let elements = state.compositor.windows.render_elements(renderer, scale);
 
                         winit.damage_tracker.render_output(
                             renderer,
@@ -74,22 +74,27 @@ impl Winit {
 
                     if let Ok(render_output) = result {
                         backend.submit(render_output.damage.map(|v| &**v)).unwrap();
-                        state.windows.mapped_windows.values().for_each(|w| {
-                            w.inner
-                                .send_frame(output, get_monotonic_time(), None, |_, _| {
-                                    Some(output.clone())
-                                });
-                        });
+                        state
+                            .compositor
+                            .windows
+                            .mapped_windows
+                            .values()
+                            .for_each(|w| {
+                                w.inner
+                                    .send_frame(output, get_monotonic_time(), None, |_, _| {
+                                        Some(output.clone())
+                                    });
+                            });
                     }
 
-                    state.popups.cleanup();
-                    let _ = state.display_handle.flush_clients();
+                    state.compositor.popups.cleanup();
+                    let _ = state.compositor.display_handle.flush_clients();
 
                     backend.window().request_redraw();
                 }
                 Focus(_) => {}
                 CloseRequested => {
-                    state.event_signal.stop();
+                    state.compositor.event_signal.stop();
                 }
             }
         })?;
@@ -99,5 +104,9 @@ impl Winit {
             backend,
             damage_tracker,
         })
+    }
+
+    pub fn init(&mut self, compositor: &mut WaylandState) {
+        compositor.space.map_output(&self.output, (0, 0));
     }
 }

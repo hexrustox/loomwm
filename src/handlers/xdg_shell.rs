@@ -15,9 +15,9 @@ use smithay::{
     },
 };
 
-use crate::{input::move_grab::MoveGrab, state::WMState, window::MappedWindow};
+use crate::{input::move_grab::MoveGrab, state::WaylandState, window::MappedWindow};
 
-impl XdgShellHandler for WMState {
+impl XdgShellHandler for WaylandState {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
         &mut self.xdg_shell_state
     }
@@ -65,13 +65,13 @@ impl XdgShellHandler for WMState {
     }
 }
 
-delegate_xdg_shell!(WMState);
+delegate_xdg_shell!(WaylandState);
 
 fn check_grab(
-    seat: &Seat<WMState>,
+    seat: &Seat<WaylandState>,
     surface: &WlSurface,
     serial: Serial,
-) -> Option<PointerGrabStartData<WMState>> {
+) -> Option<PointerGrabStartData<WaylandState>> {
     let pointer = seat.get_pointer()?;
 
     if !pointer.has_grab(serial) {

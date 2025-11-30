@@ -10,17 +10,17 @@ use smithay::{
     utils::{Logical, Point},
 };
 
-use crate::state::WMState;
+use crate::state::WaylandState;
 
 pub struct MoveGrab {
-    start_data: PointerGrabStartData<WMState>,
+    start_data: PointerGrabStartData<WaylandState>,
     window: Window,
     last_location: Point<f64, Logical>,
 }
 
 impl MoveGrab {
     pub fn new<T: Into<Point<f64, Logical>>>(
-        start_data: PointerGrabStartData<WMState>,
+        start_data: PointerGrabStartData<WaylandState>,
         window: Window,
         last_location: T,
     ) -> Self {
@@ -32,11 +32,11 @@ impl MoveGrab {
     }
 }
 
-impl PointerGrab<WMState> for MoveGrab {
+impl PointerGrab<WaylandState> for MoveGrab {
     fn motion(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         _focus: Option<(WlSurface, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
@@ -56,8 +56,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn relative_motion(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         focus: Option<(WlSurface, Point<f64, Logical>)>,
         event: &RelativeMotionEvent,
     ) {
@@ -66,8 +66,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn button(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &ButtonEvent,
     ) {
         handle.button(data, event);
@@ -84,21 +84,25 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn axis(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         details: AxisFrame,
     ) {
         handle.axis(data, details)
     }
 
-    fn frame(&mut self, data: &mut WMState, handle: &mut PointerInnerHandle<'_, WMState>) {
+    fn frame(
+        &mut self,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
+    ) {
         handle.frame(data);
     }
 
     fn gesture_swipe_begin(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GestureSwipeBeginEvent,
     ) {
         handle.gesture_swipe_begin(data, event)
@@ -106,8 +110,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_swipe_update(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GestureSwipeUpdateEvent,
     ) {
         handle.gesture_swipe_update(data, event)
@@ -115,8 +119,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_swipe_end(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GestureSwipeEndEvent,
     ) {
         handle.gesture_swipe_end(data, event)
@@ -124,8 +128,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_pinch_begin(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GesturePinchBeginEvent,
     ) {
         handle.gesture_pinch_begin(data, event)
@@ -133,8 +137,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_pinch_update(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GesturePinchUpdateEvent,
     ) {
         handle.gesture_pinch_update(data, event)
@@ -142,8 +146,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_pinch_end(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GesturePinchEndEvent,
     ) {
         handle.gesture_pinch_end(data, event)
@@ -151,8 +155,8 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_hold_begin(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GestureHoldBeginEvent,
     ) {
         handle.gesture_hold_begin(data, event)
@@ -160,16 +164,16 @@ impl PointerGrab<WMState> for MoveGrab {
 
     fn gesture_hold_end(
         &mut self,
-        data: &mut WMState,
-        handle: &mut PointerInnerHandle<'_, WMState>,
+        data: &mut WaylandState,
+        handle: &mut PointerInnerHandle<'_, WaylandState>,
         event: &GestureHoldEndEvent,
     ) {
         handle.gesture_hold_end(data, event)
     }
 
-    fn start_data(&self) -> &PointerGrabStartData<WMState> {
+    fn start_data(&self) -> &PointerGrabStartData<WaylandState> {
         &self.start_data
     }
 
-    fn unset(&mut self, _data: &mut WMState) {}
+    fn unset(&mut self, _data: &mut WaylandState) {}
 }

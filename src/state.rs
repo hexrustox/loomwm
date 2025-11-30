@@ -1,7 +1,7 @@
 use std::{ffi::OsString, sync::Arc};
 
 use smithay::{
-    desktop::PopupManager,
+    desktop::{PopupManager, Space, Window},
     input::{Seat, SeatState},
     reexports::{
         calloop::{Interest, LoopHandle, LoopSignal, Mode, PostAction, generic::Generic},
@@ -14,13 +14,13 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, handlers::ClientState, window::WindowRecord};
+use crate::{AppState, handlers::ClientState, window::WindowRecord};
 
-pub struct WMState {
+pub struct WaylandState {
     pub socket_name: OsString,
     pub display_handle: DisplayHandle,
 
-    pub event_loop: LoopHandle<'static, Self>,
+    pub event_loop: LoopHandle<'static, AppState>,
     pub event_signal: LoopSignal,
 
     pub compositor_state: CompositorState,
@@ -32,17 +32,16 @@ pub struct WMState {
     pub popups: PopupManager,
     pub seat: Seat<Self>,
 
-    pub backend: Backend,
-
+    pub space: Space<Window>,
+    // pub monitors: Vec<>
     pub windows: WindowRecord,
 }
 
-impl WMState {
+impl WaylandState {
     pub fn new(
-        event_loop: LoopHandle<'static, Self>,
+        event_loop: LoopHandle<'static, AppState>,
         event_signal: LoopSignal,
         display: Display<Self>,
-        backend: Backend,
     ) -> Self {
         let dh = display.handle();
 
@@ -66,6 +65,7 @@ impl WMState {
                 event_loop
                     .insert_source(listening_socket, move |client_stream, _, state| {
                         state
+                            .compositor
                             .display_handle
                             .insert_client(client_stream, Arc::new(ClientState::default()))
                             .unwrap();
@@ -77,7 +77,10 @@ impl WMState {
                         Generic::new(display, Interest::READ, Mode::Level),
                         |_, display, state| {
                             unsafe {
-                                display.get_mut().dispatch_clients(state).unwrap();
+                                display
+                                    .get_mut()
+                                    .dispatch_clients(&mut state.compositor)
+                                    .unwrap();
                             }
                             Ok(PostAction::Continue)
                         },
@@ -104,7 +107,7 @@ impl WMState {
             popups,
             seat,
 
-            backend,
+            space: Space::default(),
 
             windows: WindowRecord::default(),
         }
