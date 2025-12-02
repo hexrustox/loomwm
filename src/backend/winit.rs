@@ -60,32 +60,32 @@ impl Winit {
                         let age = backend.buffer_age().unwrap_or(0);
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
-                        let scale = output.current_scale().fractional_scale().into();
-                        let elements = state.compositor.windows.render_elements(renderer, scale);
+                        // let scale = output.current_scale().fractional_scale().into();
+                        // let elements = state.compositor.windows.render_elements(renderer, scale);
 
-                        winit.damage_tracker.render_output(
-                            renderer,
-                            &mut framebuffer,
-                            age,
-                            &elements,
-                            [0.1, 0.1, 0.1, 1.0],
-                        )
+                        // winit.damage_tracker.render_output(
+                        //     renderer,
+                        //     &mut framebuffer,
+                        //     age,
+                        //     &elements,
+                        //     [0.1, 0.1, 0.1, 1.0],
+                        // )
                     };
 
-                    if let Ok(render_output) = result {
-                        backend.submit(render_output.damage.map(|v| &**v)).unwrap();
-                        state
-                            .compositor
-                            .windows
-                            .mapped_windows
-                            .values()
-                            .for_each(|w| {
-                                w.inner
-                                    .send_frame(output, get_monotonic_time(), None, |_, _| {
-                                        Some(output.clone())
-                                    });
-                            });
-                    }
+                    // if let Ok(render_output) = result {
+                    //     backend.submit(render_output.damage.map(|v| &**v)).unwrap();
+                    //     state
+                    //         .compositor
+                    //         .windows
+                    //         .mapped_windows
+                    //         .values()
+                    //         .for_each(|w| {
+                    //             w.inner
+                    //                 .send_frame(output, get_monotonic_time(), None, |_, _| {
+                    //                     Some(output.clone())
+                    //                 });
+                    //         });
+                    // }
 
                     state.compositor.popups.cleanup();
                     let _ = state.compositor.display_handle.flush_clients();

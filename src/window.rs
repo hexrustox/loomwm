@@ -41,28 +41,6 @@ impl WindowRecord {
             }
         })
     }
-
-    pub fn render_elements<R: Renderer + ImportAll>(
-        &self,
-        renderer: &mut R,
-        scale: Scale<f64>,
-    ) -> Vec<WaylandSurfaceRenderElement<R>>
-    where
-        R::TextureId: Texture + Clone + 'static,
-    {
-        self.mapped_windows
-            .iter()
-            .flat_map(|(_, w)| {
-                let location = w.render_location();
-                w.inner.render_elements(
-                    renderer,
-                    location.to_physical_precise_round(scale),
-                    scale,
-                    1.0,
-                )
-            })
-            .collect()
-    }
 }
 
 pub struct UnmappedWindow {

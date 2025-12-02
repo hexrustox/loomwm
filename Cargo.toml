@@ -11,3 +11,6 @@ smithay = { version = "0.7.0", default-features = false, features = [
   "desktop",
   "renderer_gl",
 ] }
+
+[dev-dependencies]
+test-case = "3.3.1"
