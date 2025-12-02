@@ -4,16 +4,30 @@ use std::collections::HashMap;
 pub struct LayoutGroups(HashMap<String, LayoutGroupKind>);
 
 impl LayoutGroups {
+    fn get(&self, key: &str) -> &LayoutGroupKind {
+        self.0.get(key).unwrap_or(&LayoutGroupKind::None)
+    }
+
     fn new_tree(&self, mut window_count: usize) -> WindowTree {
         let mut tree = WindowTree::new();
-        let main = self.get("main");
-        if let Some(split) = main.kind() {
+        self.extend_tree(&mut window_count, "main", &mut tree, 1.0);
+        tree
+    }
+
+    fn extend_tree(
+        &self,
+        window_count: &mut usize,
+        name: &str,
+        tree: &mut WindowTree,
+        size_ratio: f32,
+    ) {
+        let group = self.get(name);
+        if let Some(split) = group.kind() {
             tree.push(WindowTreeNode {
-                kind: WindowTreeNodeKind::Branch(split, main.build_tree(self, &mut window_count)),
-                size_ratio: 1.0,
+                kind: WindowTreeNodeKind::Branch(split, group.build_tree(self, window_count)),
+                size_ratio,
             });
         }
-        tree
     }
 }
 
@@ -25,18 +39,12 @@ pub enum LayoutGroupKind {
 
 pub struct LayoutGroupItem {
     kind: LayoutGroupItemKind,
-    size_ratio: f32,
+    size_ratio: Option<f32>,
 }
 
 pub enum LayoutGroupItemKind {
     Window(usize),
     Group(String),
-}
-
-impl LayoutGroups {
-    fn get(&self, key: &str) -> &LayoutGroupKind {
-        self.0.get(key).unwrap_or(&LayoutGroupKind::None)
-    }
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
@@ -112,22 +120,18 @@ impl LayoutGroupKind {
                     let used = *window_count - left;
                     tree.push(WindowTreeNode {
                         kind: WindowTreeNodeKind::Node(used),
-                        size_ratio: *size_ratio,
+                        size_ratio: size_ratio.unwrap_or(1.0),
                     });
 
                     *window_count = left;
                 }
                 LayoutGroupItemKind::Group(group) => {
-                    let group_kind = layout_splits.get(group);
-                    if let Some(split) = group_kind.kind() {
-                        tree.push(WindowTreeNode {
-                            kind: WindowTreeNodeKind::Branch(
-                                split,
-                                group_kind.build_tree(layout_splits, window_count),
-                            ),
-                            size_ratio: *size_ratio,
-                        });
-                    }
+                    layout_splits.extend_tree(
+                        window_count,
+                        group,
+                        &mut tree,
+                        size_ratio.unwrap_or(1.0),
+                    );
                 }
             }
         }
@@ -160,13 +164,13 @@ mod tests {
         (window($count:expr $(,$ratio:expr)?)) => {
             LayoutGroupItem {
                 kind: LayoutGroupItemKind::Window($count),
-                size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
+                size_ratio: { let mut r = None; $( r = Some($ratio); )? r },
             }
         };
         (group($group:literal $(,$ratio:expr)?)) => {
             LayoutGroupItem {
                 kind: LayoutGroupItemKind::Group($group.to_string()),
-                size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
+                size_ratio: { let mut r = None; $( r = Some($ratio); )? r },
             }
         };
     }
@@ -314,6 +318,18 @@ mod tests {
             ; 1)
         ); 1)); 1);
         "deep_nesting"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1), group("main")),
+        3 =>
+        window_tree!(horizontal(window_tree!(
+            node(1),
+            horizontal(window_tree!(
+                node(1),
+                horizontal(window_tree!(node(1); 1))
+            ; 2)
+        ); 2)); 1);
+        "circular_group"
     )]
     fn test_build_tree(layout_splits: LayoutGroups, windows: usize) -> WindowTree {
         layout_splits.new_tree(windows)
