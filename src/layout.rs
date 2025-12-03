@@ -1,5 +1,9 @@
 use std::collections::HashMap;
 
+use smithay::utils::{Rectangle, Size};
+
+use crate::utils::evenly_div;
+
 #[derive(Default)]
 pub struct LayoutGroups(HashMap<String, LayoutGroupKind>);
 
@@ -9,9 +13,12 @@ impl LayoutGroups {
     }
 
     fn new_tree(&self, mut window_count: usize) -> WindowTree {
-        let mut tree = WindowTree::new();
-        self.extend_tree(&mut window_count, "main", &mut tree, 1.0);
-        tree
+        let group = self.get("main");
+        if let Some(split) = group.kind() {
+            group.build_tree(self, split, &mut window_count)
+        } else {
+            WindowTree::default()
+        }
     }
 
     fn extend_tree(
@@ -24,7 +31,7 @@ impl LayoutGroups {
         let group = self.get(name);
         if let Some(split) = group.kind() {
             tree.push(WindowTreeNode {
-                kind: WindowTreeNodeKind::Branch(split, group.build_tree(self, window_count)),
+                kind: WindowTreeNodeKind::Branch(group.build_tree(self, split, window_count)),
                 size_ratio,
             });
         }
@@ -47,10 +54,12 @@ pub enum LayoutGroupItemKind {
     Group(String),
 }
 
+#[derive(Default)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
-struct WindowTree {
+pub struct WindowTree {
     inner: Vec<WindowTreeNode>,
     count: usize,
+    split: SplitDirection,
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
@@ -62,22 +71,26 @@ struct WindowTreeNode {
 #[cfg_attr(test, derive(Debug, PartialEq))]
 enum WindowTreeNodeKind {
     Node(usize),
-    Branch(SplitDirection, WindowTree),
+    Branch(WindowTree),
 }
 
+#[derive(Clone, Copy, Default)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 enum SplitDirection {
     Horizontal,
+    #[default]
     Vertical,
 }
 
 impl WindowTree {
-    fn new() -> Self {
+    fn new(split: SplitDirection) -> Self {
         Self {
             inner: Vec::new(),
             count: 0,
+            split,
         }
     }
+
     fn push(&mut self, value: WindowTreeNode) {
         match value.kind {
             WindowTreeNodeKind::Node(n) => {
@@ -108,9 +121,14 @@ impl LayoutGroupKind {
         }
     }
 
-    fn build_tree(&self, layout_splits: &LayoutGroups, window_count: &mut usize) -> WindowTree {
+    fn build_tree(
+        &self,
+        layout_splits: &LayoutGroups,
+        split: SplitDirection,
+        window_count: &mut usize,
+    ) -> WindowTree {
         let mut iter = self.iter();
-        let mut tree = WindowTree::new();
+        let mut tree = WindowTree::new(split);
         while *window_count > 0
             && let Some(LayoutGroupItem { kind, size_ratio }) = iter.next()
         {
@@ -140,12 +158,64 @@ impl LayoutGroupKind {
     }
 }
 
+impl WindowTree {
+    fn split_windows<T>(self, container: Rectangle<i32, T>) -> Vec<Rectangle<i32, T>> {
+        let mut vec = Vec::new();
+        let mut x = container.loc.x;
+        let mut y = container.loc.y;
+        let size_iter: Vec<_> = match self.split {
+            SplitDirection::Horizontal => evenly_div(container.size.h, self.count as i32)
+                .into_iter()
+                .map(|h| Size::new(container.size.w, h))
+                .collect(),
+            SplitDirection::Vertical => evenly_div(container.size.w, self.count as i32)
+                .into_iter()
+                .map(|w| Size::new(w, container.size.h))
+                .collect(),
+        };
+        let mut size_iter = size_iter.into_iter();
+
+        for node in self.inner {
+            match node.kind {
+                WindowTreeNodeKind::Node(n) => {
+                    for _ in 0..n {
+                        let size = size_iter.next().unwrap();
+                        vec.push(Rectangle::new((x, y).into(), size));
+                        match self.split {
+                            SplitDirection::Horizontal => {
+                                y += size.h;
+                            }
+                            SplitDirection::Vertical => {
+                                x += size.w;
+                            }
+                        }
+                    }
+                }
+                WindowTreeNodeKind::Branch(tree) => {
+                    let size = size_iter.next().unwrap();
+                    vec.extend(tree.split_windows(Rectangle::new((x, y).into(), size)));
+                    match self.split {
+                        SplitDirection::Horizontal => {
+                            y += size.h;
+                        }
+                        SplitDirection::Vertical => {
+                            x += size.w;
+                        }
+                    }
+                }
+            }
+        }
+        vec
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(unused_mut)]
     #![allow(unused_assignments)]
 
     use super::*;
+    use smithay::utils::Logical;
     use test_case::test_case;
 
     macro_rules! layout_groups {
@@ -177,12 +247,13 @@ mod tests {
 
     macro_rules! window_tree {
         () => {
-            WindowTree::new()
+            WindowTree::default()
         };
-        ($($kind:ident ($($arg:expr),*)),*; $count:expr) => {
+        ($split:ident; $($kind:ident ($($arg:expr),*)),*; $count:expr) => {
             WindowTree {
                 inner: vec![$(window_tree_node!($kind ($($arg),*))),*],
                 count: $count,
+                split: SplitDirection::$split,
             }
         }
     }
@@ -194,15 +265,9 @@ mod tests {
                 size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
             }
         };
-        (horizontal($tree:expr $(,$ratio:expr)?)) => {
+        (branch($tree:expr $(,$ratio:expr)?)) => {
             WindowTreeNode {
-                kind: WindowTreeNodeKind::Branch(SplitDirection::Horizontal, $tree),
-                size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
-            }
-        };
-        (vertical($tree:expr $(,$ratio:expr)?)) => {
-            WindowTreeNode {
-                kind: WindowTreeNodeKind::Branch(SplitDirection::Vertical, $tree),
+                kind: WindowTreeNodeKind::Branch($tree),
                 size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
             }
         };
@@ -211,52 +276,52 @@ mod tests {
     #[test_case(layout_groups!(), 1 => window_tree!(); "empty")]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1)),
-        1 => window_tree!(horizontal(window_tree!(node(1); 1)); 1);
+        1 => window_tree!(Horizontal; node(1); 1);
         "single_window"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(2)),
-        1 => window_tree!(horizontal(window_tree!(node(1); 1)); 1);
+        1 => window_tree!(Horizontal; node(1); 1);
         "more_slots_than_windows"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1)),
-        2 => window_tree!(horizontal(window_tree!(node(1); 1)); 1);
+        2 => window_tree!(Horizontal; node(1); 1);
         "more_windows_than_slots"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1)),
-        0 => window_tree!(horizontal(window_tree!()); 1);
+        0 => window_tree!(Horizontal; ; 0);
         "windows_zero"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1), window(1)),
-        3 => window_tree!(horizontal(window_tree!(node(1), node(1); 2)); 1);
+        3 => window_tree!(Horizontal; node(1), node(1); 2);
         "horizontal_two_windows"
     )]
     #[test_case(
         layout_groups!("main" => Vertical => window(1), window(1)),
-        2 => window_tree!(vertical(window_tree!(node(1), node(1); 2)); 1);
+        2 => window_tree!(Vertical; node(1), node(1); 2);
         "vertical_two_windows"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1), window(1), window(1)),
-        4 => window_tree!(horizontal(window_tree!(node(1), node(1), node(1); 3)); 1);
+        4 => window_tree!(Horizontal; node(1), node(1), node(1); 3);
         "three_windows"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1, 0.5), window(2, 1.5)),
-        3 => window_tree!(horizontal(window_tree!(node(1,0.5), node(2,1.5); 3)); 1);
+        3 => window_tree!(Horizontal; node(1,0.5), node(2,1.5); 3);
         "with_size_ratios"
     )]
     #[test_case(
         layout_groups!("main" => Vertical => window(1, 0.3), window(2, 0.7)),
-        3 => window_tree!(vertical(window_tree!(node(1,0.3), node(2,0.7); 3)); 1);
+        3 => window_tree!(Vertical; node(1,0.3), node(2,0.7); 3);
         "vertical_with_ratios"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1), group("group"); "group" => Vertical => window(2)),
-        3 => window_tree!(horizontal(window_tree!(node(1), vertical(window_tree!(node(2); 2)); 2)); 1);
+        3 => window_tree!(Horizontal; node(1), branch(window_tree!(Vertical; node(2); 2)); 2);
         "simple_group"
     )]
     #[test_case(
@@ -265,11 +330,12 @@ mod tests {
             "sub" => Vertical => window(1, 0.3), window(2, 0.7)
         ),
         4 =>
-        window_tree!(horizontal(window_tree!(
+        window_tree!(
+            Horizontal;
             node(1,0.5),
-            vertical(window_tree!(node(1,0.3), node(2,0.7); 3), 1.5);
+            branch(window_tree!(Vertical; node(1,0.3), node(2,0.7); 3), 1.5);
             2
-        )); 1);
+        );
         "nested_with_ratios"
     )]
     #[test_case(
@@ -279,11 +345,12 @@ mod tests {
             "b" => Horizontal => window(2)
         ),
         3 =>
-        window_tree!(horizontal(window_tree!(
-            vertical(window_tree!(node(1); 1)),
-            horizontal(window_tree!(node(2); 2));
+        window_tree!(
+            Horizontal;
+            branch(window_tree!(Vertical; node(1); 1)),
+            branch(window_tree!(Horizontal; node(2); 2));
             2
-        )); 1);
+        );
         "multiple_groups_horizontal"
     )]
     #[test_case(
@@ -293,16 +360,17 @@ mod tests {
             "b" => Vertical => window(2)
         ),
         3 =>
-        window_tree!(vertical(window_tree!(
-            horizontal(window_tree!(node(1); 1)),
-            vertical(window_tree!(node(2); 2));
+        (window_tree!(
+            Vertical;
+            branch(window_tree!(Horizontal; node(1); 1)),
+            branch(window_tree!(Vertical; node(2); 2));
             2
-        )); 1);
+        ));
         "vertical_with_groups"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1), group("missing")),
-        2 => window_tree!(horizontal(window_tree!(node(1); 1)); 1);
+        2 => window_tree!(Horizontal; node(1); 1);
         "missing_group"
     )]
     #[test_case(
@@ -312,26 +380,36 @@ mod tests {
             "level2" => Horizontal => window(3)
         ),
         3 =>
-        window_tree!(horizontal(window_tree!(
-            vertical(window_tree!(
-                horizontal(window_tree!(node(3); 3))
+        window_tree!(
+            Horizontal; 
+            branch(window_tree!(
+                Vertical;
+                branch(window_tree!(Horizontal; node(3); 3))
             ; 1)
-        ); 1)); 1);
+        ); 1);
         "deep_nesting"
     )]
     #[test_case(
         layout_groups!("main" => Horizontal => window(1), group("main")),
         3 =>
-        window_tree!(horizontal(window_tree!(
+        window_tree!(
+            Horizontal; 
             node(1),
-            horizontal(window_tree!(
+            branch(window_tree!(
+                Horizontal;
                 node(1),
-                horizontal(window_tree!(node(1); 1))
+                branch(window_tree!(Horizontal; node(1); 1))
             ; 2)
-        ); 2)); 1);
+        ); 2);
         "circular_group"
     )]
     fn test_build_tree(layout_splits: LayoutGroups, windows: usize) -> WindowTree {
         layout_splits.new_tree(windows)
+    }
+
+    macro_rules! rectangle {
+        ($x:expr, $y:expr, $w:expr, $h:expr) => {
+            Rectangle::<_, Logical>::new(($x, $y).into(), ($w, $h).into())
+        };
     }
 }
