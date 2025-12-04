@@ -20,21 +20,24 @@ pub fn is_mapped(surface: &WlSurface) -> bool {
     with_renderer_surface_state(surface, |state| state.buffer().is_some()).unwrap_or(false)
 }
 
-pub fn evenly_div(lhs: i32, rhs: i32) -> Vec<i32> {
-    let mut vec = Vec::new();
-    let ans = lhs.wrapping_div_euclid(rhs);
-    if lhs % rhs == 0 {
-        for _ in 0..rhs {
-            vec.push(ans);
+pub fn distribute_evenly(total: i32, parts: i32) -> Vec<i32> {
+    let mut result = Vec::new();
+    if parts == 0 {
+        return result;
+    }
+
+    let base = total.wrapping_div_euclid(parts);
+    if total % parts == 0 {
+        for _ in 0..parts {
+            result.push(base);
         }
     } else {
-        let remainder = lhs - ans * rhs;
-        println!("{ans} {remainder}");
-        for i in 0..rhs {
-            vec.push(if i < remainder { ans + 1 } else { ans });
+        let remainder = total - base * parts;
+        for i in 0..parts {
+            result.push(if i < remainder { base + 1 } else { base });
         }
     }
-    vec
+    result
 }
 
 #[cfg(test)]
@@ -45,7 +48,7 @@ mod tests {
     #[test_case(3, 3 => vec![1, 1, 1])]
     #[test_case(8, 3 => vec![3, 3, 2])]
     #[test_case(9, 4 => vec![3, 2, 2, 2])]
-    fn test_evenly_div(lhs: i32, rhs: i32) -> Vec<i32> {
-        evenly_div(lhs, rhs)
+    fn test_distribute_evenly(lhs: i32, rhs: i32) -> Vec<i32> {
+        distribute_evenly(lhs, rhs)
     }
 }

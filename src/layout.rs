@@ -2,54 +2,60 @@ use std::collections::HashMap;
 
 use smithay::utils::{Rectangle, Size};
 
-use crate::utils::evenly_div;
+use crate::utils::distribute_evenly;
+
+const DEFAULT_SIZE: f32 = 1.0;
 
 #[derive(Default)]
-pub struct LayoutGroups(HashMap<String, LayoutGroupKind>);
+pub struct LayoutTemplates(HashMap<String, LayoutTemplate>);
 
-impl LayoutGroups {
-    fn get(&self, key: &str) -> &LayoutGroupKind {
-        self.0.get(key).unwrap_or(&LayoutGroupKind::None)
+impl LayoutTemplates {
+    fn get(&self, key: &str) -> &LayoutTemplate {
+        self.0.get(key).unwrap_or(&LayoutTemplate::None)
     }
 
-    fn new_tree(&self, mut window_count: usize) -> WindowTree {
-        let group = self.get("main");
-        if let Some(split) = group.kind() {
-            group.build_tree(self, split, &mut window_count)
+    fn build_tree_from_template(&self, mut window_count: usize) -> WindowTree {
+        let template = self.get("main");
+        if let Some(direction) = template.kind() {
+            template.build_tree(self, direction, &mut window_count)
         } else {
             WindowTree::default()
         }
     }
 
-    fn extend_tree(
+    fn add_subtree(
         &self,
         window_count: &mut usize,
         name: &str,
         tree: &mut WindowTree,
         size_ratio: f32,
     ) {
-        let group = self.get(name);
-        if let Some(split) = group.kind() {
+        let template = self.get(name);
+        if let Some(direction) = template.kind() {
             tree.push(WindowTreeNode {
-                kind: WindowTreeNodeKind::Branch(group.build_tree(self, split, window_count)),
-                size_ratio,
+                kind: WindowTreeNodeKind::Subtree(template.build_tree(
+                    self,
+                    direction,
+                    window_count,
+                )),
+                size: size_ratio,
             });
         }
     }
 }
 
-pub enum LayoutGroupKind {
-    Horizontal(Vec<LayoutGroupItem>),
-    Vertical(Vec<LayoutGroupItem>),
+pub enum LayoutTemplate {
+    Horizontal(Vec<LayoutTemplateNode>),
+    Vertical(Vec<LayoutTemplateNode>),
     None,
 }
 
-pub struct LayoutGroupItem {
-    kind: LayoutGroupItemKind,
-    size_ratio: Option<f32>,
+pub struct LayoutTemplateNode {
+    kind: LayoutTemplateNodeKind,
+    size: Option<f32>,
 }
 
-pub enum LayoutGroupItemKind {
+pub enum LayoutTemplateNodeKind {
     Window(usize),
     Group(String),
 }
@@ -57,7 +63,7 @@ pub enum LayoutGroupItemKind {
 #[derive(Default)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct WindowTree {
-    inner: Vec<WindowTreeNode>,
+    nodes: Vec<WindowTreeNode>,
     count: usize,
     split: SplitDirection,
 }
@@ -65,13 +71,13 @@ pub struct WindowTree {
 #[cfg_attr(test, derive(Debug, PartialEq))]
 struct WindowTreeNode {
     kind: WindowTreeNodeKind,
-    size_ratio: f32,
+    size: f32,
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
 enum WindowTreeNodeKind {
-    Node(usize),
-    Branch(WindowTree),
+    Window(usize),
+    Subtree(WindowTree),
 }
 
 #[derive(Clone, Copy, Default)]
@@ -85,7 +91,7 @@ enum SplitDirection {
 impl WindowTree {
     fn new(split: SplitDirection) -> Self {
         Self {
-            inner: Vec::new(),
+            nodes: Vec::new(),
             count: 0,
             split,
         }
@@ -93,19 +99,19 @@ impl WindowTree {
 
     fn push(&mut self, value: WindowTreeNode) {
         match value.kind {
-            WindowTreeNodeKind::Node(n) => {
+            WindowTreeNodeKind::Window(n) => {
                 self.count += n;
             }
-            WindowTreeNodeKind::Branch(..) => {
+            WindowTreeNodeKind::Subtree(..) => {
                 self.count += 1;
             }
         }
-        self.inner.push(value);
+        self.nodes.push(value);
     }
 }
 
-impl LayoutGroupKind {
-    fn iter(&self) -> Box<dyn Iterator<Item = &LayoutGroupItem> + '_> {
+impl LayoutTemplate {
+    fn iter(&self) -> Box<dyn Iterator<Item = &LayoutTemplateNode> + '_> {
         match self {
             Self::Horizontal(x) => Box::new(x.iter()),
             Self::Vertical(x) => Box::new(x.iter()),
@@ -123,33 +129,32 @@ impl LayoutGroupKind {
 
     fn build_tree(
         &self,
-        layout_splits: &LayoutGroups,
-        split: SplitDirection,
+        templates: &LayoutTemplates,
+        direction: SplitDirection,
         window_count: &mut usize,
     ) -> WindowTree {
         let mut iter = self.iter();
-        let mut tree = WindowTree::new(split);
+        let mut tree = WindowTree::new(direction);
         while *window_count > 0
-            && let Some(LayoutGroupItem { kind, size_ratio }) = iter.next()
+            && let Some(LayoutTemplateNode {
+                kind,
+                size: size_ratio,
+            }) = iter.next()
         {
+            let ratio = size_ratio.unwrap_or(DEFAULT_SIZE);
             match kind {
-                LayoutGroupItemKind::Window(n) => {
+                LayoutTemplateNodeKind::Window(n) => {
                     let left = window_count.saturating_sub(*n);
                     let used = *window_count - left;
                     tree.push(WindowTreeNode {
-                        kind: WindowTreeNodeKind::Node(used),
-                        size_ratio: size_ratio.unwrap_or(1.0),
+                        kind: WindowTreeNodeKind::Window(used),
+                        size: ratio,
                     });
 
                     *window_count = left;
                 }
-                LayoutGroupItemKind::Group(group) => {
-                    layout_splits.extend_tree(
-                        window_count,
-                        group,
-                        &mut tree,
-                        size_ratio.unwrap_or(1.0),
-                    );
+                LayoutTemplateNodeKind::Group(group) => {
+                    templates.add_subtree(window_count, group, &mut tree, ratio);
                 }
             }
         }
@@ -159,53 +164,48 @@ impl LayoutGroupKind {
 }
 
 impl WindowTree {
-    fn split_windows<T>(self, container: Rectangle<i32, T>) -> Vec<Rectangle<i32, T>> {
-        let mut vec = Vec::new();
+    fn calculate_rectangles<T>(self, container: Rectangle<i32, T>) -> Vec<Rectangle<i32, T>> {
+        let mut rectangles = Vec::with_capacity(self.count);
         let mut x = container.loc.x;
         let mut y = container.loc.y;
-        let size_iter: Vec<_> = match self.split {
-            SplitDirection::Horizontal => evenly_div(container.size.h, self.count as i32)
+        let split = self.split;
+
+        let sizes: Vec<_> = match split {
+            SplitDirection::Horizontal => distribute_evenly(container.size.h, self.count as i32)
                 .into_iter()
                 .map(|h| Size::new(container.size.w, h))
                 .collect(),
-            SplitDirection::Vertical => evenly_div(container.size.w, self.count as i32)
+            SplitDirection::Vertical => distribute_evenly(container.size.w, self.count as i32)
                 .into_iter()
                 .map(|w| Size::new(w, container.size.h))
                 .collect(),
         };
-        let mut size_iter = size_iter.into_iter();
+        let mut sizes = sizes.into_iter();
 
-        for node in self.inner {
+        for node in self.nodes {
             match node.kind {
-                WindowTreeNodeKind::Node(n) => {
+                WindowTreeNodeKind::Window(n) => {
                     for _ in 0..n {
-                        let size = size_iter.next().unwrap();
-                        vec.push(Rectangle::new((x, y).into(), size));
-                        match self.split {
-                            SplitDirection::Horizontal => {
-                                y += size.h;
-                            }
-                            SplitDirection::Vertical => {
-                                x += size.w;
-                            }
+                        let size = sizes.next().unwrap();
+                        rectangles.push(Rectangle::new((x, y).into(), size));
+                        match split {
+                            SplitDirection::Horizontal => y += size.h,
+                            SplitDirection::Vertical => x += size.w,
                         }
                     }
                 }
-                WindowTreeNodeKind::Branch(tree) => {
-                    let size = size_iter.next().unwrap();
-                    vec.extend(tree.split_windows(Rectangle::new((x, y).into(), size)));
-                    match self.split {
-                        SplitDirection::Horizontal => {
-                            y += size.h;
-                        }
-                        SplitDirection::Vertical => {
-                            x += size.w;
-                        }
+                WindowTreeNodeKind::Subtree(tree) => {
+                    let size = sizes.next().unwrap();
+                    rectangles
+                        .extend(tree.calculate_rectangles(Rectangle::new((x, y).into(), size)));
+                    match split {
+                        SplitDirection::Horizontal => y += size.h,
+                        SplitDirection::Vertical => x += size.w,
                     }
                 }
             }
         }
-        vec
+        rectangles
     }
 }
 
@@ -224,23 +224,23 @@ mod tests {
             let mut map = HashMap::new();
             $({
                 let items = vec![$(layout_group_item!($kind ($($arg),*))),*];
-                map.insert($key.to_string(), LayoutGroupKind::$split(items));
+                map.insert($key.to_string(), LayoutTemplate::$split(items));
             })*
-            LayoutGroups(map)
+            LayoutTemplates(map)
         }};
     }
 
     macro_rules! layout_group_item {
-        (window($count:expr $(,$ratio:expr)?)) => {
-            LayoutGroupItem {
-                kind: LayoutGroupItemKind::Window($count),
-                size_ratio: { let mut r = None; $( r = Some($ratio); )? r },
+        (window($count:expr $(,$size:expr)?)) => {
+            LayoutTemplateNode {
+                kind: LayoutTemplateNodeKind::Window($count),
+                size: { let mut r = None; $( r = Some($size); )? r },
             }
         };
-        (group($group:literal $(,$ratio:expr)?)) => {
-            LayoutGroupItem {
-                kind: LayoutGroupItemKind::Group($group.to_string()),
-                size_ratio: { let mut r = None; $( r = Some($ratio); )? r },
+        (group($group:literal $(,$size:expr)?)) => {
+            LayoutTemplateNode {
+                kind: LayoutTemplateNodeKind::Group($group.to_string()),
+                size: { let mut r = None; $( r = Some($size); )? r },
             }
         };
     }
@@ -251,7 +251,7 @@ mod tests {
         };
         ($split:ident; $($kind:ident ($($arg:expr),*)),*; $count:expr) => {
             WindowTree {
-                inner: vec![$(window_tree_node!($kind ($($arg),*))),*],
+                nodes: vec![$(window_tree_node!($kind ($($arg),*))),*],
                 count: $count,
                 split: SplitDirection::$split,
             }
@@ -259,16 +259,16 @@ mod tests {
     }
 
     macro_rules! window_tree_node {
-        (node($count:expr $(,$ratio:expr)?)) => {
+        (node($count:expr $(,$size:expr)?)) => {
             WindowTreeNode {
-                kind: WindowTreeNodeKind::Node($count),
-                size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
+                kind: WindowTreeNodeKind::Window($count),
+                size: { let mut r = 1.0; $( r = $size; )? r },
             }
         };
-        (branch($tree:expr $(,$ratio:expr)?)) => {
+        (branch($tree:expr $(,$size:expr)?)) => {
             WindowTreeNode {
-                kind: WindowTreeNodeKind::Branch($tree),
-                size_ratio: { let mut r = 1.0; $( r = $ratio; )? r },
+                kind: WindowTreeNodeKind::Subtree($tree),
+                size: { let mut r = 1.0; $( r = $size; )? r },
             }
         };
     }
@@ -381,7 +381,7 @@ mod tests {
         ),
         3 =>
         window_tree!(
-            Horizontal; 
+            Horizontal;
             branch(window_tree!(
                 Vertical;
                 branch(window_tree!(Horizontal; node(3); 3))
@@ -393,7 +393,7 @@ mod tests {
         layout_groups!("main" => Horizontal => window(1), group("main")),
         3 =>
         window_tree!(
-            Horizontal; 
+            Horizontal;
             node(1),
             branch(window_tree!(
                 Horizontal;
@@ -403,13 +403,34 @@ mod tests {
         ); 2);
         "circular_group"
     )]
-    fn test_build_tree(layout_splits: LayoutGroups, windows: usize) -> WindowTree {
-        layout_splits.new_tree(windows)
+    fn test_build_tree(templates: LayoutTemplates, windows: usize) -> WindowTree {
+        templates.build_tree_from_template(windows)
     }
 
     macro_rules! rectangle {
         ($x:expr, $y:expr, $w:expr, $h:expr) => {
             Rectangle::<_, Logical>::new(($x, $y).into(), ($w, $h).into())
         };
+    }
+
+    #[test_case(
+        window_tree!(Vertical; ; 0) => Vec::<Rectangle<i32, Logical>>::new();
+        "empty_tree"
+    )]
+    #[test_case(
+        window_tree!(Vertical; node(1); 1) => vec![rectangle!(0, 0, 100, 100)];
+        "single_window_vertical"
+    )]
+    #[test_case(
+        window_tree!(Vertical; node(1), branch(window_tree!(Horizontal; node(2); 2)); 2) =>
+        vec![
+            rectangle!(0, 0, 50, 100),
+            rectangle!(50, 0, 50, 50),
+            rectangle!(50, 50, 50, 50)
+        ];
+        "vertical_with_horizontal_branch"
+    )]
+    fn test_calculate_window_rectangles<T>(window_tree: WindowTree) -> Vec<Rectangle<i32, T>> {
+        window_tree.calculate_rectangles(Rectangle::new((0, 0).into(), (100, 100).into()))
     }
 }
