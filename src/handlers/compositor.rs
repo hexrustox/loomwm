@@ -1,10 +1,12 @@
-use crate::{Smallvil, grabs::resize_grab, state::ClientState};
+use std::collections::hash_map::Entry;
+
 use smithay::{
     backend::renderer::utils::on_commit_buffer_handler,
     delegate_compositor, delegate_shm,
     reexports::wayland_server::{
         Client,
-        protocol::{wl_buffer, wl_surface::WlSurface},
+        backend::ClientData,
+        protocol::{wl_buffer::WlBuffer, wl_surface::WlSurface},
     },
     wayland::{
         buffer::BufferHandler,
@@ -16,9 +18,13 @@ use smithay::{
     },
 };
 
-use super::xdg_shell;
+use crate::{
+    state::WaylandState,
+    utils::is_mapped,
+    window::{MappedWindow, UnmappedWindowConfigurationState},
+};
 
-impl CompositorHandler for Smallvil {
+impl CompositorHandler for WaylandState {
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.compositor_state
     }
@@ -29,34 +35,66 @@ impl CompositorHandler for Smallvil {
 
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
-        if !is_sync_subsurface(surface) {
-            let mut root = surface.clone();
-            while let Some(parent) = get_parent(&root) {
-                root = parent;
-            }
-            if let Some(window) = self
-                .windows
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-            {
-                window.on_commit();
-            }
-        };
+        if is_sync_subsurface(surface) {
+            return;
+        }
 
-        xdg_shell::handle_commit(&mut self.popups, &self.windows, surface);
-        resize_grab::handle_commit(&mut self.windows, surface);
+        let mut root_surface = surface.clone();
+        while let Some(parent) = get_parent(&root_surface) {
+            root_surface = parent;
+        }
+
+        if let Entry::Occupied(entry) = self.windows.unmapped_windows.entry(root_surface) {
+            if is_mapped(surface) {
+                let unmapped = entry.remove();
+                unmapped.inner.on_commit();
+                self.windows.mapped_windows.insert(
+                    unmapped.toplevel().wl_surface().clone(),
+                    MappedWindow::new(unmapped.inner),
+                );
+            } else {
+                let unmapped = entry.get();
+                let toplevel = unmapped.toplevel().clone();
+                self.event_loop.insert_idle(move |state| {
+                    if !toplevel.alive() {
+                        return;
+                    }
+
+                    if let Some(unmapped) = state
+                        .compositor
+                        .windows
+                        .unmapped_windows
+                        .get_mut(toplevel.wl_surface())
+                        && !unmapped.configured()
+                    {
+                        unmapped.state = UnmappedWindowConfigurationState::Configured;
+                        toplevel.send_configure();
+                    }
+                });
+            }
+        } else if let Some(mapped) = self.windows.mapped_windows.get(surface) {
+            mapped.inner.on_commit();
+            // assume window surface will not be unmapped
+        }
     }
 }
 
-impl BufferHandler for Smallvil {
-    fn buffer_destroyed(&mut self, _buffer: &wl_buffer::WlBuffer) {}
+#[derive(Default)]
+pub struct ClientState {
+    pub compositor_state: CompositorClientState,
 }
 
-impl ShmHandler for Smallvil {
+impl ClientData for ClientState {}
+
+impl BufferHandler for WaylandState {
+    fn buffer_destroyed(&mut self, buffer: &WlBuffer) {}
+}
+
+impl ShmHandler for WaylandState {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
     }
 }
 
-delegate_compositor!(Smallvil);
-delegate_shm!(Smallvil);
+delegate_compositor!(WaylandState);
+delegate_shm!(WaylandState);

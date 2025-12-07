@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bitflags = "2.10.0"
+anyhow = "1.0.100"
 smithay = { version = "0.7.0", default-features = false, features = [
   "backend_winit",
   "wayland_frontend",
   "desktop",
+  "renderer_gl",
 ] }
+
+[dev-dependencies]
 test-case = "3.3.1"
-xkbcommon = "0.8"

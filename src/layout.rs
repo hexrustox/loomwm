@@ -1,315 +1,436 @@
-use std::cell::Cell;
+use std::collections::HashMap;
 
-use smithay::utils::{Logical, Rectangle};
+use smithay::utils::{Rectangle, Size};
 
-pub type BBox = Rectangle<i32, Logical>;
+use crate::utils::distribute_evenly;
 
-pub enum LayoutTree {
-    Horizontal(Vec<LayoutNode>),
-    Vertical(Vec<LayoutNode>),
-}
+const DEFAULT_SIZE: f32 = 1.0;
 
-impl LayoutTree {
-    fn unwrap(&self) -> &[LayoutNode] {
-        match self {
-            Self::Horizontal(v) => v,
-            Self::Vertical(v) => v,
-        }
+#[derive(Default)]
+pub struct LayoutTemplates(HashMap<String, LayoutTemplate>);
+
+impl LayoutTemplates {
+    fn get(&self, key: &str) -> &LayoutTemplate {
+        self.0.get(key).unwrap_or(&LayoutTemplate::None)
     }
 
-    fn is_empty(&self) -> bool {
-        match self {
-            Self::Horizontal(v) => v.is_empty(),
-            Self::Vertical(v) => v.is_empty(),
-        }
-    }
-}
-
-pub enum LayoutNode {
-    Window,
-    SubTree(LayoutTree),
-}
-
-pub fn get_layout(output: BBox, window_remain: usize, layout_tree: &LayoutTree) -> Vec<BBox> {
-    if window_remain == 0 || layout_tree.is_empty() {
-        return vec![];
-    }
-
-    let mut vec = Vec::new();
-
-    let tree = layout_tree.unwrap();
-    let (window_count, remain) = consume_window(window_remain, tree);
-
-    let x = Cell::new(output.loc.x);
-    let y = Cell::new(output.loc.y);
-    let w;
-    let h;
-
-    let mut increment: Box<dyn FnMut()> = match layout_tree {
-        LayoutTree::Horizontal(..) => {
-            w = output.size.w / window_count as i32;
-            h = output.size.h;
-            Box::new(|| {
-                x.set(x.get() + w);
-            })
-        }
-        LayoutTree::Vertical(..) => {
-            w = output.size.w;
-            h = output.size.h / window_count as i32;
-            Box::new(|| {
-                y.set(y.get() + h);
-            })
-        }
-    };
-
-    let mut iter = tree.iter();
-    let mut i = 0;
-    while let Some(n) = iter.next()
-        && i < window_count
-    {
-        let rect = Rectangle::new((x.get(), y.get()).into(), (w, h).into());
-        if let LayoutNode::SubTree(tree) = n {
-            let count = window_remain.saturating_sub(remain + 1);
-            if count == 0 {
-                break;
-            }
-            vec.extend(get_layout(rect, count, tree));
+    fn build_tree_from_template(&self, mut window_count: usize) -> WindowTree {
+        let template = self.get("main");
+        if let Some(direction) = template.kind() {
+            template.build_tree(self, direction, &mut window_count)
         } else {
-            vec.push(rect);
+            WindowTree::default()
         }
-        increment();
-        i += 1;
     }
 
-    vec
+    fn add_subtree(
+        &self,
+        window_count: &mut usize,
+        name: &str,
+        tree: &mut WindowTree,
+        size_ratio: f32,
+    ) {
+        let template = self.get(name);
+        if let Some(direction) = template.kind() {
+            tree.push(WindowTreeNode {
+                kind: WindowTreeNodeKind::Subtree(template.build_tree(
+                    self,
+                    direction,
+                    window_count,
+                )),
+                size: size_ratio,
+            });
+        }
+    }
 }
 
-fn consume_window(mut window_remain: usize, tree: &[LayoutNode]) -> (usize, usize) {
-    let mut count = 0;
-    for n in tree {
-        if window_remain == 0 {
-            break;
-        }
-        if matches!(n, LayoutNode::Window) {
-            window_remain -= 1;
-            count += 1;
-        } else if let LayoutNode::SubTree(t) = n {
-            let (c, r) = consume_window(window_remain, t.unwrap());
-            window_remain = r;
-            if c > 0 {
-                count += 1;
-            }
+pub enum LayoutTemplate {
+    Horizontal(Vec<LayoutTemplateNode>),
+    Vertical(Vec<LayoutTemplateNode>),
+    None,
+}
+
+pub struct LayoutTemplateNode {
+    kind: LayoutTemplateNodeKind,
+    size: Option<f32>,
+}
+
+pub enum LayoutTemplateNodeKind {
+    Window(usize),
+    Group(String),
+}
+
+#[derive(Default)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
+pub struct WindowTree {
+    nodes: Vec<WindowTreeNode>,
+    count: usize,
+    split: SplitDirection,
+}
+
+#[cfg_attr(test, derive(Debug, PartialEq))]
+struct WindowTreeNode {
+    kind: WindowTreeNodeKind,
+    size: f32,
+}
+
+#[cfg_attr(test, derive(Debug, PartialEq))]
+enum WindowTreeNodeKind {
+    Window(usize),
+    Subtree(WindowTree),
+}
+
+#[derive(Clone, Copy, Default)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
+enum SplitDirection {
+    Horizontal,
+    #[default]
+    Vertical,
+}
+
+impl WindowTree {
+    fn new(split: SplitDirection) -> Self {
+        Self {
+            nodes: Vec::new(),
+            count: 0,
+            split,
         }
     }
 
-    (count, window_remain)
+    fn push(&mut self, value: WindowTreeNode) {
+        match value.kind {
+            WindowTreeNodeKind::Window(n) => {
+                self.count += n;
+            }
+            WindowTreeNodeKind::Subtree(..) => {
+                self.count += 1;
+            }
+        }
+        self.nodes.push(value);
+    }
+}
+
+impl LayoutTemplate {
+    fn iter(&self) -> Box<dyn Iterator<Item = &LayoutTemplateNode> + '_> {
+        match self {
+            Self::Horizontal(x) => Box::new(x.iter()),
+            Self::Vertical(x) => Box::new(x.iter()),
+            Self::None => Box::new(std::iter::empty()),
+        }
+    }
+
+    fn kind(&self) -> Option<SplitDirection> {
+        match self {
+            Self::Horizontal(_) => Some(SplitDirection::Horizontal),
+            Self::Vertical(_) => Some(SplitDirection::Vertical),
+            Self::None => None,
+        }
+    }
+
+    fn build_tree(
+        &self,
+        templates: &LayoutTemplates,
+        direction: SplitDirection,
+        window_count: &mut usize,
+    ) -> WindowTree {
+        let mut iter = self.iter();
+        let mut tree = WindowTree::new(direction);
+        while *window_count > 0
+            && let Some(LayoutTemplateNode {
+                kind,
+                size: size_ratio,
+            }) = iter.next()
+        {
+            let ratio = size_ratio.unwrap_or(DEFAULT_SIZE);
+            match kind {
+                LayoutTemplateNodeKind::Window(n) => {
+                    let left = window_count.saturating_sub(*n);
+                    let used = *window_count - left;
+                    tree.push(WindowTreeNode {
+                        kind: WindowTreeNodeKind::Window(used),
+                        size: ratio,
+                    });
+
+                    *window_count = left;
+                }
+                LayoutTemplateNodeKind::Group(group) => {
+                    templates.add_subtree(window_count, group, &mut tree, ratio);
+                }
+            }
+        }
+
+        tree
+    }
+}
+
+impl WindowTree {
+    fn calculate_rectangles<T>(self, container: Rectangle<i32, T>) -> Vec<Rectangle<i32, T>> {
+        let mut rectangles = Vec::with_capacity(self.count);
+        let mut x = container.loc.x;
+        let mut y = container.loc.y;
+        let split = self.split;
+
+        let sizes: Vec<_> = match split {
+            SplitDirection::Horizontal => distribute_evenly(container.size.h, self.count as i32)
+                .into_iter()
+                .map(|h| Size::new(container.size.w, h))
+                .collect(),
+            SplitDirection::Vertical => distribute_evenly(container.size.w, self.count as i32)
+                .into_iter()
+                .map(|w| Size::new(w, container.size.h))
+                .collect(),
+        };
+        let mut sizes = sizes.into_iter();
+
+        for node in self.nodes {
+            match node.kind {
+                WindowTreeNodeKind::Window(n) => {
+                    for _ in 0..n {
+                        let size = sizes.next().unwrap();
+                        rectangles.push(Rectangle::new((x, y).into(), size));
+                        match split {
+                            SplitDirection::Horizontal => y += size.h,
+                            SplitDirection::Vertical => x += size.w,
+                        }
+                    }
+                }
+                WindowTreeNodeKind::Subtree(tree) => {
+                    let size = sizes.next().unwrap();
+                    rectangles
+                        .extend(tree.calculate_rectangles(Rectangle::new((x, y).into(), size)));
+                    match split {
+                        SplitDirection::Horizontal => y += size.h,
+                        SplitDirection::Vertical => x += size.w,
+                    }
+                }
+            }
+        }
+        rectangles
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_mut)]
+    #![allow(unused_assignments)]
+
     use super::*;
+    use smithay::utils::Logical;
     use test_case::test_case;
 
-    fn h(nodes: Vec<LayoutNode>) -> LayoutTree {
-        LayoutTree::Horizontal(nodes)
+    macro_rules! layout_groups {
+        ($($key:expr => $split:ident => $($kind:ident ($($arg:expr),*)),*);*) => {{
+            #[allow(unused_mut)]
+            let mut map = HashMap::new();
+            $({
+                let items = vec![$(layout_group_item!($kind ($($arg),*))),*];
+                map.insert($key.to_string(), LayoutTemplate::$split(items));
+            })*
+            LayoutTemplates(map)
+        }};
     }
 
-    fn v(nodes: Vec<LayoutNode>) -> LayoutTree {
-        LayoutTree::Vertical(nodes)
-    }
-
-    macro_rules! empty_layout {
-        () => {
-            Vec::<BBox>::new()
+    macro_rules! layout_group_item {
+        (window($count:expr $(,$size:expr)?)) => {
+            LayoutTemplateNode {
+                kind: LayoutTemplateNodeKind::Window($count),
+                size: { let mut r = None; $( r = Some($size); )? r },
+            }
+        };
+        (group($group:literal $(,$size:expr)?)) => {
+            LayoutTemplateNode {
+                kind: LayoutTemplateNodeKind::Group($group.to_string()),
+                size: { let mut r = None; $( r = Some($size); )? r },
+            }
         };
     }
 
-    #[test_case(1, &[] => (0, 1); "empty_tree")]
-    #[test_case(3, &[LayoutNode::Window] => (1, 2); "single_window")]
-    #[test_case(3, &[LayoutNode::Window, LayoutNode::Window, LayoutNode::Window, LayoutNode::Window] => (3, 0); "more_windows_than_remain")]
-    #[test_case(3, &[LayoutNode::Window, LayoutNode::SubTree(h(vec![LayoutNode::Window, LayoutNode::Window]))] => (2, 0); "nested_tree_consumes_all")]
-    #[test_case(3, &[LayoutNode::Window, LayoutNode::SubTree(h(vec![LayoutNode::Window]))] => (2, 1); "nested_tree_consumes_partial")]
-    #[test_case(3, &[LayoutNode::Window, LayoutNode::SubTree(h(vec![LayoutNode::Window])), LayoutNode::Window] => (3, 0); "nested_and_sibling")]
-    #[test_case(0, &[LayoutNode::Window, LayoutNode::Window] => (0, 0); "zero_remain")]
-    fn test_get_remaining_window(remain: usize, tree: &[LayoutNode]) -> (usize, usize) {
-        consume_window(remain, tree)
+    macro_rules! window_tree {
+        () => {
+            WindowTree::default()
+        };
+        ($split:ident; $($kind:ident ($($arg:expr),*)),*; $count:expr) => {
+            WindowTree {
+                nodes: vec![$(window_tree_node!($kind ($($arg),*))),*],
+                count: $count,
+                split: SplitDirection::$split,
+            }
+        }
+    }
+
+    macro_rules! window_tree_node {
+        (node($count:expr $(,$size:expr)?)) => {
+            WindowTreeNode {
+                kind: WindowTreeNodeKind::Window($count),
+                size: { let mut r = 1.0; $( r = $size; )? r },
+            }
+        };
+        (branch($tree:expr $(,$size:expr)?)) => {
+            WindowTreeNode {
+                kind: WindowTreeNodeKind::Subtree($tree),
+                size: { let mut r = 1.0; $( r = $size; )? r },
+            }
+        };
+    }
+
+    #[test_case(layout_groups!(), 1 => window_tree!(); "empty")]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1)),
+        1 => window_tree!(Horizontal; node(1); 1);
+        "single_window"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(2)),
+        1 => window_tree!(Horizontal; node(1); 1);
+        "more_slots_than_windows"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1)),
+        2 => window_tree!(Horizontal; node(1); 1);
+        "more_windows_than_slots"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1)),
+        0 => window_tree!(Horizontal; ; 0);
+        "windows_zero"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1), window(1)),
+        3 => window_tree!(Horizontal; node(1), node(1); 2);
+        "horizontal_two_windows"
+    )]
+    #[test_case(
+        layout_groups!("main" => Vertical => window(1), window(1)),
+        2 => window_tree!(Vertical; node(1), node(1); 2);
+        "vertical_two_windows"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1), window(1), window(1)),
+        4 => window_tree!(Horizontal; node(1), node(1), node(1); 3);
+        "three_windows"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1, 0.5), window(2, 1.5)),
+        3 => window_tree!(Horizontal; node(1,0.5), node(2,1.5); 3);
+        "with_size_ratios"
+    )]
+    #[test_case(
+        layout_groups!("main" => Vertical => window(1, 0.3), window(2, 0.7)),
+        3 => window_tree!(Vertical; node(1,0.3), node(2,0.7); 3);
+        "vertical_with_ratios"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1), group("group"); "group" => Vertical => window(2)),
+        3 => window_tree!(Horizontal; node(1), branch(window_tree!(Vertical; node(2); 2)); 2);
+        "simple_group"
+    )]
+    #[test_case(
+        layout_groups!(
+            "main" => Horizontal => window(1, 0.5), group("sub", 1.5);
+            "sub" => Vertical => window(1, 0.3), window(2, 0.7)
+        ),
+        4 =>
+        window_tree!(
+            Horizontal;
+            node(1,0.5),
+            branch(window_tree!(Vertical; node(1,0.3), node(2,0.7); 3), 1.5);
+            2
+        );
+        "nested_with_ratios"
+    )]
+    #[test_case(
+        layout_groups!(
+            "main" => Horizontal => group("a"), group("b");
+            "a" => Vertical => window(1);
+            "b" => Horizontal => window(2)
+        ),
+        3 =>
+        window_tree!(
+            Horizontal;
+            branch(window_tree!(Vertical; node(1); 1)),
+            branch(window_tree!(Horizontal; node(2); 2));
+            2
+        );
+        "multiple_groups_horizontal"
+    )]
+    #[test_case(
+        layout_groups!(
+            "main" => Vertical => group("a"), group("b");
+            "a" => Horizontal => window(1);
+            "b" => Vertical => window(2)
+        ),
+        3 =>
+        (window_tree!(
+            Vertical;
+            branch(window_tree!(Horizontal; node(1); 1)),
+            branch(window_tree!(Vertical; node(2); 2));
+            2
+        ));
+        "vertical_with_groups"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1), group("missing")),
+        2 => window_tree!(Horizontal; node(1); 1);
+        "missing_group"
+    )]
+    #[test_case(
+        layout_groups!(
+            "main" => Horizontal => group("level1");
+            "level1" => Vertical => group("level2");
+            "level2" => Horizontal => window(3)
+        ),
+        3 =>
+        window_tree!(
+            Horizontal;
+            branch(window_tree!(
+                Vertical;
+                branch(window_tree!(Horizontal; node(3); 3))
+            ; 1)
+        ); 1);
+        "deep_nesting"
+    )]
+    #[test_case(
+        layout_groups!("main" => Horizontal => window(1), group("main")),
+        3 =>
+        window_tree!(
+            Horizontal;
+            node(1),
+            branch(window_tree!(
+                Horizontal;
+                node(1),
+                branch(window_tree!(Horizontal; node(1); 1))
+            ; 2)
+        ); 2);
+        "circular_group"
+    )]
+    fn test_build_tree(templates: LayoutTemplates, windows: usize) -> WindowTree {
+        templates.build_tree_from_template(windows)
+    }
+
+    macro_rules! rectangle {
+        ($x:expr, $y:expr, $w:expr, $h:expr) => {
+            Rectangle::<_, Logical>::new(($x, $y).into(), ($w, $h).into())
+        };
     }
 
     #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        h(vec![LayoutNode::Window]) => vec![Rectangle::new((0, 0).into(), (100, 100).into())];
-        "single_window_horizontal"
+        window_tree!(Vertical; ; 0) => Vec::<Rectangle<i32, Logical>>::new();
+        "empty_tree"
     )]
     #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        v(vec![LayoutNode::Window]) => vec![Rectangle::new((0, 0).into(), (100, 100).into())];
+        window_tree!(Vertical; node(1); 1) => vec![rectangle!(0, 0, 100, 100)];
         "single_window_vertical"
     )]
     #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        h(vec![LayoutNode::Window, LayoutNode::Window]) => vec![
-            Rectangle::new((0, 0).into(), (50, 100).into()),
-            Rectangle::new((50, 0).into(), (50, 100).into())
+        window_tree!(Vertical; node(1), branch(window_tree!(Horizontal; node(2); 2)); 2) =>
+        vec![
+            rectangle!(0, 0, 50, 100),
+            rectangle!(50, 0, 50, 50),
+            rectangle!(50, 50, 50, 50)
         ];
-        "two_windows_horizontal"
+        "vertical_with_horizontal_branch"
     )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        v(vec![LayoutNode::Window, LayoutNode::Window]) => vec![
-            Rectangle::new((0, 0).into(), (100, 50).into()),
-            Rectangle::new((0, 50).into(), (100, 50).into())
-        ];
-        "two_windows_vertical"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        h(vec![
-            LayoutNode::Window,
-            LayoutNode::SubTree(v(vec![LayoutNode::Window, LayoutNode::Window]))
-        ]) => vec![
-            Rectangle::new((0, 0).into(), (50, 100).into()),
-            Rectangle::new((50, 0).into(), (50, 50).into()),
-            Rectangle::new((50, 50).into(), (50, 50).into())
-        ];
-        "horizontal_with_vertical_subtree"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        h(vec![
-            LayoutNode::Window,
-            LayoutNode::SubTree(v(vec![
-                LayoutNode::Window,
-                LayoutNode::SubTree(h(vec![LayoutNode::Window, LayoutNode::Window])),
-                LayoutNode::Window
-            ]))
-        ]) => vec![
-            Rectangle::new((0, 0).into(), (50, 100).into()),
-            Rectangle::new((50, 0).into(), (50, 50).into()),
-            Rectangle::new((50, 50).into(), (50, 50).into())
-        ];
-        "deeply_nested_layout"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        0,
-        h(vec![LayoutNode::Window, LayoutNode::Window]) => empty_layout!();
-        "zero_windows_remain"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        2,
-        h(vec![]) => empty_layout![];
-        "empty_layout_tree"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        1,
-        h(vec![LayoutNode::Window, LayoutNode::Window]) => vec![Rectangle::new((0, 0).into(), (100, 100).into())];
-        "more_nodes_than_windows"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        2,
-        h(vec![LayoutNode::Window, LayoutNode::SubTree(v(vec![]))]) => vec![Rectangle::new((0, 0).into(), (100, 100).into())];
-        "subtree_with_no_windows"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (0, 100).into()),
-        2,
-        h(vec![LayoutNode::Window, LayoutNode::Window]) => vec![Rectangle::new((0, 0).into(), (0, 100).into()), Rectangle::new((0, 0).into(), (0, 100).into())];
-        "zero_width_layout"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 0).into()),
-        2,
-        v(vec![LayoutNode::Window, LayoutNode::Window]) => vec![Rectangle::new((0, 0).into(), (100, 0).into()), Rectangle::new((0, 0).into(), (100, 0).into())];
-        "zero_height_layout"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (120, 120).into()),
-        4,
-        h(vec![
-            LayoutNode::Window,
-            LayoutNode::SubTree(v(vec![
-                LayoutNode::Window,
-                LayoutNode::SubTree(h(vec![
-                    LayoutNode::Window,
-                    LayoutNode::Window
-                ]))
-            ]))
-        ]) => vec![
-            Rectangle::new((0, 0).into(), (60, 120).into()),
-            Rectangle::new((60, 0).into(), (60, 60).into()),
-            Rectangle::new((60, 60).into(), (30, 60).into()),
-            Rectangle::new((90, 60).into(), (30, 60).into())
-        ];
-        "three_level_nested_h_in_v_in_h"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        4,
-        h(vec![
-            LayoutNode::SubTree(v(vec![LayoutNode::Window, LayoutNode::Window])),
-            LayoutNode::SubTree(v(vec![LayoutNode::Window, LayoutNode::Window]))
-        ]) => vec![
-            Rectangle::new((0, 0).into(), (50, 50).into()),
-            Rectangle::new((0, 50).into(), (50, 50).into()),
-            Rectangle::new((50, 0).into(), (50, 50).into()),
-            Rectangle::new((50, 50).into(), (50, 50).into())
-        ];
-        "two_separate_nested_subtrees"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (100, 100).into()),
-        3,
-        h(vec![
-            LayoutNode::Window,
-            LayoutNode::SubTree(v(vec![
-                LayoutNode::Window,
-                LayoutNode::Window,
-                LayoutNode::Window
-            ])),
-            LayoutNode::Window
-        ]) => vec![
-            Rectangle::new((0, 0).into(), (50, 100).into()),
-            Rectangle::new((50, 0).into(), (50, 50).into()),
-            Rectangle::new((50, 50).into(), (50, 50).into())
-        ];
-        "window_count_exhausted_in_deep_subtree"
-    )]
-    #[test_case(
-        Rectangle::new((0, 0).into(), (200, 200).into()),
-        10,
-        v(vec![
-            LayoutNode::Window,
-            LayoutNode::SubTree(h(vec![
-                LayoutNode::Window,
-                LayoutNode::SubTree(v(vec![
-                    LayoutNode::Window,
-                    LayoutNode::Window
-                ]))
-            ])),
-            LayoutNode::Window
-        ]) => vec![
-            Rectangle::new((0, 0).into(), (200, 66).into()),
-            Rectangle::new((0, 66).into(), (100, 66).into()),
-            Rectangle::new((100, 66).into(), (100, 33).into()),
-            Rectangle::new((100, 99).into(), (100, 33).into()),
-            Rectangle::new((0, 132).into(), (200, 66).into())
-        ];
-        "complex_layout_with_surplus_windows"
-    )]
-    fn test_get_layout(
-        layout_size: BBox,
-        window_remain: usize,
-        layout_tree: LayoutTree,
-    ) -> Vec<BBox> {
-        get_layout(layout_size, window_remain, &layout_tree)
+    fn test_calculate_window_rectangles<T>(window_tree: WindowTree) -> Vec<Rectangle<i32, T>> {
+        window_tree.calculate_rectangles(Rectangle::new((0, 0).into(), (100, 100).into()))
     }
 }

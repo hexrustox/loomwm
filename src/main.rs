@@ -1,42 +1,43 @@
-#![allow(irrefutable_let_patterns)]
+use std::env;
 
+use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
+
+use crate::{
+    backend::{Backend, Winit},
+    state::WaylandState,
+};
+
+mod backend;
 mod handlers;
-
-mod grabs;
 mod input;
 mod layout;
 mod state;
+mod utils;
 mod window;
-mod winit;
 
-use smithay::reexports::{
-    calloop::EventLoop,
-    wayland_server::{Display, DisplayHandle},
-};
-pub use state::Smallvil;
-
-pub struct CalloopData {
-    state: Smallvil,
-    display_handle: DisplayHandle,
+pub struct AppState {
+    pub compositor: WaylandState,
+    pub backend: Backend,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
+    let mut event_loop: EventLoop<AppState> = EventLoop::try_new()?;
+    let display: Display<WaylandState> = Display::new()?;
+    let mut backend = Backend::Winit(Winit::new(event_loop.handle())?);
+    let mut compositor = WaylandState::new(event_loop.handle(), event_loop.get_signal(), display);
+    backend.init(&mut compositor);
 
-    let display: Display<Smallvil> = Display::new()?;
-    let display_handle = display.handle();
-    let state = Smallvil::new(&mut event_loop, display);
-
-    let mut data = CalloopData {
-        state,
-        display_handle,
+    unsafe {
+        env::set_var("WAYLAND_DISPLAY", &compositor.socket_name);
+    }
+    let mut state = AppState {
+        compositor,
+        backend,
     };
 
-    crate::winit::init_winit(&mut event_loop, &mut data)?;
+    std::process::Command::new("alacritty").spawn().ok();
 
-    event_loop.run(None, &mut data, move |_| {
-        // Smallvil is running
-    })?;
+    event_loop.run(None, &mut state, |_| {})?;
 
     Ok(())
 }
