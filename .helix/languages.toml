@@ -1,10 +1,6 @@
-[language-server.rust-analyzer]
-command = "just"
-args = ["lsp"]
-
 [language-server.codebook]
-command = "just"
-args = ["spellcheck-lsp"]
+command = "codebook-lsp"
+args = ["serve"]
 
 [[language]]
 name = "rust"

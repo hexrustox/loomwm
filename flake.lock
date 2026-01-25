@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "capsule": {
+      "locked": {
+        "lastModified": 1769212863,
+        "narHash": "sha256-SjnlIplEuW7qNYY4gx2xWeRpVS/Fk6HcplbmW63Emy4=",
+        "owner": "codnixus",
+        "repo": "capsule",
+        "rev": "9b5925c5ffae554819b0b328e8b0e0573b409e0f",
+        "type": "gitlab"
+      },
+      "original": {
+        "owner": "codnixus",
+        "repo": "capsule",
+        "type": "gitlab"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -20,22 +35,23 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1764317397,
-        "narHash": "sha256-4BioqNpLjXHEWyd+TFI/1znWPxk8z8JM2MEplJM2Nvg=",
+        "lastModified": 1769089682,
+        "narHash": "sha256-9yA/LIuAVQq0lXelrZPjLuLVuZdm03p8tfmHhnDIkms=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "fa4a775ca6b4075390ce9601db39f09f48d034e2",
+        "rev": "078d69f03934859a181e81ba987c2bb033eebfc5",
         "type": "github"
       },
       "original": {
         "owner": "nixos",
-        "ref": "fa4a775ca6b4075390ce9601db39f09f48d034e2",
+        "ref": "nixos-25.11",
         "repo": "nixpkgs",
         "type": "github"
       }
     },
     "root": {
       "inputs": {
+        "capsule": "capsule",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs"
       }
