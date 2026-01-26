@@ -14,7 +14,7 @@ use smithay::{
     },
 };
 
-use crate::{AppState, handlers::ClientState, window::WindowRecord};
+use crate::{AppState, handlers::ClientState, window::WindowRecord, workspace::Workspaces};
 
 pub struct WaylandState {
     pub socket_name: OsString,
@@ -33,8 +33,8 @@ pub struct WaylandState {
     pub seat: Seat<Self>,
 
     pub space: Space<Window>,
-    // pub monitors: Vec<>
     pub windows: WindowRecord,
+    pub workspaces: Workspaces,
 }
 
 impl WaylandState {
@@ -108,8 +108,8 @@ impl WaylandState {
             seat,
 
             space: Space::default(),
-
             windows: WindowRecord::default(),
+            workspaces: Workspaces::default(),
         }
     }
 }

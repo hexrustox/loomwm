@@ -48,6 +48,9 @@ impl CompositorHandler for WaylandState {
             if is_mapped(surface) {
                 let unmapped = entry.remove();
                 unmapped.inner.on_commit();
+                self.workspaces
+                    .get_active()
+                    .new_window(unmapped.toplevel().wl_surface().clone());
                 self.windows.mapped_windows.insert(
                     unmapped.toplevel().wl_surface().clone(),
                     MappedWindow::new(unmapped.inner),
@@ -74,8 +77,8 @@ impl CompositorHandler for WaylandState {
             }
         } else if let Some(mapped) = self.windows.mapped_windows.get(surface) {
             mapped.inner.on_commit();
-            // assume window surface will not be unmapped
         }
+        // assume window surface will not be unmapped
     }
 }
 

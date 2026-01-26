@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use smithay::{
     backend::renderer::{
-        ImportAll, Renderer, Texture,
+        ImportAll, Renderer, RendererSuper,
         element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
     },
     desktop::{Window, space::SpaceElement},
@@ -13,6 +13,7 @@ use smithay::{
 
 #[derive(Default)]
 pub struct WindowRecord {
+    // remove
     pub mapped_windows: HashMap<WlSurface, MappedWindow>,
     pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
 }
@@ -29,13 +30,14 @@ impl WindowRecord {
         point: T,
     ) -> Option<(&Window, Point<i32, Logical>)> {
         let point = point.into();
-        self.mapped_windows.iter().find_map(|(_, e)| {
+        self.mapped_windows.iter().find_map(|(_, mapped)| {
             // we need to offset the point to the location where the surface is actually drawn
-            let render_location = e.render_location();
-            if e.inner
+            let render_location = mapped.render_location();
+            if mapped
+                .inner
                 .is_in_input_region(&(point - render_location.to_f64()))
             {
-                Some((&e.inner, render_location))
+                Some((&mapped.inner, render_location))
             } else {
                 None
             }
@@ -90,5 +92,17 @@ impl MappedWindow {
 
     pub fn toplevel(&self) -> &ToplevelSurface {
         self.inner.toplevel().expect("No X11 support")
+    }
+
+    pub fn render_elements<R: Renderer + ImportAll>(
+        &self,
+        renderer: &mut R,
+        scale: Scale<f64>,
+    ) -> Vec<WaylandSurfaceRenderElement<R>>
+    where
+        <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
+    {
+        let loc = self.render_location().to_physical_precise_round(scale);
+        self.inner.render_elements(renderer, loc, scale, 1.0)
     }
 }
