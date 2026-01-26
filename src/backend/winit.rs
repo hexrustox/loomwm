@@ -82,7 +82,7 @@ impl Winit {
                             .compositor
                             .workspaces
                             .get_active()
-                            .windows()
+                            .windows_iter()
                             .for_each(|w| {
                                 w.inner
                                     .send_frame(output, get_monotonic_time(), None, |_, _| {

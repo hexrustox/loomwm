@@ -23,9 +23,9 @@ impl Workspaces {
             .expect("No active workspace")
     }
 
-    pub fn window_lookup(&mut self, wl_surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         for workspace in self.workspaces.values_mut() {
-            let window = workspace.window_lookup(wl_surface);
+            let window = workspace.window_lookup(surface);
             if window.is_some() {
                 return window;
             }
@@ -56,7 +56,7 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new_mapped_window(&mut self, mapped: MappedWindow) {
-        self.floating.push(mapped);
+        self.floating.insert(0, mapped);
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
@@ -92,12 +92,23 @@ impl Workspace {
         })
     }
 
-    pub fn windows(&mut self) -> std::slice::IterMut<'_, MappedWindow> {
+    pub fn windows_iter(&mut self) -> std::slice::IterMut<'_, MappedWindow> {
         self.floating.iter_mut()
     }
 
-    fn window_lookup(&mut self, wl_surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.windows()
-            .find(|w| w.toplevel().wl_surface() == wl_surface)
+    pub fn window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        self.floating
+            .iter_mut()
+            .find(|w| w.toplevel().wl_surface() == surface)
+    }
+
+    pub fn raise_floating_window(&mut self, surface: &WlSurface) {
+        if let Some(index) = self
+            .floating
+            .iter()
+            .position(|mapped| mapped.toplevel().wl_surface() == surface)
+        {
+            self.floating[0..=index].rotate_right(1);
+        }
     }
 }

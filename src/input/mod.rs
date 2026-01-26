@@ -9,7 +9,7 @@ use smithay::{
         pointer::{ButtonEvent, MotionEvent},
     },
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, SERIAL_COUNTER, Serial},
+    utils::{Logical, Point, SERIAL_COUNTER},
 };
 
 use crate::state::WaylandState;
@@ -71,7 +71,7 @@ impl WaylandState {
                         .window_under(pointer.current_location())
                 {
                     let surface = window.toplevel().unwrap().wl_surface().clone();
-                    // self.focus_window(&surface, Some(serial));
+                    self.focus_window(&surface, Some(serial));
                 }
 
                 pointer.button(
@@ -102,20 +102,4 @@ impl WaylandState {
                     .map(|(s, p)| (s, (p + location).to_f64()))
             })
     }
-
-    // pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
-    //     let keyboard = self.seat.get_keyboard().unwrap();
-    //     let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
-    //     if let Some(surface) = keyboard.current_focus()
-    //         && let Some(mapped) = self.windows.mapped_windows.get(&surface)
-    //     {
-    //         mapped.inner.set_activated(false);
-    //         mapped.toplevel().send_pending_configure();
-    //     }
-    //     keyboard.set_focus(self, Some(surface.clone()), serial);
-    //     if let Some(mapped) = self.windows.mapped_windows.get(surface) {
-    //         mapped.inner.set_activated(true);
-    //         mapped.toplevel().send_pending_configure();
-    //     }
-    // }
 }
