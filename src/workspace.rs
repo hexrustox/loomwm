@@ -4,8 +4,9 @@ use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
     },
+    desktop::{Window, space::SpaceElement},
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::Scale,
+    utils::{Logical, Point, Scale},
 };
 
 use crate::window::MappedWindow;
@@ -20,6 +21,16 @@ impl Workspaces {
         self.workspaces
             .get_mut(&self.active)
             .expect("No active workspace")
+    }
+
+    pub fn window_lookup(&mut self, wl_surface: &WlSurface) -> Option<&mut MappedWindow> {
+        for workspace in self.workspaces.values_mut() {
+            let window = workspace.window_lookup(wl_surface);
+            if window.is_some() {
+                return window;
+            }
+        }
+        None
     }
 }
 
@@ -40,17 +51,16 @@ impl Default for Workspaces {
 }
 
 pub struct Workspace {
-    floating: Vec<WlSurface>,
+    floating: Vec<MappedWindow>,
 }
 
 impl Workspace {
-    pub fn new_window(&mut self, wl_surface: WlSurface) {
-        self.floating.push(wl_surface);
+    pub fn new_mapped_window(&mut self, mapped: MappedWindow) {
+        self.floating.push(mapped);
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
         &self,
-        mapped_windows: &HashMap<WlSurface, MappedWindow>,
         renderer: &mut R,
         scale: Scale<f64>,
     ) -> Vec<WaylandSurfaceRenderElement<R>>
@@ -59,10 +69,35 @@ impl Workspace {
     {
         self.floating
             .iter()
-            .flat_map(|w| {
-                let m = mapped_windows.get(w).unwrap();
-                m.render_elements::<R>(renderer, scale)
-            })
+            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()
+    }
+
+    pub fn window_under<T: Into<Point<f64, Logical>>>(
+        &self,
+        point: T,
+    ) -> Option<(&Window, Point<i32, Logical>)> {
+        let point = point.into();
+        self.floating.iter().find_map(|mapped| {
+            // we need to offset the point to the location where the surface is actually drawn
+            let render_location = mapped.render_location();
+            if mapped
+                .inner
+                .is_in_input_region(&(point - render_location.to_f64()))
+            {
+                Some((&mapped.inner, render_location))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn windows(&mut self) -> std::slice::IterMut<'_, MappedWindow> {
+        self.floating.iter_mut()
+    }
+
+    fn window_lookup(&mut self, wl_surface: &WlSurface) -> Option<&mut MappedWindow> {
+        self.windows()
+            .find(|w| w.toplevel().wl_surface() == wl_surface)
     }
 }

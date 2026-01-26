@@ -61,11 +61,11 @@ impl Winit {
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
                         let scale = output.current_scale().fractional_scale().into();
-                        let elements = state.compositor.workspaces.get_active().render_elements(
-                            &state.compositor.windows.mapped_windows,
-                            renderer,
-                            scale,
-                        );
+                        let elements = state
+                            .compositor
+                            .workspaces
+                            .get_active()
+                            .render_elements(renderer, scale);
 
                         winit.damage_tracker.render_output(
                             renderer,
@@ -80,9 +80,9 @@ impl Winit {
                         backend.submit(render_output.damage.map(|v| &**v)).unwrap();
                         state
                             .compositor
-                            .windows
-                            .mapped_windows
-                            .values()
+                            .workspaces
+                            .get_active()
+                            .windows()
                             .for_each(|w| {
                                 w.inner
                                     .send_frame(output, get_monotonic_time(), None, |_, _| {

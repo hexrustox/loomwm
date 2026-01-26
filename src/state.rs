@@ -1,11 +1,11 @@
-use std::{ffi::OsString, sync::Arc};
+use std::{collections::HashMap, ffi::OsString, sync::Arc};
 
 use smithay::{
     desktop::{PopupManager, Space, Window},
     input::{Seat, SeatState},
     reexports::{
         calloop::{Interest, LoopHandle, LoopSignal, Mode, PostAction, generic::Generic},
-        wayland_server::{Display, DisplayHandle},
+        wayland_server::{Display, DisplayHandle, protocol::wl_surface::WlSurface},
     },
     wayland::{
         compositor::CompositorState, output::OutputManagerState,
@@ -14,7 +14,7 @@ use smithay::{
     },
 };
 
-use crate::{AppState, handlers::ClientState, window::WindowRecord, workspace::Workspaces};
+use crate::{AppState, handlers::ClientState, window::UnmappedWindow, workspace::Workspaces};
 
 pub struct WaylandState {
     pub socket_name: OsString,
@@ -33,7 +33,7 @@ pub struct WaylandState {
     pub seat: Seat<Self>,
 
     pub space: Space<Window>,
-    pub windows: WindowRecord,
+    pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
     pub workspaces: Workspaces,
 }
 
@@ -108,7 +108,7 @@ impl WaylandState {
             seat,
 
             space: Space::default(),
-            windows: WindowRecord::default(),
+            unmapped_windows: HashMap::new(),
             workspaces: Workspaces::default(),
         }
     }

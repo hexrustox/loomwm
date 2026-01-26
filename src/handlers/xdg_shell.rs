@@ -24,7 +24,7 @@ impl XdgShellHandler for WaylandState {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface);
-        self.windows.new_window(window);
+        self.new_window(window);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {}
@@ -53,7 +53,7 @@ impl XdgShellHandler for WaylandState {
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let window = self.windows.mapped_windows.get(wl_surface);
+            let window = self.mapped_window_lookup(wl_surface);
             if let Some(MappedWindow {
                 inner, location, ..
             }) = window

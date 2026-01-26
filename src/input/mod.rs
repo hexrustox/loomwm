@@ -65,10 +65,13 @@ impl WaylandState {
                 let button_state = event.state();
 
                 if button_state == ButtonState::Pressed
-                    && let Some((window, _)) = self.windows.window_under(pointer.current_location())
+                    && let Some((window, _)) = self
+                        .workspaces
+                        .get_active()
+                        .window_under(pointer.current_location())
                 {
                     let surface = window.toplevel().unwrap().wl_surface().clone();
-                    self.focus_window(&surface, Some(serial));
+                    // self.focus_window(&surface, Some(serial));
                 }
 
                 pointer.button(
@@ -87,10 +90,11 @@ impl WaylandState {
     }
 
     pub fn surface_under(
-        &self,
+        &mut self,
         pos: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.windows
+        self.workspaces
+            .get_active()
             .window_under(pos)
             .and_then(|(window, location)| {
                 window
@@ -99,19 +103,19 @@ impl WaylandState {
             })
     }
 
-    pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
-        let keyboard = self.seat.get_keyboard().unwrap();
-        let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
-        if let Some(surface) = keyboard.current_focus()
-            && let Some(mapped) = self.windows.mapped_windows.get(&surface)
-        {
-            mapped.inner.set_activated(false);
-            mapped.toplevel().send_pending_configure();
-        }
-        keyboard.set_focus(self, Some(surface.clone()), serial);
-        if let Some(mapped) = self.windows.mapped_windows.get(surface) {
-            mapped.inner.set_activated(true);
-            mapped.toplevel().send_pending_configure();
-        }
-    }
+    // pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
+    //     let keyboard = self.seat.get_keyboard().unwrap();
+    //     let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
+    //     if let Some(surface) = keyboard.current_focus()
+    //         && let Some(mapped) = self.windows.mapped_windows.get(&surface)
+    //     {
+    //         mapped.inner.set_activated(false);
+    //         mapped.toplevel().send_pending_configure();
+    //     }
+    //     keyboard.set_focus(self, Some(surface.clone()), serial);
+    //     if let Some(mapped) = self.windows.mapped_windows.get(surface) {
+    //         mapped.inner.set_activated(true);
+    //         mapped.toplevel().send_pending_configure();
+    //     }
+    // }
 }
