@@ -53,6 +53,7 @@
               cargo-machete
 
               pkg-config
+              alacritty
             ]);
           extraOpts = [
             "--pid host"
@@ -70,6 +71,8 @@
             "--volume=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/runtime/$WAYLAND_DISPLAY:ro"
             "--device=/dev/dri"
 
+            "--volume=/etc/fonts:/etc/fonts:ro"
+
             "--env=RUST_SRC_PATH"
             "--env=LIBRARY_PATH=\"${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}\""
             "--env=PKG_CONFIG_PATH=\"${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}\""
@@ -78,9 +81,8 @@
             "--env=LIBVA_DRIVERS_PATH"
             "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
             "--env=LD_LIBRARY_PATH"
-
-            "-v /etc/static/ssl/certs:/etc/ssl/certs:ro"
           ];
+          image = "alpine:latest";
         };
       in
       {
