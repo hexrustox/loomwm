@@ -11,6 +11,8 @@ use smithay::{
 
 use crate::window::MappedWindow;
 
+mod tile;
+
 pub struct Workspaces {
     active: String,
     workspaces: HashMap<String, Workspace>,
@@ -43,6 +45,7 @@ impl Default for Workspaces {
             workspaces: HashMap::from_iter([(
                 DEFAULT_NAME.to_string(),
                 Workspace {
+                    // tiles: ,
                     floating: Vec::new(),
                 },
             )]),
@@ -51,11 +54,12 @@ impl Default for Workspaces {
 }
 
 pub struct Workspace {
+    // tiles: TileGroup,
     floating: Vec<MappedWindow>,
 }
 
 impl Workspace {
-    pub fn new_mapped_window(&mut self, mapped: MappedWindow) {
+    pub fn new_floating_window(&mut self, mapped: MappedWindow) {
         self.floating.insert(0, mapped);
     }
 
