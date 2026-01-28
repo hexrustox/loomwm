@@ -13,7 +13,7 @@ struct TileTree {
     arena: SlotMap<TileId, Tile>,
     root: TileId,
     current_tile: TileId,
-    layouts: Rc<TileLayouts>,
+    layouts: Rc<LayoutSet>,
     layout_trace: Vec<TileLayoutTrace>,
 }
 
@@ -25,10 +25,10 @@ struct Tile {
 }
 
 impl Tile {
-    fn as_group_mut(&mut self) -> &mut TileGroup {
+    fn as_layout_mut(&mut self) -> &mut TileLayout {
         match &mut self.kind {
-            TileKind::Group(group) => group,
-            TileKind::Window(_) => panic!("Expected Tile to be a Group, but found a Window"),
+            TileKind::Layout(x) => x,
+            TileKind::Window(_) => panic!("Expected Tile to be a Layout, but found a Window"),
         }
     }
 }
@@ -40,7 +40,7 @@ struct TileSize(f64);
 #[derive(Debug)]
 enum TileKind {
     Window(TileWindow),
-    Group(TileGroup),
+    Layout(TileLayout),
 }
 
 #[derive(Debug)]
@@ -49,7 +49,7 @@ struct TileWindow {
 }
 
 #[derive(Debug)]
-struct TileGroup {
+struct TileLayout {
     split: TileSplit,
     orientation: TileOrientation,
     tiles: Vec<TileId>,
@@ -72,30 +72,33 @@ enum TileOrientation {
 }
 
 #[derive(Debug)]
-struct TileLayouts(HashMap<String, TileLayout>);
+struct LayoutSet(HashMap<String, LayoutSchema>);
 
-impl TileLayouts {
-    fn get(&self, layout_name: &str) -> &TileLayout {
+impl LayoutSet {
+    fn get(&self, layout_name: &str) -> &LayoutSchema {
         // TODO
         self.0.get(layout_name).unwrap()
     }
 }
 
 #[derive(Debug)]
-struct TileLayout {
+#[cfg_attr(test, derive(Clone))]
+struct LayoutSchema {
     split: TileSplit,
     orientation: TileOrientation,
-    specs: Vec<TileSpec>,
+    nodes: Vec<LayoutNode>,
 }
 
 #[derive(Debug)]
-struct TileSpec {
-    group: Option<String>,
+#[cfg_attr(test, derive(Clone))]
+struct LayoutNode {
+    layout: Option<String>,
     repeat: TileRepeat,
     size: TileSize,
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(Clone))]
 struct TileRepeat(usize);
 
 #[derive(Debug)]
@@ -116,12 +119,12 @@ impl TileLayoutTrace {
 }
 
 impl TileTree {
-    fn new(layouts: Rc<TileLayouts>, layout_name: &str) -> Self {
+    fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
         let mut arena = SlotMap::with_key();
         let layout = layouts.get(layout_name);
 
         let new_tile = Tile {
-            kind: TileKind::Group(TileGroup {
+            kind: TileKind::Layout(TileLayout {
                 split: layout.split,
                 orientation: layout.orientation,
                 tiles: Vec::new(),
@@ -141,30 +144,63 @@ impl TileTree {
     }
 
     fn add(&mut self, mapped: MappedWindow) {
-        let Some(trace) = self.layout_trace.last_mut() else {
-            // TODO
-            panic!();
-        };
+        // TODO
+        let trace = self.layout_trace.last_mut().unwrap();
 
         let layout = self.layouts.get(&trace.layout);
-        for i in trace.index..layout.specs.len() {
+        for i in trace.index..layout.nodes.len() {
             trace.index = i;
-            let spec = &layout.specs[i];
-            if trace.tile_count < spec.repeat.0 {
-                if let Some(group) = &spec.group {
+            let node = &layout.nodes[i];
+            if trace.tile_count < node.repeat.0 {
+                if let Some(layout_name) = &node.layout {
+                    let layout = self.layouts.get(layout_name);
+                    let new_tile = Tile {
+                        kind: TileKind::Layout(TileLayout {
+                            split: layout.split,
+                            orientation: layout.orientation,
+                            tiles: Vec::new(),
+                        }),
+                        size: node.size,
+                        parent: Some(self.current_tile),
+                    };
+                    let layout_id = self.arena.insert(new_tile);
+
+                    // TODO
+                    let current_layout = self.arena.get_mut(self.current_tile).unwrap();
+                    current_layout.as_layout_mut().tiles.push(layout_id);
+
+                    self.current_tile = layout_id;
+                    self.layout_trace.push(TileLayoutTrace::new(layout_name));
+                    self.add(mapped);
                 } else {
                     let new_tile = Tile {
                         kind: TileKind::Window(TileWindow { window: mapped }),
-                        size: spec.size,
+                        size: node.size,
                         parent: Some(self.current_tile),
                     };
-                    let id = self.arena.insert(new_tile);
+                    let window_id = self.arena.insert(new_tile);
 
-                    let current_group = self.arena.get_mut(self.current_tile).unwrap();
-                    current_group.as_group_mut().tiles.push(id);
+                    // TODO
+                    let current_layout = self.arena.get_mut(self.current_tile).unwrap();
+                    current_layout.as_layout_mut().tiles.push(window_id);
 
                     trace.tile_count += 1;
                 }
+                break;
+            }
+            if i == layout.nodes.len() - 1 {
+                // TODO
+                self.current_tile = self
+                    .arena
+                    .get_mut(self.current_tile)
+                    .unwrap()
+                    .parent
+                    .unwrap();
+
+                self.layout_trace.pop();
+                let trace = self.layout_trace.last_mut().unwrap();
+                trace.index += 1;
+                self.add(mapped);
                 break;
             }
             trace.tile_count = 0;
@@ -174,6 +210,8 @@ impl TileTree {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use super::*;
 
     #[derive(Debug, PartialEq)]
@@ -204,7 +242,7 @@ mod tests {
                     (TileKind::Window(win_a), TileKind::Window(win_b)) => {
                         win_a.window == win_b.window
                     }
-                    (TileKind::Group(grp_a), TileKind::Group(grp_b)) => {
+                    (TileKind::Layout(grp_a), TileKind::Layout(grp_b)) => {
                         if grp_a.split != grp_b.split || grp_a.orientation != grp_b.orientation {
                             return false;
                         }
@@ -265,10 +303,10 @@ mod tests {
                 TileKind::Window(_) => {
                     f.push_str(&format!("Window (size: {:?})\n", tile.size.0));
                 }
-                TileKind::Group(group) => {
+                TileKind::Layout(layout) => {
                     f.push_str(&format!(
-                        "Group {:?} {:?} (size: {:?})\n",
-                        group.split, group.orientation, tile.size.0
+                        "Layout {:?} {:?} (size: {:?})\n",
+                        layout.split, layout.orientation, tile.size.0
                     ));
 
                     let new_prefix = format!(
@@ -283,8 +321,8 @@ mod tests {
                         }
                     );
 
-                    for (i, child_id) in group.tiles.iter().enumerate() {
-                        let last_child = i == group.tiles.len() - 1;
+                    for (i, child_id) in layout.tiles.iter().enumerate() {
+                        let last_child = i == layout.tiles.len() - 1;
                         self.format_node(*child_id, &new_prefix, false, last_child, f);
                     }
                 }
@@ -301,9 +339,9 @@ mod tests {
             })
         };
 
-        (@node $arena:ident, $parent:expr, group($size:expr, $split:ident, $orient:ident) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
-            let group_id = $arena.insert_with_key(|_| Tile {
-                kind: TileKind::Group(TileGroup {
+        (@node $arena:ident, $parent:expr, layout($size:expr, $split:ident, $orient:ident) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
+            let layout_id = $arena.insert_with_key(|_| Tile {
+                kind: TileKind::Layout(TileLayout {
                     split: TileSplit::$split,
                     orientation: TileOrientation::$orient,
                     tiles: Vec::new(),
@@ -314,106 +352,177 @@ mod tests {
 
             let children = vec![
                 $(
-                    tile_tree!(@node $arena, Some(group_id), $child_kind ( $($child_args)* ) $( [ $($child_inner)* ] )? )
+                    tile_tree!(@node $arena, Some(layout_id), $child_kind ( $($child_args)* ) $( [ $($child_inner)* ] )? )
                 ),*
             ];
 
-            if let TileKind::Group(ref mut g) = $arena[group_id].kind {
+            if let TileKind::Layout(ref mut g) = $arena[layout_id].kind {
                 g.tiles = children;
             }
-            group_id
+            layout_id
         }};
 
         ($kind:ident ( $($args:tt)* ) $( [ $($inner:tt)* ] )?) => {{
             let mut arena = slotmap::SlotMap::with_key();
             let root = tile_tree!(@node arena, None, $kind ( $($args)* ) $( [ $($inner)* ] )?);
-            TileTree { arena, root, layouts: Rc::new(TileLayouts(HashMap::new())), current_tile: root, layout_trace: Vec::new() }
+            TileTree { arena, root, layouts: Rc::new(LayoutSet(HashMap::new())), current_tile: root, layout_trace: Vec::new() }
         }};
     }
 
-    macro_rules! layouts {
-        () => {
-            TileLayouts(HashMap::from_iter([
-                (
-                    "a".to_string(),
-                    TileLayout {
-                        split: Default::default(),
-                        orientation: Default::default(),
-                        specs: vec![TileSpec {
-                            group: None,
-                            repeat: TileRepeat(10),
+    static LAYOUT_SET: LazyLock<HashMap<String, LayoutSchema>> = LazyLock::new(|| {
+        HashMap::from_iter([
+            (
+                "empty".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![],
+                },
+            ),
+            (
+                "single_window".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![LayoutNode {
+                        layout: None,
+                        repeat: TileRepeat(3),
+                        size: TileSize(1.0),
+                    }],
+                },
+            ),
+            (
+                "multi_window".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![
+                        LayoutNode {
+                            layout: None,
+                            repeat: TileRepeat(1),
+                            size: TileSize(0.1),
+                        },
+                        LayoutNode {
+                            layout: None,
+                            repeat: TileRepeat(2),
+                            size: TileSize(0.2),
+                        },
+                        LayoutNode {
+                            layout: None,
+                            repeat: TileRepeat(1),
+                            size: TileSize(0.3),
+                        },
+                    ],
+                },
+            ),
+            (
+                "single_layout".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![LayoutNode {
+                        layout: Some("single_window".to_string()),
+                        repeat: TileRepeat(1),
+                        size: TileSize(1.0),
+                    }],
+                },
+            ),
+            (
+                "multi_window_layout".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![
+                        LayoutNode {
+                            layout: None,
+                            repeat: TileRepeat(1),
                             size: TileSize(1.0),
-                        }],
-                    },
-                ),
-                (
-                    "b".to_string(),
-                    TileLayout {
-                        split: Default::default(),
-                        orientation: Default::default(),
-                        specs: vec![
-                            TileSpec {
-                                group: None,
-                                repeat: TileRepeat(1),
-                                size: TileSize(0.1),
-                            },
-                            TileSpec {
-                                group: None,
-                                repeat: TileRepeat(2),
-                                size: TileSize(0.2),
-                            },
-                            TileSpec {
-                                group: None,
-                                repeat: TileRepeat(1),
-                                size: TileSize(0.3),
-                            },
-                        ],
-                    },
-                ),
-            ]))
-        };
-    }
+                        },
+                        LayoutNode {
+                            layout: Some("single_window".to_string()),
+                            repeat: TileRepeat(1),
+                            size: TileSize(1.0),
+                        },
+                        LayoutNode {
+                            layout: None,
+                            repeat: TileRepeat(1),
+                            size: TileSize(1.0),
+                        },
+                        LayoutNode {
+                            layout: Some("single_window".to_string()),
+                            repeat: TileRepeat(1),
+                            size: TileSize(1.0),
+                        },
+                    ],
+                },
+            ),
+            (
+                "nested_layout".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![LayoutNode {
+                        layout: Some("single_layout".to_string()),
+                        repeat: TileRepeat(1),
+                        size: TileSize(1.0),
+                    }],
+                },
+            ),
+        ])
+    });
 
     use test_case::test_case;
-    #[test_case("a",
-    |tree| {
-        tree.add(MappedWindow);
-    },
-    tile_tree!(group(1.0, Vertical, BottomRight) [
+    #[test_case("single_window", 1,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(1.0)
     ]); "1 simple insert")]
-    #[test_case("a",
-    |tree| {
-        tree.add(MappedWindow);
-        tree.add(MappedWindow);
-        tree.add(MappedWindow);
-    },
-    tile_tree!(group(1.0, Vertical, BottomRight) [
+    #[test_case("single_window", 3,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(1.0),
         window(1.0),
         window(1.0)
     ]); "multiple simple insert")]
-    #[test_case("b",
-    |tree| {
-        tree.add(MappedWindow);
-        tree.add(MappedWindow);
-        tree.add(MappedWindow);
-        tree.add(MappedWindow);
-    },
-    tile_tree!(group(1.0, Vertical, BottomRight) [
+    #[test_case("multi_window", 4,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(0.1),
         window(0.2),
         window(0.2),
         window(0.3)
-    ]); "insert across specs")]
-    fn test_tile_tree<T: FnOnce(&mut TileTree)>(
-        layout_name: &str,
-        callback: T,
-        expected: TileTree,
-    ) {
-        let layouts = Rc::new(layouts!());
+    ]); "insert across nodes")]
+    #[test_case("single_layout", 1,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
+        layout(1.0, Vertical, BottomRight) [
+            window(1.0)
+        ]
+    ]); "insert into layout")]
+    #[test_case("multi_window_layout", 7,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
+        window(1.0),
+        layout(1.0, Vertical, BottomRight) [
+            window(1.0),
+            window(1.0),
+            window(1.0)
+        ],
+        window(1.0),
+        layout(1.0, Vertical, BottomRight) [
+            window(1.0),
+            window(1.0),
+        ]
+    ]); "insert across nodes and layouts")]
+    #[test_case("nested_layout", 1,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
+        layout(1.0, Vertical, BottomRight) [
+            layout(1.0, Vertical, BottomRight) [
+                window(1.0)
+            ]
+        ]
+    ]); "insert into nested layout")]
+    fn test_tile_tree(layout_name: &str, tiles: u32, expected: TileTree) {
+        let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
-        callback(&mut tree);
+        for _ in 0..tiles {
+            tree.add(MappedWindow);
+        }
         if tree != expected {
             println!("Expected:");
             println!("{}", expected.visualize());
