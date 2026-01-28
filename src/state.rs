@@ -7,7 +7,6 @@ use smithay::{
         calloop::{Interest, LoopHandle, LoopSignal, Mode, PostAction, generic::Generic},
         wayland_server::{Display, DisplayHandle, protocol::wl_surface::WlSurface},
     },
-    utils::{SERIAL_COUNTER, Serial},
     wayland::{
         compositor::CompositorState, output::OutputManagerState,
         selection::data_device::DataDeviceState, shell::xdg::XdgShellState, shm::ShmState,
@@ -112,24 +111,5 @@ impl WaylandState {
             unmapped_windows: HashMap::new(),
             workspaces: Workspaces::default(),
         }
-    }
-
-    pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
-        let keyboard = self.seat.get_keyboard().unwrap();
-        let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
-
-        if let Some(surface) = keyboard.current_focus()
-            && let Some(mapped) = self.mapped_window_lookup(&surface)
-        {
-            mapped.inner.set_activated(false);
-            mapped.toplevel().send_pending_configure();
-        }
-        keyboard.set_focus(self, Some(surface.clone()), serial);
-
-        if let Some(mapped) = self.workspaces.get_active().window_lookup(surface) {
-            mapped.inner.set_activated(true);
-            mapped.toplevel().send_pending_configure();
-        }
-        self.workspaces.get_active().raise_floating_window(surface);
     }
 }

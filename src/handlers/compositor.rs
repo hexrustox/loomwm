@@ -8,6 +8,7 @@ use smithay::{
         backend::ClientData,
         protocol::{wl_buffer::WlBuffer, wl_surface::WlSurface},
     },
+    utils::SERIAL_COUNTER,
     wayland::{
         buffer::BufferHandler,
         compositor::{
@@ -51,6 +52,7 @@ impl CompositorHandler for WaylandState {
                 self.workspaces
                     .get_active()
                     .new_mapped_window(MappedWindow::new(unmapped.inner));
+                self.focus_window(surface, Some(SERIAL_COUNTER.next_serial()));
             } else {
                 let unmapped = entry.get();
                 let toplevel = unmapped.toplevel().clone();

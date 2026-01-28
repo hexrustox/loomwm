@@ -5,7 +5,7 @@ use smithay::{
     },
     desktop::Window,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Scale},
+    utils::{Logical, Point, SERIAL_COUNTER, Scale, Serial},
     wayland::shell::xdg::ToplevelSurface,
 };
 
@@ -24,6 +24,25 @@ impl WaylandState {
 
     pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         self.workspaces.remove_window(surface)
+    }
+
+    pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
+
+        if let Some(surface) = keyboard.current_focus()
+            && let Some(mapped) = self.mapped_window_lookup(&surface)
+        {
+            mapped.inner.set_activated(false);
+            mapped.toplevel().send_pending_configure();
+        }
+        keyboard.set_focus(self, Some(surface.clone()), serial);
+
+        if let Some(mapped) = self.workspaces.get_active().window_lookup(surface) {
+            mapped.inner.set_activated(true);
+            mapped.toplevel().send_pending_configure();
+        }
+        self.workspaces.get_active().raise_floating_window(surface);
     }
 }
 
