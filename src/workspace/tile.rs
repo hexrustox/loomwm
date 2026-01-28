@@ -143,7 +143,7 @@ impl TileTree {
         }
     }
 
-    fn add(&mut self, mapped: MappedWindow) {
+    fn insert(&mut self, mapped: MappedWindow) {
         // TODO
         let trace = self.layout_trace.last_mut().unwrap();
 
@@ -171,7 +171,7 @@ impl TileTree {
 
                     self.current_tile = layout_id;
                     self.layout_trace.push(TileLayoutTrace::new(layout_name));
-                    self.add(mapped);
+                    self.insert(mapped);
                 } else {
                     let new_tile = Tile {
                         kind: TileKind::Window(TileWindow { window: mapped }),
@@ -186,25 +186,23 @@ impl TileTree {
 
                     trace.tile_count += 1;
                 }
-                break;
-            }
-            if i == layout.nodes.len() - 1 {
-                // TODO
-                self.current_tile = self
-                    .arena
-                    .get_mut(self.current_tile)
-                    .unwrap()
-                    .parent
-                    .unwrap();
-
-                self.layout_trace.pop();
-                let trace = self.layout_trace.last_mut().unwrap();
-                trace.index += 1;
-                self.add(mapped);
-                break;
+                return;
             }
             trace.tile_count = 0;
         }
+
+        // TODO
+        self.current_tile = self
+            .arena
+            .get_mut(self.current_tile)
+            .unwrap()
+            .parent
+            .unwrap();
+
+        self.layout_trace.pop();
+        let trace = self.layout_trace.last_mut().unwrap();
+        trace.index += 1;
+        self.insert(mapped);
     }
 }
 
@@ -380,7 +378,7 @@ mod tests {
                 },
             ),
             (
-                "single_window".to_string(),
+                "1 window repeat 3".to_string(),
                 LayoutSchema {
                     split: Default::default(),
                     orientation: Default::default(),
@@ -392,7 +390,7 @@ mod tests {
                 },
             ),
             (
-                "multi_window".to_string(),
+                "3 windows".to_string(),
                 LayoutSchema {
                     split: Default::default(),
                     orientation: Default::default(),
@@ -416,19 +414,19 @@ mod tests {
                 },
             ),
             (
-                "single_layout".to_string(),
+                "1 layout".to_string(),
                 LayoutSchema {
                     split: Default::default(),
                     orientation: Default::default(),
                     nodes: vec![LayoutNode {
-                        layout: Some("single_window".to_string()),
+                        layout: Some("1 window repeat 3".to_string()),
                         repeat: TileRepeat(1),
                         size: TileSize(1.0),
                     }],
                 },
             ),
             (
-                "multi_window_layout".to_string(),
+                "2 windows 2 layouts".to_string(),
                 LayoutSchema {
                     split: Default::default(),
                     orientation: Default::default(),
@@ -439,7 +437,7 @@ mod tests {
                             size: TileSize(1.0),
                         },
                         LayoutNode {
-                            layout: Some("single_window".to_string()),
+                            layout: Some("1 window repeat 3".to_string()),
                             repeat: TileRepeat(1),
                             size: TileSize(1.0),
                         },
@@ -449,7 +447,7 @@ mod tests {
                             size: TileSize(1.0),
                         },
                         LayoutNode {
-                            layout: Some("single_window".to_string()),
+                            layout: Some("1 window repeat 3".to_string()),
                             repeat: TileRepeat(1),
                             size: TileSize(1.0),
                         },
@@ -457,45 +455,69 @@ mod tests {
                 },
             ),
             (
-                "nested_layout".to_string(),
+                "nested layout".to_string(),
                 LayoutSchema {
                     split: Default::default(),
                     orientation: Default::default(),
                     nodes: vec![LayoutNode {
-                        layout: Some("single_layout".to_string()),
+                        layout: Some("1 layout".to_string()),
                         repeat: TileRepeat(1),
                         size: TileSize(1.0),
                     }],
+                },
+            ),
+            (
+                "1 empty 1 window".to_string(),
+                LayoutSchema {
+                    split: Default::default(),
+                    orientation: Default::default(),
+                    nodes: vec![
+                        LayoutNode {
+                            layout: Some("empty".to_string()),
+                            repeat: TileRepeat(1),
+                            size: TileSize(1.0),
+                        },
+                        LayoutNode {
+                            layout: Some("empty".to_string()),
+                            repeat: TileRepeat(1),
+                            size: TileSize(1.0),
+                        },
+                        LayoutNode {
+                            layout: None,
+                            repeat: TileRepeat(1),
+                            size: TileSize(1.0),
+                        },
+                    ],
                 },
             ),
         ])
     });
 
     use test_case::test_case;
-    #[test_case("single_window", 1,
+    #[test_case("1 window repeat 3", 1,
     tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(1.0)
     ]); "1 simple insert")]
-    #[test_case("single_window", 3,
+    #[test_case("1 window repeat 3", 3,
     tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(1.0),
         window(1.0),
         window(1.0)
     ]); "multiple simple insert")]
-    #[test_case("multi_window", 4,
+    #[test_case("3 windows", 4,
     tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(0.1),
         window(0.2),
         window(0.2),
         window(0.3)
     ]); "insert across nodes")]
-    #[test_case("single_layout", 1,
+    #[test_case("1 layout", 1,
     tile_tree!(layout(1.0, Vertical, BottomRight) [
         layout(1.0, Vertical, BottomRight) [
             window(1.0)
         ]
     ]); "insert into layout")]
-    #[test_case("multi_window_layout", 7,
+    #[test_case("2 windows 2 layouts", 7,
     tile_tree!(layout(1.0, Vertical, BottomRight) [
         window(1.0),
         layout(1.0, Vertical, BottomRight) [
@@ -509,7 +531,7 @@ mod tests {
             window(1.0),
         ]
     ]); "insert across nodes and layouts")]
-    #[test_case("nested_layout", 1,
+    #[test_case("nested layout", 1,
     tile_tree!(layout(1.0, Vertical, BottomRight) [
         layout(1.0, Vertical, BottomRight) [
             layout(1.0, Vertical, BottomRight) [
@@ -517,19 +539,32 @@ mod tests {
             ]
         ]
     ]); "insert into nested layout")]
-    fn test_tile_tree(layout_name: &str, tiles: u32, expected: TileTree) {
+    #[test_case("1 empty 1 window", 1,
+    tile_tree!(layout(1.0, Vertical, BottomRight) [
+        layout(1.0, Vertical, BottomRight) [],
+        layout(1.0, Vertical, BottomRight) [],
+        window(1.0)
+    ]); "skip empty layout")]
+    fn test_tile_tree_insert(layout_name: &str, tiles: u32, expected: TileTree) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles {
-            tree.add(MappedWindow);
+            tree.insert(MappedWindow);
         }
-        if tree != expected {
-            println!("Expected:");
-            println!("{}", expected.visualize());
-            println!("Get:");
-            println!("{}", tree.visualize());
-            println!("{:?}", tree.layout_trace);
-            panic!("Expected tree differ from tree got");
-        }
+        assert!(
+            tree == expected,
+            "
+Expected:
+{}
+
+Get:
+{}
+
+{:?}
+",
+            expected.visualize(),
+            tree.visualize(),
+            tree.layout_trace
+        );
     }
 }
