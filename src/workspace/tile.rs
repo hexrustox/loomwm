@@ -1,5 +1,5 @@
 use slotmap::{SlotMap, new_key_type};
-use std::{collections::HashMap, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, rc::Rc};
 
 #[cfg(not(test))]
 use crate::window::MappedWindow;
@@ -25,7 +25,7 @@ struct Tile {
 }
 
 impl Tile {
-    fn as_layout_mut(&mut self) -> &mut TileLayout {
+    fn as_layout(&mut self) -> &mut TileLayout {
         match &mut self.kind {
             TileKind::Layout(x) => x,
             TileKind::Window(_) => panic!("Expected Tile to be a Layout, but found a Window"),
@@ -75,30 +75,40 @@ enum TileOrientation {
 struct LayoutSet(HashMap<String, LayoutSchema>);
 
 impl LayoutSet {
-    fn get(&self, layout_name: &str) -> &LayoutSchema {
-        // TODO
-        self.0.get(layout_name).unwrap()
+    fn get(&self, layout_name: &str) -> Cow<'_, LayoutSchema> {
+        #[cfg(test)]
+        {
+            Cow::Borrowed(
+                self.0
+                    .get(layout_name)
+                    .unwrap_or_else(|| panic!(r#"Unknown layout: "{layout_name}""#)),
+            )
+        }
+        #[cfg(not(test))]
+        {
+            self.0
+                .get(layout_name)
+                .map(Cow::Borrowed)
+                .unwrap_or_default()
+        }
     }
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, Default, Clone)]
 struct LayoutSchema {
     split: TileSplit,
     orientation: TileOrientation,
     nodes: Vec<LayoutNode>,
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, Clone)]
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
     size: TileSize,
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, Clone)]
 struct TileRepeat(usize);
 
 #[derive(Debug)]
@@ -143,9 +153,10 @@ impl TileTree {
         }
     }
 
-    fn insert(&mut self, mapped: MappedWindow) {
-        // TODO
-        let trace = self.layout_trace.last_mut().unwrap();
+    fn insert(&mut self, mapped: MappedWindow) -> bool {
+        let Some(trace) = self.layout_trace.last_mut() else {
+            return false;
+        };
 
         let layout = self.layouts.get(&trace.layout);
         for i in trace.index..layout.nodes.len() {
@@ -165,9 +176,12 @@ impl TileTree {
                     };
                     let layout_id = self.arena.insert(new_tile);
 
-                    // TODO
-                    let current_layout = self.arena.get_mut(self.current_tile).unwrap();
-                    current_layout.as_layout_mut().tiles.push(layout_id);
+                    self.arena
+                        .get_mut(self.current_tile)
+                        .unwrap()
+                        .as_layout()
+                        .tiles
+                        .push(layout_id);
 
                     self.current_tile = layout_id;
                     self.layout_trace.push(TileLayoutTrace::new(layout_name));
@@ -180,29 +194,27 @@ impl TileTree {
                     };
                     let window_id = self.arena.insert(new_tile);
 
-                    // TODO
-                    let current_layout = self.arena.get_mut(self.current_tile).unwrap();
-                    current_layout.as_layout_mut().tiles.push(window_id);
+                    self.arena
+                        .get_mut(self.current_tile)
+                        .unwrap()
+                        .as_layout()
+                        .tiles
+                        .push(window_id);
 
                     trace.tile_count += 1;
                 }
-                return;
+                return true;
             }
             trace.tile_count = 0;
         }
 
-        // TODO
-        self.current_tile = self
-            .arena
-            .get_mut(self.current_tile)
-            .unwrap()
-            .parent
-            .unwrap();
-
+        let Some(parent) = self.arena.get_mut(self.current_tile).unwrap().parent else {
+            return false;
+        };
+        self.current_tile = parent;
         self.layout_trace.pop();
-        let trace = self.layout_trace.last_mut().unwrap();
-        trace.index += 1;
-        self.insert(mapped);
+        self.layout_trace.last_mut().unwrap().index += 1;
+        self.insert(mapped)
     }
 }
 
@@ -545,7 +557,7 @@ mod tests {
         layout(1.0, Vertical, BottomRight) [],
         window(1.0)
     ]); "skip empty layout")]
-    fn test_tile_tree_insert(layout_name: &str, tiles: u32, expected: TileTree) {
+    fn test_tile_tree_matches_expected(layout_name: &str, tiles: u32, expected: TileTree) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles {
@@ -566,5 +578,17 @@ Get:
             tree.visualize(),
             tree.layout_trace
         );
+    }
+
+    #[test_case("1 window repeat 3", 1 => true; "simple")]
+    #[test_case("1 window repeat 3", 4 => false; "full")]
+    #[test_case("empty", 1 => false; "empty")]
+    fn test_tile_tree_insertion(layout_name: &str, tiles: u32) -> bool {
+        let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
+        let mut tree = TileTree::new(layouts, layout_name);
+        for _ in 0..tiles - 1 {
+            tree.insert(MappedWindow);
+        }
+        tree.insert(MappedWindow)
     }
 }
