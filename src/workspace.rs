@@ -11,6 +11,7 @@ use smithay::{
 
 use crate::window::MappedWindow;
 
+#[derive(Debug)]
 pub struct Workspaces {
     active: String,
     workspaces: HashMap<String, Workspace>,
@@ -26,6 +27,16 @@ impl Workspaces {
     pub fn window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         for workspace in self.workspaces.values_mut() {
             let window = workspace.window_lookup(surface);
+            if window.is_some() {
+                return window;
+            }
+        }
+        None
+    }
+
+    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+        for workspace in self.workspaces.values_mut() {
+            let window = workspace.remove_window(surface);
             if window.is_some() {
                 return window;
             }
@@ -50,6 +61,7 @@ impl Default for Workspaces {
     }
 }
 
+#[derive(Debug)]
 pub struct Workspace {
     floating: Vec<MappedWindow>,
 }
@@ -79,7 +91,6 @@ impl Workspace {
     ) -> Option<(&Window, Point<i32, Logical>)> {
         let point = point.into();
         self.floating.iter().find_map(|mapped| {
-            // we need to offset the point to the location where the surface is actually drawn
             let render_location = mapped.render_location();
             if mapped
                 .inner
@@ -110,5 +121,16 @@ impl Workspace {
         {
             self.floating[0..=index].rotate_right(1);
         }
+    }
+
+    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+        if let Some(index) = self
+            .floating
+            .iter()
+            .position(|mapped| mapped.toplevel().wl_surface() == surface)
+        {
+            return Some(self.floating.remove(index));
+        }
+        None
     }
 }

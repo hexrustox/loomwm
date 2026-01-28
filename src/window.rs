@@ -21,6 +21,10 @@ impl WaylandState {
     pub fn mapped_window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         self.workspaces.window_lookup(surface)
     }
+
+    pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+        self.workspaces.remove_window(surface)
+    }
 }
 
 pub struct UnmappedWindow {

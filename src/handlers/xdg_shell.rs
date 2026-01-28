@@ -63,6 +63,10 @@ impl XdgShellHandler for WaylandState {
             }
         }
     }
+
+    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
+        self.remove_mapped_window(surface.wl_surface());
+    }
 }
 
 delegate_xdg_shell!(WaylandState);
