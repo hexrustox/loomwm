@@ -8,9 +8,11 @@ use tests::MappedWindow;
 
 new_key_type! { struct TileId; }
 
+type TileArena = SlotMap<TileId, Tile>;
+
 #[derive(Debug)]
 struct TileTree {
-    arena: SlotMap<TileId, Tile>,
+    arena: TileArena,
     root: TileId,
     current_tile: TileId,
     layouts: Rc<LayoutSet>,
@@ -176,9 +178,7 @@ impl TileTree {
                     };
                     let layout_id = self.arena.insert(new_tile);
 
-                    self.arena
-                        .get_mut(self.current_tile)
-                        .unwrap()
+                    self.arena[self.current_tile]
                         .as_layout()
                         .tiles
                         .push(layout_id);
@@ -194,9 +194,7 @@ impl TileTree {
                     };
                     let window_id = self.arena.insert(new_tile);
 
-                    self.arena
-                        .get_mut(self.current_tile)
-                        .unwrap()
+                    self.arena[self.current_tile]
                         .as_layout()
                         .tiles
                         .push(window_id);
@@ -208,7 +206,7 @@ impl TileTree {
             trace.tile_count = 0;
         }
 
-        let Some(parent) = self.arena.get_mut(self.current_tile).unwrap().parent else {
+        let Some(parent) = self.arena[self.current_tile].parent else {
             return false;
         };
         self.current_tile = parent;
@@ -225,7 +223,7 @@ mod tests {
     use super::*;
 
     #[derive(Debug, PartialEq)]
-    pub struct MappedWindow;
+    pub struct MappedWindow(Option<u32>);
 
     impl PartialEq for TileTree {
         fn eq(&self, other: &Self) -> bool {
@@ -341,19 +339,32 @@ mod tests {
     }
 
     macro_rules! tile_tree {
-        (@node $arena:ident, $parent:expr, window($size:expr)) => {
+        (@node $arena:ident, $parent:expr, window($size:expr$(, $id:expr)?)) => {
             $arena.insert(Tile {
-                kind: TileKind::Window(TileWindow { window: MappedWindow }),
+                kind: TileKind::Window(TileWindow {
+                    window: {
+                        #[allow(unused_mut)]
+                        let mut window = MappedWindow(None);
+                        $(window = MappedWindow(Some($id));)?
+                        window
+                    }
+                }),
                 size: TileSize($size),
                 parent: $parent,
             })
         };
 
-        (@node $arena:ident, $parent:expr, layout($size:expr, $split:ident, $orient:ident) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
+        (@node $arena:ident, $parent:expr, layout($size:expr, $split:ident$(, $orient:ident)?) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
             let layout_id = $arena.insert_with_key(|_| Tile {
                 kind: TileKind::Layout(TileLayout {
                     split: TileSplit::$split,
-                    orientation: TileOrientation::$orient,
+                    orientation: {
+                        #[allow(unused_mut)]
+                        let mut orient = TileOrientation::default();
+                        $(orient = TileOrientation::$orient;)?
+                        orient
+
+                    },
                     tiles: Vec::new(),
                 }),
                 size: TileSize($size),
@@ -507,61 +518,61 @@ mod tests {
 
     use test_case::test_case;
     #[test_case("1 window repeat 3", 1,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
+    tile_tree!(layout(1.0, Vertical) [
         window(1.0)
     ]); "1 simple insert")]
     #[test_case("1 window repeat 3", 3,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
+    tile_tree!(layout(1.0, Vertical) [
         window(1.0),
         window(1.0),
         window(1.0)
     ]); "multiple simple insert")]
     #[test_case("3 windows", 4,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
+    tile_tree!(layout(1.0, Vertical) [
         window(0.1),
         window(0.2),
         window(0.2),
         window(0.3)
     ]); "insert across nodes")]
     #[test_case("1 layout", 1,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
-        layout(1.0, Vertical, BottomRight) [
+    tile_tree!(layout(1.0, Vertical) [
+        layout(1.0, Vertical) [
             window(1.0)
         ]
     ]); "insert into layout")]
     #[test_case("2 windows 2 layouts", 7,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
+    tile_tree!(layout(1.0, Vertical) [
         window(1.0),
-        layout(1.0, Vertical, BottomRight) [
+        layout(1.0, Vertical) [
             window(1.0),
             window(1.0),
             window(1.0)
         ],
         window(1.0),
-        layout(1.0, Vertical, BottomRight) [
+        layout(1.0, Vertical) [
             window(1.0),
             window(1.0),
         ]
     ]); "insert across nodes and layouts")]
     #[test_case("nested layout", 1,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
-        layout(1.0, Vertical, BottomRight) [
-            layout(1.0, Vertical, BottomRight) [
+    tile_tree!(layout(1.0, Vertical) [
+        layout(1.0, Vertical) [
+            layout(1.0, Vertical) [
                 window(1.0)
             ]
         ]
     ]); "insert into nested layout")]
     #[test_case("1 empty 1 window", 1,
-    tile_tree!(layout(1.0, Vertical, BottomRight) [
-        layout(1.0, Vertical, BottomRight) [],
-        layout(1.0, Vertical, BottomRight) [],
+    tile_tree!(layout(1.0, Vertical) [
+        layout(1.0, Vertical) [],
+        layout(1.0, Vertical) [],
         window(1.0)
     ]); "skip empty layout")]
     fn test_tile_tree_matches_expected(layout_name: &str, tiles: u32, expected: TileTree) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles {
-            tree.insert(MappedWindow);
+            tree.insert(MappedWindow(None));
         }
         assert!(
             tree == expected,
@@ -587,8 +598,8 @@ Get:
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles - 1 {
-            tree.insert(MappedWindow);
+            tree.insert(MappedWindow(None));
         }
-        tree.insert(MappedWindow)
+        tree.insert(MappedWindow(None))
     }
 }
