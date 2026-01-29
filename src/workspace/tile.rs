@@ -465,7 +465,7 @@ mod tests {
     }
 
     macro_rules! tile_tree {
-        (@node $arena:ident, $parent:expr, window($size:expr$(, $id:expr)?)) => {
+        (@node $arena:ident, $parent:expr, window($($size:expr)?$(; $id:expr)?)) => {
             $arena.insert(Tile {
                 kind: TileKind::Window(TileWindow {
                     window: {
@@ -476,15 +476,28 @@ mod tests {
                         window
                     }
                 }),
-                size: TileSize($size),
+                size: TileSize({
+                    #[allow(unused_mut)]
+                    #[allow(unused_assignments)]
+                    let mut size = 1.0;
+                    $(size = $size;)?
+                    size
+                }),
                 parent: $parent,
             })
         };
 
-        (@node $arena:ident, $parent:expr, layout($size:expr, $split:ident$(, $orient:ident)?) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
+        (@node $arena:ident, $parent:expr, layout($($size:expr)?$(; $split:ident)?$(, $orient:ident)?) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
             let layout_id = $arena.insert_with_key(|_| Tile {
                 kind: TileKind::Layout(TileLayout {
-                    split: TileSplit::$split,
+                    split: {
+                        #[allow(unused_mut)]
+                        #[allow(unused_assignments)]
+                        let mut split = TileSplit::default();
+                        $(split = TileSplit::$split;)?
+                        split
+
+                    },
                     orientation: {
                         #[allow(unused_mut)]
                         #[allow(unused_assignments)]
@@ -495,7 +508,13 @@ mod tests {
                     },
                     tiles: Vec::new(),
                 }),
-                size: TileSize($size),
+                size: TileSize({
+                    #[allow(unused_mut)]
+                    #[allow(unused_assignments)]
+                    let mut size = 1.0;
+                    $(size = $size;)?
+                    size
+                }),
                 parent: $parent,
             });
 
@@ -665,55 +684,55 @@ mod tests {
 
     use test_case::test_case;
     #[test_case("1 window repeat 3", 1,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0)
+    tile_tree!(layout() [
+        window()
     ]); "1 simple insert")]
     #[test_case("1 window repeat 3", 3,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0),
-        window(1.0),
-        window(1.0)
+    tile_tree!(layout() [
+        window(),
+        window(),
+        window()
     ]); "multiple simple insert")]
     #[test_case("3 windows", 4,
-    tile_tree!(layout(1.0, Vertical) [
+    tile_tree!(layout() [
         window(0.1),
         window(0.2),
         window(0.2),
         window(0.3)
     ]); "insert across nodes")]
     #[test_case("1 layout", 1,
-    tile_tree!(layout(1.0, Vertical) [
-        layout(1.0, Vertical) [
-            window(1.0)
+    tile_tree!(layout() [
+        layout() [
+            window()
         ]
     ]); "insert into layout")]
     #[test_case("2 windows 2 layouts", 7,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0),
-        layout(1.0, Vertical) [
-            window(1.0),
-            window(1.0),
-            window(1.0)
+    tile_tree!(layout() [
+        window(),
+        layout() [
+            window(),
+            window(),
+            window()
         ],
-        window(1.0),
-        layout(1.0, Vertical) [
-            window(1.0),
-            window(1.0),
+        window(),
+        layout() [
+            window(),
+            window(),
         ]
     ]); "insert across nodes and layouts")]
     #[test_case("nested layout", 1,
-    tile_tree!(layout(1.0, Vertical) [
-        layout(1.0, Vertical) [
-            layout(1.0, Vertical) [
-                window(1.0)
+    tile_tree!(layout() [
+        layout() [
+            layout() [
+                window()
             ]
         ]
     ]); "insert into nested layout")]
     #[test_case("1 empty 1 window", 1,
-    tile_tree!(layout(1.0, Vertical) [
-        layout(1.0, Vertical) [],
-        layout(1.0, Vertical) [],
-        window(1.0)
+    tile_tree!(layout() [
+        layout() [],
+        layout() [],
+        window()
     ]); "skip empty layout")]
     fn test_tile_tree_insertion_matches_expected(
         layout_name: &str,
@@ -741,38 +760,38 @@ mod tests {
     }
 
     #[test_case("1 window repeat 3", 3, 0,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0, 1),
-        window(1.0, 2),
+    tile_tree!(layout() [
+        window(; 1),
+        window(; 2),
     ]); "remove first window")]
     #[test_case("1 window repeat 3", 3, 1,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0, 0),
-        window(1.0, 2),
+    tile_tree!(layout() [
+        window(; 0),
+        window(; 2),
     ]); "remove middle window")]
     #[test_case("1 window repeat 3", 3, 2,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0, 0),
-        window(1.0, 1),
+    tile_tree!(layout() [
+        window(; 0),
+        window(; 1),
     ]); "remove last window")]
     #[test_case("2 windows 2 layouts", 7, 3,
-    tile_tree!(layout(1.0, Vertical) [
-        window(1.0, 0),
-        layout(1.0, Vertical) [
-            window(1.0, 1),
-            window(1.0, 2),
-            window(1.0, 4)
+    tile_tree!(layout() [
+        window(; 0),
+        layout() [
+            window(; 1),
+            window(; 2),
+            window(; 4)
         ],
-        window(1.0, 5),
-        layout(1.0, Vertical) [
-            window(1.0, 6),
+        window(; 5),
+        layout() [
+            window(; 6),
         ]
     ]); "remove across window and layouts")]
     #[test_case("nested layout", 2, 0,
-    tile_tree!(layout(1.0, Vertical) [
-        layout(1.0, Vertical) [
-            layout(1.0, Vertical) [
-                window(1.0, 1)
+    tile_tree!(layout() [
+        layout() [
+            layout() [
+                window(; 1)
             ]
         ]
     ]); "remove from nested layout")]
