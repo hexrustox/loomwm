@@ -1,13 +1,16 @@
-use slotmap::{SlotMap, new_key_type};
-use std::{borrow::Cow, collections::HashMap, rc::Rc};
-
 #[cfg(test)]
 use tests::MappedWindow;
 
 #[cfg(not(test))]
-use crate::window::MappedWindow;
-#[cfg(not(test))]
-use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use {
+    crate::window::MappedWindow,
+    smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+};
+
+use crate::utils::distribute_evenly;
+use slotmap::{SlotMap, new_key_type};
+use smithay::utils::{Logical, Point, Size};
+use std::{borrow::Cow, collections::HashMap, rc::Rc};
 
 new_key_type! { struct TileId; }
 
@@ -38,6 +41,13 @@ impl Tile {
         }
     }
 
+    fn get_window_mut(&mut self) -> &mut TileWindow {
+        match &mut self.kind {
+            TileKind::Window(x) => x,
+            TileKind::Layout(_) => panic!("Expected `Tile` to be a `Window`, but found a `Layout`"),
+        }
+    }
+
     fn as_layout(self) -> TileLayout {
         match self.kind {
             TileKind::Layout(x) => x,
@@ -62,7 +72,7 @@ impl Tile {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
-struct TileSize(f64);
+struct TileSize(u32);
 
 #[derive(Debug)]
 enum TileKind {
@@ -166,7 +176,7 @@ impl TileTree {
                 orientation: layout.orientation,
                 tiles: Vec::new(),
             }),
-            size: TileSize(1.0),
+            size: TileSize(1),
             parent: None,
         };
         let root = arena.insert(new_tile);
@@ -241,6 +251,7 @@ impl TileTree {
         self.insert(window)
     }
 
+    // IMPROVE
     fn remove(
         &mut self,
         #[cfg(test)] window_id: u32,
@@ -249,7 +260,7 @@ impl TileTree {
         let predicate = {
             #[cfg(test)]
             {
-                |mapped: &MappedWindow| mapped.0 == Some(window_id)
+                |mapped: &MappedWindow| mapped.id == Some(window_id)
             }
             #[cfg(not(test))]
             {
@@ -337,6 +348,93 @@ impl TileTree {
 
         None
     }
+
+    fn update_toplevel_state(&mut self, point: Point<i32, Logical>, size: Size<i32, Logical>) {
+        struct UpdateWindow {
+            id: TileId,
+            point: Point<i32, Logical>,
+            size: Size<i32, Logical>,
+        }
+
+        fn traverse(
+            arena: &TileArena,
+            layout_id: TileId,
+            point: Point<i32, Logical>,
+            size: Size<i32, Logical>,
+        ) -> Vec<UpdateWindow> {
+            let mut update_windows = Vec::new();
+
+            let layout = arena[layout_id].get_layout();
+            let total_size = layout
+                .tiles
+                .iter()
+                .fold(0, |acc, tile_id| acc + arena[*tile_id].size.0);
+            let mut lengths = distribute_evenly(
+                match layout.split {
+                    TileSplit::Vertical => size.w,
+                    TileSplit::Horizontal => size.h,
+                },
+                total_size as i32,
+            );
+
+            let mut point = point;
+            let iter: Box<dyn Iterator<Item = &_>> =
+                if matches!(layout.orientation, TileOrientation::BottomRight) {
+                    Box::new(layout.tiles.iter())
+                } else {
+                    Box::new(layout.tiles.iter().rev())
+                };
+            for tile_id in iter {
+                let tile = &arena[*tile_id];
+                let (w, h) = {
+                    let len = lengths
+                        .drain(lengths.len().saturating_sub(tile.size.0 as usize)..)
+                        .sum();
+                    match layout.split {
+                        TileSplit::Vertical => (len, size.h),
+                        TileSplit::Horizontal => (size.w, len),
+                    }
+                };
+                let size = Size::<_, Logical>::new(w, h);
+                match &tile.kind {
+                    TileKind::Window(_) => {
+                        update_windows.push(UpdateWindow {
+                            id: *tile_id,
+                            point,
+                            size,
+                        });
+                    }
+                    TileKind::Layout(_) => {
+                        update_windows.extend(traverse(arena, *tile_id, point, size));
+                    }
+                }
+
+                match layout.split {
+                    TileSplit::Vertical => point.x += w,
+                    TileSplit::Horizontal => point.y += h,
+                }
+            }
+
+            update_windows
+        }
+
+        let update_windows = traverse(&self.arena, self.root, point, size);
+        for update_window in update_windows {
+            let window = &mut self.arena[update_window.id].get_window_mut().window;
+            #[cfg(test)]
+            {
+                window.point = update_window.point;
+                window.size = update_window.size;
+            }
+            #[cfg(not(test))]
+            {
+                if let Some(toplevel) = window.inner.toplevel() {
+                    toplevel.with_pending_state(|state| state.size = Some(size))
+                }
+                window.location = update_window.point;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -345,8 +443,18 @@ mod tests {
 
     use super::*;
 
-    #[derive(Debug, PartialEq)]
-    pub struct MappedWindow(pub Option<u32>);
+    #[derive(Debug, Default, PartialEq)]
+    pub struct MappedWindow {
+        pub id: Option<u32>,
+        pub point: Point<i32, Logical>,
+        pub size: Size<i32, Logical>,
+    }
+
+    impl MappedWindow {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
 
     impl PartialEq for TileTree {
         fn eq(&self, other: &Self) -> bool {
@@ -433,13 +541,22 @@ mod tests {
             match &tile.kind {
                 TileKind::Window(TileWindow { window }) => {
                     f.push_str(&format!(
-                        "Window {:?} (size: {:?})\n",
-                        window.0, tile.size.0
+                        "Window {}[point:({}, {}) area:({}, {}) size:{}]\n",
+                        if let Some(id) = window.id {
+                            id.to_string() + " "
+                        } else {
+                            "".to_string()
+                        },
+                        window.point.x,
+                        window.point.y,
+                        window.size.w,
+                        window.size.h,
+                        tile.size.0
                     ));
                 }
                 TileKind::Layout(layout) => {
                     f.push_str(&format!(
-                        "Layout {:?} {:?} (size: {:?})\n",
+                        "Layout [{:?} {:?} size:{}]\n",
                         layout.split, layout.orientation, tile.size.0
                     ));
 
@@ -465,21 +582,25 @@ mod tests {
     }
 
     macro_rules! tile_tree {
-        (@node $arena:ident, $parent:expr, window($($size:expr)?$(; $id:expr)?)) => {
+        (@node $arena:ident, $parent:expr, window($($size:expr)?$(; $id:expr)?$(, $point:expr, $size2:expr)?)) => {
             $arena.insert(Tile {
                 kind: TileKind::Window(TileWindow {
                     window: {
                         #[allow(unused_mut)]
                         #[allow(unused_assignments)]
-                        let mut window = MappedWindow(None);
-                        $(window = MappedWindow(Some($id));)?
+                        let mut window = MappedWindow::new();
+                        $(window.id = Some($id);)?
+                        $(
+                            window.point = $point.into();
+                            window.size = $size2.into();
+                        )?
                         window
                     }
                 }),
                 size: TileSize({
                     #[allow(unused_mut)]
                     #[allow(unused_assignments)]
-                    let mut size = 1.0;
+                    let mut size = 1;
                     $(size = $size;)?
                     size
                 }),
@@ -511,7 +632,7 @@ mod tests {
                 size: TileSize({
                     #[allow(unused_mut)]
                     #[allow(unused_assignments)]
-                    let mut size = 1.0;
+                    let mut size = 1;
                     $(size = $size;)?
                     size
                 }),
@@ -562,7 +683,7 @@ mod tests {
                     nodes: vec![LayoutNode {
                         layout: None,
                         repeat: TileRepeat(3),
-                        size: TileSize(1.0),
+                        size: TileSize(1),
                     }],
                 },
             ),
@@ -575,17 +696,17 @@ mod tests {
                         LayoutNode {
                             layout: None,
                             repeat: TileRepeat(1),
-                            size: TileSize(0.1),
+                            size: TileSize(1),
                         },
                         LayoutNode {
                             layout: None,
                             repeat: TileRepeat(2),
-                            size: TileSize(0.2),
+                            size: TileSize(2),
                         },
                         LayoutNode {
                             layout: None,
                             repeat: TileRepeat(1),
-                            size: TileSize(0.3),
+                            size: TileSize(3),
                         },
                     ],
                 },
@@ -598,7 +719,7 @@ mod tests {
                     nodes: vec![LayoutNode {
                         layout: Some("1 window repeat 3".to_string()),
                         repeat: TileRepeat(1),
-                        size: TileSize(1.0),
+                        size: TileSize(1),
                     }],
                 },
             ),
@@ -611,22 +732,22 @@ mod tests {
                         LayoutNode {
                             layout: None,
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                         LayoutNode {
                             layout: Some("1 window repeat 3".to_string()),
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                         LayoutNode {
                             layout: None,
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                         LayoutNode {
                             layout: Some("1 window repeat 3".to_string()),
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                     ],
                 },
@@ -639,7 +760,7 @@ mod tests {
                     nodes: vec![LayoutNode {
                         layout: Some("1 layout".to_string()),
                         repeat: TileRepeat(1),
-                        size: TileSize(1.0),
+                        size: TileSize(1),
                     }],
                 },
             ),
@@ -652,17 +773,17 @@ mod tests {
                         LayoutNode {
                             layout: Some("empty".to_string()),
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                         LayoutNode {
                             layout: Some("empty".to_string()),
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                         LayoutNode {
                             layout: None,
                             repeat: TileRepeat(1),
-                            size: TileSize(1.0),
+                            size: TileSize(1),
                         },
                     ],
                 },
@@ -695,10 +816,10 @@ mod tests {
     ]); "multiple simple insert")]
     #[test_case("3 windows", 4,
     tile_tree!(layout() [
-        window(0.1),
-        window(0.2),
-        window(0.2),
-        window(0.3)
+        window(1),
+        window(2),
+        window(2),
+        window(3)
     ]); "insert across nodes")]
     #[test_case("1 layout", 1,
     tile_tree!(layout() [
@@ -742,7 +863,7 @@ mod tests {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles {
-            tree.insert(MappedWindow(None));
+            tree.insert(MappedWindow::new());
         }
         assert_tree_eq!(tree, expected);
     }
@@ -754,9 +875,9 @@ mod tests {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles - 1 {
-            tree.insert(MappedWindow(None));
+            tree.insert(MappedWindow::new());
         }
-        tree.insert(MappedWindow(None))
+        tree.insert(MappedWindow::new())
     }
 
     #[test_case("1 window repeat 3", 3, 0,
@@ -804,9 +925,59 @@ mod tests {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for i in 0..tiles {
-            tree.insert(MappedWindow(Some(i)));
+            tree.insert(MappedWindow {
+                id: Some(i),
+                ..Default::default()
+            });
         }
-        assert_eq!(tree.remove(remove), Some(MappedWindow(Some(remove))));
+        assert_eq!(tree.remove(remove).map(|w| w.id), Some(Some(remove)));
+        assert_tree_eq!(tree, expected);
+    }
+
+    #[test_case(
+        tile_tree!(layout() [window(), window()]),
+        tile_tree!(layout() [window(, (0, 0), (50, 100)), window(, (50, 0), (50, 100))])
+    ; "simple")]
+    #[test_case(
+        tile_tree!(layout() [window(1), window(3), window(2)]),
+        tile_tree!(layout() [
+            window(1, (0, 0), (16, 100)),
+            window(3, (16, 0), (50, 100)),
+            window(2, (66, 0), (34, 100))
+        ])
+    ; "tile size")]
+    #[test_case(
+        tile_tree!(layout(; Horizontal) [window(), window()]),
+        tile_tree!(layout(; Horizontal) [window(, (0, 0), (100, 50)), window(, (0, 50), (100, 50))])
+    ; "layout split")]
+    #[test_case(
+        tile_tree!(layout(, TopLeft) [window(), window()]),
+        tile_tree!(layout(, TopLeft) [window(, (50, 0), (50, 100)), window(, (0, 0), (50, 100))])
+    ; "layout orientation")]
+    #[test_case(
+        tile_tree!(layout() [
+            window(),
+            layout(; Horizontal, TopLeft) [
+                window(),
+                layout(; Horizontal) [
+                    window(),
+                    window(),
+                ]
+            ]
+        ]),
+        tile_tree!(layout() [
+            window(, (0, 0), (50, 100)),
+            layout(; Horizontal, TopLeft) [
+                window(, (50, 50), (50, 50)),
+                layout(; Horizontal) [
+                    window(, (50, 0), (50, 25)),
+                    window(, (50, 25), (50, 25)),
+                ]
+            ]
+        ])
+    ; "all")]
+    fn test_tile_tree_update_toplevel_state(mut tree: TileTree, expected: TileTree) {
+        tree.update_toplevel_state((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected);
     }
 }
