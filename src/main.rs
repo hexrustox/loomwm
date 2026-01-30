@@ -10,7 +10,6 @@ use crate::{
 mod backend;
 mod handlers;
 mod input;
-mod layout;
 mod state;
 mod utils;
 mod window;

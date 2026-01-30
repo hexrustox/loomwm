@@ -9,7 +9,10 @@ use smithay::{
     wayland::shell::xdg::ToplevelSurface,
 };
 
-use crate::state::WaylandState;
+use crate::{
+    state::WaylandState,
+    workspace::{TileTreeWindow, TileTreeWindowId},
+};
 
 impl WaylandState {
     pub fn new_window(&mut self, window: Window) {
@@ -18,7 +21,7 @@ impl WaylandState {
             .insert(key, UnmappedWindow::new(window));
     }
 
-    pub fn mapped_window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn mapped_window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.workspaces.window_lookup(surface)
     }
 
@@ -105,5 +108,25 @@ impl MappedWindow {
     {
         let loc = self.render_location().to_physical_precise_round(scale);
         self.inner.render_elements(renderer, loc, scale, 1.0)
+    }
+}
+
+impl TileTreeWindow for MappedWindow {
+    fn match_id(&self, id: TileTreeWindowId) -> bool {
+        match id {
+            TileTreeWindowId::WlSurface(wl_surface) => self.toplevel().wl_surface() == wl_surface,
+            _ => false,
+        }
+    }
+
+    fn update_location(&mut self, location: Point<i32, Logical>) {
+        self.location = location;
+    }
+
+    fn update_size(&mut self, size: smithay::utils::Size<i32, Logical>) {
+        self.toplevel().with_pending_state(|state| {
+            state.size = Some(size);
+        });
+        self.toplevel().send_configure();
     }
 }

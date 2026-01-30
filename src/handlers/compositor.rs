@@ -51,7 +51,7 @@ impl CompositorHandler for WaylandState {
                 unmapped.inner.on_commit();
                 self.workspaces
                     .get_active()
-                    .new_mapped_window(MappedWindow::new(unmapped.inner));
+                    .new_window(MappedWindow::new(unmapped.inner));
                 self.focus_window(surface, Some(SERIAL_COUNTER.next_serial()));
             } else {
                 let unmapped = entry.get();

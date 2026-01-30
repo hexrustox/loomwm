@@ -1,7 +1,4 @@
-use std::{
-    ops::{Div, Rem},
-    time::Duration,
-};
+use std::time::Duration;
 
 use smithay::{
     backend::renderer::utils::with_renderer_surface_state,
@@ -20,35 +17,55 @@ pub fn is_mapped(surface: &WlSurface) -> bool {
     with_renderer_surface_state(surface, |state| state.buffer().is_some()).unwrap_or(false)
 }
 
-pub fn distribute_evenly(total: i32, parts: i32) -> Vec<i32> {
-    let mut result = Vec::new();
-    if parts == 0 {
-        return result;
+pub fn partition(sum: i32, split_into: usize) -> Vec<i32> {
+    if split_into == 0 {
+        return Vec::new();
     }
 
-    let base = total.wrapping_div_euclid(parts);
-    if total % parts == 0 {
-        for _ in 0..parts {
-            result.push(base);
-        }
-    } else {
-        let remainder = total - base * parts;
-        for i in 0..parts {
-            result.push(if i < remainder { base + 1 } else { base });
-        }
-    }
-    result
+    let split_into = split_into as i32;
+    let base = sum / split_into;
+    let remainder = sum - base * split_into;
+
+    (0..split_into)
+        .map(|i| {
+            if remainder >= 0 {
+                if i < remainder { base + 1 } else { base }
+            } else if i < -remainder {
+                base - 1
+            } else {
+                base
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_case::test_case;
+    use proptest::{prelude::*, test_runner::TestRunner};
 
-    #[test_case(3, 3 => vec![1, 1, 1])]
-    #[test_case(8, 3 => vec![3, 3, 2])]
-    #[test_case(9, 4 => vec![3, 2, 2, 2])]
-    fn test_distribute_evenly(lhs: i32, rhs: i32) -> Vec<i32> {
-        distribute_evenly(lhs, rhs)
+    #[test]
+    fn test_partition() {
+        let mut runner = TestRunner::default();
+        runner
+            .run(
+                // i32 takes too long
+                &any::<i16>().prop_flat_map(|a| {
+                    let b = a.unsigned_abs() as usize;
+                    (Just(a), 0..b)
+                }),
+                |(a, b)| {
+                    let parts = partition(a as i32, b);
+                    let avg = a as f64 / b as f64;
+
+                    for p in &parts {
+                        assert!((*p as f64 - avg).abs() <= 1.0);
+                    }
+                    assert!(parts.iter().sum::<i32>() == a as i32);
+
+                    Ok(())
+                },
+            )
+            .unwrap();
     }
 }

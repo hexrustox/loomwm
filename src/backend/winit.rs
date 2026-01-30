@@ -65,7 +65,7 @@ impl Winit {
                             .compositor
                             .workspaces
                             .get_active()
-                            .render_elements(renderer, scale);
+                            .render_elements(output, renderer, scale);
 
                         winit.damage_tracker.render_output(
                             renderer,

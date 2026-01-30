@@ -48,7 +48,8 @@ impl PointerGrab<WaylandState> for MoveGrab {
         if let Some(mapped) =
             data.mapped_window_lookup(self.window.toplevel().unwrap().wl_surface())
         {
-            mapped.location = new_location.to_i32_round();
+            // TODO
+            // mapped.location = new_location.to_i32_round();
         }
     }
 

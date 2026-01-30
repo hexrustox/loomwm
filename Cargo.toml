@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
+slotmap = "1.1.1"
 smithay = { version = "0.7.0", default-features = false, features = [
   "backend_winit",
   "wayland_frontend",
@@ -13,4 +14,5 @@ smithay = { version = "0.7.0", default-features = false, features = [
 ] }
 
 [dev-dependencies]
+proptest = "1.9.0"
 test-case = "3.3.1"
