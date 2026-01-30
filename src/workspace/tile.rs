@@ -11,7 +11,7 @@ new_key_type! { struct TileId; }
 type TileArena<T> = SlotMap<TileId, Tile<T>>;
 
 #[derive(Debug)]
-struct TileTree<T = MappedWindow>
+pub struct TileTree<T = MappedWindow>
 where
     T: TileTreeWindow,
 {
@@ -71,6 +71,12 @@ impl<T> Tile<T> {
 #[cfg_attr(test, derive(PartialEq))]
 struct TileSize(u32);
 
+impl Default for TileSize {
+    fn default() -> Self {
+        Self(1)
+    }
+}
+
 #[derive(Debug)]
 enum TileKind<T> {
     Window(T),
@@ -122,7 +128,7 @@ enum TileOrientation {
 }
 
 #[derive(Debug)]
-struct LayoutSet(HashMap<String, LayoutSchema>);
+pub struct LayoutSet(HashMap<String, LayoutSchema>);
 
 impl LayoutSet {
     fn get(&self, layout_name: &str) -> Cow<'_, LayoutSchema> {
@@ -151,7 +157,7 @@ struct LayoutSchema {
     nodes: Vec<LayoutNode>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
@@ -160,6 +166,16 @@ struct LayoutNode {
 
 #[derive(Debug, Clone)]
 struct TileRepeat(usize);
+
+impl TileRepeat {
+    const MAX: Self = Self(usize::MAX);
+}
+
+impl Default for TileRepeat {
+    fn default() -> Self {
+        TileRepeat(1)
+    }
+}
 
 #[derive(Debug)]
 struct TileLayoutTrace {
@@ -179,7 +195,7 @@ impl TileLayoutTrace {
 }
 
 impl<T: TileTreeWindow> TileTree<T> {
-    fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+    pub fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
         let mut arena = SlotMap::with_key();
         let layout = layouts.get(layout_name);
 
@@ -204,7 +220,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    fn insert(&mut self, window: T) -> bool {
+    pub fn insert(&mut self, window: T) -> bool {
         let Some(trace) = self.layout_trace.last_mut() else {
             return false;
         };
@@ -263,7 +279,7 @@ impl<T: TileTreeWindow> TileTree<T> {
     }
 
     // IMPROVE
-    fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
+    pub fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
         struct RemoveTile {
             parent: TileId,
             index: usize,
@@ -344,7 +360,11 @@ impl<T: TileTreeWindow> TileTree<T> {
         None
     }
 
-    fn update_toplevel_state(&mut self, location: Point<i32, Logical>, size: Size<i32, Logical>) {
+    pub fn update_toplevel_state(
+        &mut self,
+        location: Point<i32, Logical>,
+        size: Size<i32, Logical>,
+    ) {
         struct UpdateWindow {
             id: TileId,
             location: Point<i32, Logical>,
@@ -426,6 +446,56 @@ impl<T: TileTreeWindow> TileTree<T> {
             window.update_size(update.size);
         }
     }
+
+    pub fn windows(&self) -> Vec<&T> {
+        fn traverse<T: TileTreeWindow>(arena: &TileArena<T>, layout_id: TileId) -> Vec<&T> {
+            let mut windows = Vec::new();
+            for tile_id in arena[layout_id].as_layout_tiles() {
+                match &arena[*tile_id] {
+                    Tile {
+                        kind: TileKind::Window(window),
+                        ..
+                    } => {
+                        windows.push(window);
+                    }
+                    _ => windows.extend(traverse(arena, *tile_id)),
+                }
+            }
+
+            windows
+        }
+        traverse(&self.arena, self.root)
+    }
+}
+
+// TEMP
+pub fn test_layout_set() -> LayoutSet {
+    LayoutSet(HashMap::from_iter([
+        (
+            "master".to_string(),
+            LayoutSchema {
+                nodes: vec![
+                    LayoutNode::default(),
+                    LayoutNode {
+                        layout: Some("slaves".to_string()),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            "slaves".to_string(),
+            LayoutSchema {
+                split: TileSplit::Horizontal,
+                nodes: vec![LayoutNode {
+                    repeat: TileRepeat::MAX,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        ),
+    ]))
 }
 
 #[cfg(test)]

@@ -1,15 +1,19 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
     },
     desktop::{Window, space::SpaceElement},
+    output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale},
 };
 
-use crate::window::MappedWindow;
+use crate::{
+    window::MappedWindow,
+    workspace::tile::{TileTree, test_layout_set},
+};
 
 mod tile;
 
@@ -27,8 +31,8 @@ impl Workspaces {
             .expect("No active workspace")
     }
 
-    pub fn window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        for workspace in self.workspaces.values_mut() {
+    pub fn window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
+        for workspace in self.workspaces.values() {
             let window = workspace.window_lookup(surface);
             if window.is_some() {
                 return window;
@@ -47,7 +51,7 @@ impl Default for Workspaces {
             workspaces: HashMap::from_iter([(
                 DEFAULT_NAME.to_string(),
                 Workspace {
-                    // tiles: ,
+                    tiling: TileTree::new(Rc::new(test_layout_set()), "master"),
                     floating: Vec::new(),
                 },
             )]),
@@ -56,25 +60,34 @@ impl Default for Workspaces {
 }
 
 pub struct Workspace {
-    // tiles: TileGroup,
+    tiling: TileTree,
     floating: Vec<MappedWindow>,
 }
 
 impl Workspace {
-    pub fn new_floating_window(&mut self, mapped: MappedWindow) {
-        self.floating.insert(0, mapped);
+    pub fn new_window(&mut self, mapped: MappedWindow) {
+        self.tiling.insert(mapped);
+        // self.floating.insert(0, mapped);
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
-        &self,
+        &mut self,
+        output: &Output,
         renderer: &mut R,
         scale: Scale<f64>,
     ) -> Vec<WaylandSurfaceRenderElement<R>>
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
-        self.floating
-            .iter()
+        self.tiling.update_toplevel_state(
+            output.current_location(),
+            output
+                .current_mode()
+                .unwrap()
+                .size
+                .to_logical(output.current_scale().integer_scale()),
+        );
+        self.windows_iter()
             .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()
     }
@@ -98,13 +111,12 @@ impl Workspace {
         })
     }
 
-    pub fn windows_iter(&mut self) -> std::slice::IterMut<'_, MappedWindow> {
-        self.floating.iter_mut()
+    pub fn windows_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
+        Box::new(self.floating.iter().chain(self.tiling.windows()))
     }
 
-    pub fn window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.floating
-            .iter_mut()
+    pub fn window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
+        self.windows_iter()
             .find(|w| w.toplevel().wl_surface() == surface)
     }
 

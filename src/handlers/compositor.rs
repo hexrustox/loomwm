@@ -50,7 +50,7 @@ impl CompositorHandler for WaylandState {
                 unmapped.inner.on_commit();
                 self.workspaces
                     .get_active()
-                    .new_floating_window(MappedWindow::new(unmapped.inner));
+                    .new_window(MappedWindow::new(unmapped.inner));
             } else {
                 let unmapped = entry.get();
                 let toplevel = unmapped.toplevel().clone();

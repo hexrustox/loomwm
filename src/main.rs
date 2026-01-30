@@ -36,6 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     std::process::Command::new("alacritty").spawn().ok();
+    std::process::Command::new("alacritty").spawn().ok();
+    std::process::Command::new("alacritty").spawn().ok();
+    std::process::Command::new("alacritty").spawn().ok();
 
     event_loop.run(None, &mut state, |_| {})?;
 

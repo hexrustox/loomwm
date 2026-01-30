@@ -21,7 +21,7 @@ impl WaylandState {
             .insert(key, UnmappedWindow::new(window));
     }
 
-    pub fn mapped_window_lookup(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn mapped_window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.workspaces.window_lookup(surface)
     }
 }
