@@ -1,24 +1,21 @@
-#[cfg(test)]
-use tests::MappedWindow;
-
-#[cfg(not(test))]
-use {
-    crate::window::MappedWindow,
-    smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
-};
-
-use crate::utils::partition;
+use crate::{utils::partition, window::MappedWindow};
 use slotmap::{SlotMap, new_key_type};
-use smithay::utils::{Logical, Point, Size};
+use smithay::{
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    utils::{Logical, Point, Size},
+};
 use std::{borrow::Cow, collections::HashMap, rc::Rc};
 
 new_key_type! { struct TileId; }
 
-type TileArena = SlotMap<TileId, Tile>;
+type TileArena<T> = SlotMap<TileId, Tile<T>>;
 
 #[derive(Debug)]
-struct TileTree {
-    arena: TileArena,
+struct TileTree<T = MappedWindow>
+where
+    T: TileTreeWindow,
+{
+    arena: TileArena<T>,
     root: TileId,
     current_tile: TileId,
     layouts: Rc<LayoutSet>,
@@ -27,55 +24,45 @@ struct TileTree {
 }
 
 #[derive(Debug)]
-struct Tile {
-    kind: TileKind,
+struct Tile<T> {
+    kind: TileKind<T>,
     size: TileSize,
     parent: Option<TileId>,
 }
 
-impl Tile {
-    const EXPECTED_WINDOW: &str = "Expected `Tile` to be a `Window`, but found a `Layout`";
-    const EXPECTED_LAYOUT: &str = "Expected `Tile` to be a `Layout`, but found a `Window`";
-
-    fn into_window(self) -> TileWindow {
+impl<T> Tile<T> {
+    fn into_window(self) -> T {
         match self.kind {
             TileKind::Window(window) => window,
-            TileKind::Layout(_) => panic!("{}", Self::EXPECTED_WINDOW),
+            _ => unreachable!(),
         }
     }
 
-    fn as_window(&self) -> &TileWindow {
-        match &self.kind {
-            TileKind::Window(window) => window,
-            TileKind::Layout(_) => panic!("{}", Self::EXPECTED_WINDOW),
-        }
-    }
-
-    fn as_window_mut(&mut self) -> &mut TileWindow {
+    fn as_window_mut(&mut self) -> &mut T {
         match &mut self.kind {
             TileKind::Window(window) => window,
-            TileKind::Layout(_) => panic!("{}", Self::EXPECTED_WINDOW),
+            _ => unreachable!(),
         }
     }
 
-    fn into_layout(self) -> TileLayout {
+    fn into_layout_tiles(self) -> Vec<TileId> {
         match self.kind {
-            TileKind::Layout(layout) => layout,
-            TileKind::Window(_) => panic!("{}", Self::EXPECTED_LAYOUT),
+            TileKind::Layout { tiles, .. } => tiles,
+            _ => unreachable!(),
         }
     }
 
-    fn as_layout(&self) -> &TileLayout {
+    fn as_layout_tiles(&self) -> &Vec<TileId> {
         match &self.kind {
-            TileKind::Layout(layout) => layout,
-            TileKind::Window(_) => panic!("{}", Self::EXPECTED_LAYOUT),
+            TileKind::Layout { tiles, .. } => tiles,
+            _ => unreachable!(),
         }
     }
 
-    fn as_layout_mut(&mut self) -> &mut TileLayout {
+    fn as_layout_tiles_mut(&mut self) -> &mut Vec<TileId> {
         match &mut self.kind {
-            TileKind::Layout(layout) => layout,
-            TileKind::Window(_) => panic!("{}", Self::EXPECTED_LAYOUT),
+            TileKind::Layout { tiles, .. } => tiles,
+            _ => unreachable!(),
         }
     }
 }
@@ -85,21 +72,37 @@ impl Tile {
 struct TileSize(u32);
 
 #[derive(Debug)]
-enum TileKind {
-    Window(TileWindow),
-    Layout(TileLayout),
+enum TileKind<T> {
+    Window(T),
+    Layout {
+        split: TileSplit,
+        orientation: TileOrientation,
+        tiles: Vec<TileId>,
+    },
 }
 
-#[derive(Debug)]
-struct TileWindow {
-    window: MappedWindow,
+pub trait TileTreeWindow {
+    fn match_id(&self, id: TileTreeWindowId) -> bool;
+    fn update_location(&mut self, location: Point<i32, Logical>);
+    fn update_size(&mut self, size: Size<i32, Logical>);
 }
 
-#[derive(Debug)]
-struct TileLayout {
-    split: TileSplit,
-    orientation: TileOrientation,
-    tiles: Vec<TileId>,
+#[derive(Clone, Copy)]
+pub enum TileTreeWindowId<'a> {
+    Id(u32),
+    WlSurface(&'a WlSurface),
+}
+
+impl From<u32> for TileTreeWindowId<'_> {
+    fn from(value: u32) -> Self {
+        Self::Id(value)
+    }
+}
+
+impl<'a> From<&'a WlSurface> for TileTreeWindowId<'a> {
+    fn from(value: &'a WlSurface) -> Self {
+        Self::WlSurface(value)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -175,17 +178,17 @@ impl TileLayoutTrace {
     }
 }
 
-impl TileTree {
+impl<T: TileTreeWindow> TileTree<T> {
     fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
         let mut arena = SlotMap::with_key();
         let layout = layouts.get(layout_name);
 
         let new_tile = Tile {
-            kind: TileKind::Layout(TileLayout {
+            kind: TileKind::Layout {
                 split: layout.split,
                 orientation: layout.orientation,
                 tiles: Vec::new(),
-            }),
+            },
             size: TileSize(1),
             parent: None,
         };
@@ -201,7 +204,7 @@ impl TileTree {
         }
     }
 
-    fn insert(&mut self, window: MappedWindow) -> bool {
+    fn insert(&mut self, window: T) -> bool {
         let Some(trace) = self.layout_trace.last_mut() else {
             return false;
         };
@@ -214,19 +217,18 @@ impl TileTree {
                 if let Some(layout_name) = &node.layout {
                     let layout = self.layouts.get(layout_name);
                     let new_tile = Tile {
-                        kind: TileKind::Layout(TileLayout {
+                        kind: TileKind::Layout {
                             split: layout.split,
                             orientation: layout.orientation,
                             tiles: Vec::new(),
-                        }),
+                        },
                         size: node.size,
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
 
                     self.arena[self.current_tile]
-                        .as_layout_mut()
-                        .tiles
+                        .as_layout_tiles_mut()
                         .push(tile_id);
 
                     self.current_tile = tile_id;
@@ -234,15 +236,14 @@ impl TileTree {
                     self.insert(window);
                 } else {
                     let new_tile = Tile {
-                        kind: TileKind::Window(TileWindow { window }),
+                        kind: TileKind::Window(window),
                         size: node.size,
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
 
                     self.arena[self.current_tile]
-                        .as_layout_mut()
-                        .tiles
+                        .as_layout_tiles_mut()
                         .push(tile_id);
 
                     trace.tile_count += 1;
@@ -262,41 +263,25 @@ impl TileTree {
     }
 
     // IMPROVE
-    fn remove(
-        &mut self,
-        #[cfg(test)] window_id: u32,
-        #[cfg(not(test))] wl_surface: &WlSurface,
-    ) -> Option<MappedWindow> {
-        let predicate = {
-            #[cfg(test)]
-            {
-                |mapped: &MappedWindow| mapped.id == Some(window_id)
-            }
-            #[cfg(not(test))]
-            {
-                |mapped: &MappedWindow| {
-                    mapped.inner.toplevel().map(|t| t.wl_surface()) == Some(wl_surface)
-                }
-            }
-        };
-
+    fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
         struct RemoveTile {
             parent: TileId,
             index: usize,
         }
 
-        fn traverse<F>(arena: &TileArena, layout_id: TileId, predicate: &F) -> Option<RemoveTile>
-        where
-            F: Fn(&MappedWindow) -> bool,
-        {
+        fn traverse<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            layout_id: TileId,
+            id: TileTreeWindowId<'_>,
+        ) -> Option<RemoveTile> {
             let mut res = None;
-            for (index, tile_id) in arena[layout_id].as_layout().tiles.iter().enumerate() {
+            for (index, tile_id) in arena[layout_id].as_layout_tiles().iter().enumerate() {
                 match &arena[*tile_id] {
                     Tile {
-                        kind: TileKind::Window(TileWindow { window }),
+                        kind: TileKind::Window(window),
                         ..
                     } => {
-                        if predicate(window) {
+                        if window.match_id(id) {
                             res = Some(RemoveTile {
                                 parent: layout_id,
                                 index,
@@ -304,7 +289,7 @@ impl TileTree {
                         }
                     }
                     _ => {
-                        if let sub_res @ Some(_) = traverse(arena, *tile_id, predicate) {
+                        if let sub_res @ Some(_) = traverse(arena, *tile_id, id) {
                             res = sub_res;
                         }
                     }
@@ -314,12 +299,12 @@ impl TileTree {
             res
         }
 
-        if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, &predicate) {
-            let remove_id = self.arena[parent].as_layout_mut().tiles.remove(index);
-            let window = self.arena.remove(remove_id).unwrap().into_window().window;
+        if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, id.into()) {
+            let remove_id = self.arena[parent].as_layout_tiles_mut().remove(index);
+            let window = self.arena.remove(remove_id).unwrap().into_window();
 
             let mut handle_ids = Vec::new();
-            for id in &self.arena[self.root].as_layout().tiles {
+            for id in self.arena[self.root].as_layout_tiles() {
                 handle_ids.push(*id);
             }
 
@@ -332,15 +317,15 @@ impl TileTree {
                         kind: TileKind::Window(..),
                         ..
                     } => {
-                        extracted_windows.push(self.arena.remove(id).unwrap().into_window().window);
+                        extracted_windows.push(self.arena.remove(id).unwrap().into_window());
                     }
                     Tile {
-                        kind: TileKind::Layout(..),
+                        kind: TileKind::Layout { .. },
                         ..
                     } => {
                         handle_ids.splice(
                             i + 1..i + 1,
-                            self.arena.remove(id).unwrap().into_layout().tiles,
+                            self.arena.remove(id).unwrap().into_layout_tiles(),
                         );
                     }
                 }
@@ -359,29 +344,36 @@ impl TileTree {
         None
     }
 
-    fn update_toplevel_state(&mut self, origin: Point<i32, Logical>, area: Size<i32, Logical>) {
+    fn update_toplevel_state(&mut self, location: Point<i32, Logical>, size: Size<i32, Logical>) {
         struct UpdateWindow {
             id: TileId,
-            origin: Point<i32, Logical>,
-            area: Size<i32, Logical>,
+            location: Point<i32, Logical>,
+            size: Size<i32, Logical>,
         }
 
-        fn traverse(
-            arena: &TileArena,
+        fn traverse<T>(
+            arena: &TileArena<T>,
             layout_id: TileId,
             mut origin: Point<i32, Logical>,
             area: Size<i32, Logical>,
         ) -> Vec<UpdateWindow> {
             let mut updates = Vec::new();
 
-            let layout = arena[layout_id].as_layout();
-            let total_weight = layout
-                .tiles
+            let TileKind::Layout {
+                split,
+                orientation,
+                tiles,
+            } = &arena[layout_id].kind
+            else {
+                unreachable!()
+            };
+
+            let total_weight = tiles
                 .iter()
                 .fold(0, |acc, tile_id| acc + arena[*tile_id].size.0);
 
             let mut lengths = partition(
-                match layout.split {
+                match split {
                     TileSplit::Vertical => area.w,
                     TileSplit::Horizontal => area.h,
                 },
@@ -389,10 +381,10 @@ impl TileTree {
             );
 
             let tile_iter: Box<dyn Iterator<Item = &_>> =
-                if matches!(layout.orientation, TileOrientation::BottomRight) {
-                    Box::new(layout.tiles.iter())
+                if matches!(orientation, TileOrientation::BottomRight) {
+                    Box::new(tiles.iter())
                 } else {
-                    Box::new(layout.tiles.iter().rev())
+                    Box::new(tiles.iter().rev())
                 };
             for tile_id in tile_iter {
                 let tile = &arena[*tile_id];
@@ -400,7 +392,7 @@ impl TileTree {
                     let len = lengths
                         .drain(lengths.len().saturating_sub(tile.size.0 as usize)..)
                         .sum();
-                    match layout.split {
+                    match split {
                         TileSplit::Vertical => Size::new(len, area.h),
                         TileSplit::Horizontal => Size::new(area.w, len),
                     }
@@ -409,16 +401,16 @@ impl TileTree {
                     TileKind::Window(_) => {
                         updates.push(UpdateWindow {
                             id: *tile_id,
-                            origin,
-                            area: new_area,
+                            location: origin,
+                            size: new_area,
                         });
                     }
-                    TileKind::Layout(_) => {
+                    TileKind::Layout { .. } => {
                         updates.extend(traverse(arena, *tile_id, origin, new_area));
                     }
                 }
 
-                match layout.split {
+                match split {
                     TileSplit::Vertical => origin.x += new_area.w,
                     TileSplit::Horizontal => origin.y += new_area.h,
                 }
@@ -427,21 +419,11 @@ impl TileTree {
             updates
         }
 
-        let updates = traverse(&self.arena, self.root, origin, area);
+        let updates = traverse(&self.arena, self.root, location, size);
         for update in updates {
-            let window = &mut self.arena[update.id].as_window_mut().window;
-            #[cfg(test)]
-            {
-                window.location = update.origin;
-                window.size = update.area;
-            }
-            #[cfg(not(test))]
-            {
-                if let Some(toplevel) = window.inner.toplevel() {
-                    toplevel.with_pending_state(|state| state.size = Some(update.area))
-                }
-                window.location = update.origin;
-            }
+            let window = self.arena[update.id].as_window_mut();
+            window.update_location(update.location);
+            window.update_size(update.size);
         }
     }
 }
@@ -451,26 +433,44 @@ mod tests {
     use std::sync::LazyLock;
 
     use super::*;
+    use test_case::test_case;
 
     #[derive(Debug, Default, PartialEq)]
-    pub struct MappedWindow {
+    pub struct TestWindow {
         pub id: Option<u32>,
         pub location: Point<i32, Logical>,
         pub size: Size<i32, Logical>,
     }
 
-    impl MappedWindow {
+    impl TestWindow {
         pub fn new() -> Self {
             Self::default()
         }
     }
 
-    impl PartialEq for TileTree {
+    impl TileTreeWindow for TestWindow {
+        fn match_id(&self, id: TileTreeWindowId) -> bool {
+            match id {
+                TileTreeWindowId::Id(x) => self.id == Some(x),
+                _ => false,
+            }
+        }
+
+        fn update_location(&mut self, location: Point<i32, Logical>) {
+            self.location = location;
+        }
+
+        fn update_size(&mut self, size: Size<i32, Logical>) {
+            self.size = size;
+        }
+    }
+
+    impl PartialEq for TileTree<TestWindow> {
         fn eq(&self, other: &Self) -> bool {
             fn compare_tiles(
-                tree_a: &TileTree,
+                tree_a: &TileTree<TestWindow>,
                 id_a: TileId,
-                tree_b: &TileTree,
+                tree_b: &TileTree<TestWindow>,
                 id_b: TileId,
             ) -> bool {
                 let tile_a = match tree_a.arena.get(id_a) {
@@ -487,21 +487,29 @@ mod tests {
                 }
 
                 match (&tile_a.kind, &tile_b.kind) {
-                    (TileKind::Window(win_a), TileKind::Window(win_b)) => {
-                        win_a.window == win_b.window
-                    }
-                    (TileKind::Layout(grp_a), TileKind::Layout(grp_b)) => {
-                        if grp_a.split != grp_b.split || grp_a.orientation != grp_b.orientation {
+                    (TileKind::Window(w1), TileKind::Window(w2)) => w1 == w2,
+                    (
+                        TileKind::Layout {
+                            split: split1,
+                            orientation: orientation1,
+                            tiles: tiles1,
+                        },
+                        TileKind::Layout {
+                            split: split2,
+                            orientation: orientation2,
+                            tiles: tiles2,
+                        },
+                    ) => {
+                        if split1 != split2 || orientation1 != orientation2 {
                             return false;
                         }
-                        if grp_a.tiles.len() != grp_b.tiles.len() {
+                        if tiles1.len() != tiles2.len() {
                             return false;
                         }
 
-                        grp_a
-                            .tiles
+                        tiles1
                             .iter()
-                            .zip(grp_a.tiles.iter())
+                            .zip(tiles2.iter())
                             .all(|(&child_a, &child_b)| {
                                 compare_tiles(tree_a, child_a, tree_b, child_b)
                             })
@@ -514,7 +522,7 @@ mod tests {
         }
     }
 
-    impl TileTree {
+    impl TileTree<TestWindow> {
         fn visualize(&self) -> String {
             let mut output = String::new();
             self.format_node(self.root, "", true, true, &mut output);
@@ -548,7 +556,7 @@ mod tests {
             f.push_str(marker);
 
             match &tile.kind {
-                TileKind::Window(TileWindow { window }) => {
+                TileKind::Window(window) => {
                     f.push_str(&format!(
                         "Window {}[point:({}, {}) area:({}, {}) size:{}]\n",
                         if let Some(id) = window.id {
@@ -563,10 +571,14 @@ mod tests {
                         tile.size.0
                     ));
                 }
-                TileKind::Layout(layout) => {
+                TileKind::Layout {
+                    split,
+                    orientation,
+                    tiles,
+                } => {
                     f.push_str(&format!(
                         "Layout [{:?} {:?} size:{}]\n",
-                        layout.split, layout.orientation, tile.size.0
+                        split, orientation, tile.size.0
                     ));
 
                     let new_prefix = format!(
@@ -581,8 +593,8 @@ mod tests {
                         }
                     );
 
-                    for (i, child_id) in layout.tiles.iter().enumerate() {
-                        let last_child = i == layout.tiles.len() - 1;
+                    for (i, child_id) in tiles.iter().enumerate() {
+                        let last_child = i == tiles.len() - 1;
                         self.format_node(*child_id, &new_prefix, false, last_child, f);
                     }
                 }
@@ -593,11 +605,11 @@ mod tests {
     macro_rules! tile_tree {
         (@node $arena:ident, $parent:expr, window($($ratio:expr)?$(; $id:expr)?$(, $point:expr, $size:expr)?)) => {
             $arena.insert(Tile {
-                kind: TileKind::Window(TileWindow {
-                    window: {
+                kind: TileKind::Window(
+                    {
                         #[allow(unused_mut)]
                         #[allow(unused_assignments)]
-                        let mut window = MappedWindow::new();
+                        let mut window = TestWindow::new();
                         $(window.id = Some($id);)?
                         $(
                             window.location = $point.into();
@@ -605,7 +617,7 @@ mod tests {
                         )?
                         window
                     }
-                }),
+                ),
                 size: TileSize({
                     #[allow(unused_mut)]
                     #[allow(unused_assignments)]
@@ -619,7 +631,7 @@ mod tests {
 
         (@node $arena:ident, $parent:expr, layout($($size:expr)?$(; $split:ident)?$(, $orient:ident)?) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
             let layout_id = $arena.insert_with_key(|_| Tile {
-                kind: TileKind::Layout(TileLayout {
+                kind: TileKind::Layout {
                     split: {
                         #[allow(unused_mut)]
                         #[allow(unused_assignments)]
@@ -637,7 +649,7 @@ mod tests {
 
                     },
                     tiles: Vec::new(),
-                }),
+                },
                 size: TileSize({
                     #[allow(unused_mut)]
                     #[allow(unused_assignments)]
@@ -654,8 +666,8 @@ mod tests {
                 ),*
             ];
 
-            if let TileKind::Layout(ref mut g) = $arena[layout_id].kind {
-                g.tiles = children;
+            if let TileKind::Layout { ref mut tiles, .. } = $arena[layout_id].kind {
+                *tiles = children;
             }
             layout_id
         }};
@@ -812,7 +824,6 @@ mod tests {
         };
     }
 
-    use test_case::test_case;
     #[test_case("1 window repeat 3", 1,
     tile_tree!(layout() [
         window()
@@ -867,12 +878,12 @@ mod tests {
     fn test_tile_tree_insertion_matches_expected(
         layout_name: &str,
         tiles: u32,
-        expected: TileTree,
+        expected: TileTree<TestWindow>,
     ) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
-        let mut tree = TileTree::new(layouts, layout_name);
+        let mut tree = TileTree::<TestWindow>::new(layouts, layout_name);
         for _ in 0..tiles {
-            tree.insert(MappedWindow::new());
+            tree.insert(TestWindow::new());
         }
         assert_tree_eq!(tree, expected);
     }
@@ -884,9 +895,9 @@ mod tests {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for _ in 0..tiles - 1 {
-            tree.insert(MappedWindow::new());
+            tree.insert(TestWindow::new());
         }
-        tree.insert(MappedWindow::new())
+        tree.insert(TestWindow::new())
     }
 
     #[test_case("1 window repeat 3", 3, 0,
@@ -929,12 +940,12 @@ mod tests {
         layout_name: &str,
         tiles: u32,
         remove: u32,
-        expected: TileTree,
+        expected: TileTree<TestWindow>,
     ) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
-        let mut tree = TileTree::new(layouts, layout_name);
+        let mut tree = TileTree::<TestWindow>::new(layouts, layout_name);
         for i in 0..tiles {
-            tree.insert(MappedWindow {
+            tree.insert(TestWindow {
                 id: Some(i),
                 ..Default::default()
             });
@@ -985,7 +996,10 @@ mod tests {
             ]
         ])
     ; "all")]
-    fn test_tile_tree_update_toplevel_state(mut tree: TileTree, expected: TileTree) {
+    fn test_tile_tree_update_toplevel_state(
+        mut tree: TileTree<TestWindow>,
+        expected: TileTree<TestWindow>,
+    ) {
         tree.update_toplevel_state((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected);
     }

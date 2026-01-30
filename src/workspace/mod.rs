@@ -13,6 +13,8 @@ use crate::window::MappedWindow;
 
 mod tile;
 
+pub use tile::{TileTreeWindow, TileTreeWindowId};
+
 pub struct Workspaces {
     active: String,
     workspaces: HashMap<String, Workspace>,
