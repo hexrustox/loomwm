@@ -349,89 +349,88 @@ impl TileTree {
         None
     }
 
-    fn update_toplevel_state(&mut self, point: Point<i32, Logical>, size: Size<i32, Logical>) {
+    fn update_toplevel_state(&mut self, origin: Point<i32, Logical>, area: Size<i32, Logical>) {
         struct UpdateWindow {
             id: TileId,
-            point: Point<i32, Logical>,
-            size: Size<i32, Logical>,
+            origin: Point<i32, Logical>,
+            area: Size<i32, Logical>,
         }
 
         fn traverse(
             arena: &TileArena,
             layout_id: TileId,
-            point: Point<i32, Logical>,
-            size: Size<i32, Logical>,
+            mut origin: Point<i32, Logical>,
+            area: Size<i32, Logical>,
         ) -> Vec<UpdateWindow> {
-            let mut update_windows = Vec::new();
+            let mut updates = Vec::new();
 
             let layout = arena[layout_id].get_layout();
-            let total_size = layout
+            let total_weight = layout
                 .tiles
                 .iter()
                 .fold(0, |acc, tile_id| acc + arena[*tile_id].size.0);
+
             let mut lengths = distribute_evenly(
                 match layout.split {
-                    TileSplit::Vertical => size.w,
-                    TileSplit::Horizontal => size.h,
+                    TileSplit::Vertical => area.w,
+                    TileSplit::Horizontal => area.h,
                 },
-                total_size as i32,
+                total_weight as i32,
             );
 
-            let mut point = point;
-            let iter: Box<dyn Iterator<Item = &_>> =
+            let tile_iter: Box<dyn Iterator<Item = &_>> =
                 if matches!(layout.orientation, TileOrientation::BottomRight) {
                     Box::new(layout.tiles.iter())
                 } else {
                     Box::new(layout.tiles.iter().rev())
                 };
-            for tile_id in iter {
+            for tile_id in tile_iter {
                 let tile = &arena[*tile_id];
-                let (w, h) = {
+                let new_area = {
                     let len = lengths
                         .drain(lengths.len().saturating_sub(tile.size.0 as usize)..)
                         .sum();
                     match layout.split {
-                        TileSplit::Vertical => (len, size.h),
-                        TileSplit::Horizontal => (size.w, len),
+                        TileSplit::Vertical => Size::new(len, area.h),
+                        TileSplit::Horizontal => Size::new(area.w, len),
                     }
                 };
-                let size = Size::<_, Logical>::new(w, h);
                 match &tile.kind {
                     TileKind::Window(_) => {
-                        update_windows.push(UpdateWindow {
+                        updates.push(UpdateWindow {
                             id: *tile_id,
-                            point,
-                            size,
+                            origin,
+                            area: new_area,
                         });
                     }
                     TileKind::Layout(_) => {
-                        update_windows.extend(traverse(arena, *tile_id, point, size));
+                        updates.extend(traverse(arena, *tile_id, origin, new_area));
                     }
                 }
 
                 match layout.split {
-                    TileSplit::Vertical => point.x += w,
-                    TileSplit::Horizontal => point.y += h,
+                    TileSplit::Vertical => origin.x += new_area.w,
+                    TileSplit::Horizontal => origin.y += new_area.h,
                 }
             }
 
-            update_windows
+            updates
         }
 
-        let update_windows = traverse(&self.arena, self.root, point, size);
-        for update_window in update_windows {
-            let window = &mut self.arena[update_window.id].get_window_mut().window;
+        let updates = traverse(&self.arena, self.root, origin, area);
+        for update in updates {
+            let window = &mut self.arena[update.id].get_window_mut().window;
             #[cfg(test)]
             {
-                window.point = update_window.point;
-                window.size = update_window.size;
+                window.location = update.origin;
+                window.size = update.area;
             }
             #[cfg(not(test))]
             {
                 if let Some(toplevel) = window.inner.toplevel() {
-                    toplevel.with_pending_state(|state| state.size = Some(size))
+                    toplevel.with_pending_state(|state| state.size = Some(update.area))
                 }
-                window.location = update_window.point;
+                window.location = update.origin;
             }
         }
     }
@@ -446,7 +445,7 @@ mod tests {
     #[derive(Debug, Default, PartialEq)]
     pub struct MappedWindow {
         pub id: Option<u32>,
-        pub point: Point<i32, Logical>,
+        pub location: Point<i32, Logical>,
         pub size: Size<i32, Logical>,
     }
 
@@ -547,8 +546,8 @@ mod tests {
                         } else {
                             "".to_string()
                         },
-                        window.point.x,
-                        window.point.y,
+                        window.location.x,
+                        window.location.y,
                         window.size.w,
                         window.size.h,
                         tile.size.0
@@ -582,7 +581,7 @@ mod tests {
     }
 
     macro_rules! tile_tree {
-        (@node $arena:ident, $parent:expr, window($($size:expr)?$(; $id:expr)?$(, $point:expr, $size2:expr)?)) => {
+        (@node $arena:ident, $parent:expr, window($($ratio:expr)?$(; $id:expr)?$(, $point:expr, $size:expr)?)) => {
             $arena.insert(Tile {
                 kind: TileKind::Window(TileWindow {
                     window: {
@@ -591,8 +590,8 @@ mod tests {
                         let mut window = MappedWindow::new();
                         $(window.id = Some($id);)?
                         $(
-                            window.point = $point.into();
-                            window.size = $size2.into();
+                            window.location = $point.into();
+                            window.size = $size.into();
                         )?
                         window
                     }
@@ -601,7 +600,7 @@ mod tests {
                     #[allow(unused_mut)]
                     #[allow(unused_assignments)]
                     let mut size = 1;
-                    $(size = $size;)?
+                    $(size = $ratio;)?
                     size
                 }),
                 parent: $parent,
