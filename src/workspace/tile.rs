@@ -34,38 +34,48 @@ struct Tile {
 }
 
 impl Tile {
-    fn as_window(self) -> TileWindow {
+    const EXPECTED_WINDOW: &str = "Expected `Tile` to be a `Window`, but found a `Layout`";
+    const EXPECTED_LAYOUT: &str = "Expected `Tile` to be a `Layout`, but found a `Window`";
+
+    fn into_window(self) -> TileWindow {
         match self.kind {
-            TileKind::Window(x) => x,
-            TileKind::Layout(_) => panic!("Expected `Tile` to be a `Window`, but found a `Layout`"),
+            TileKind::Window(window) => window,
+            TileKind::Layout(_) => panic!("{}", Self::EXPECTED_WINDOW),
         }
     }
 
-    fn get_window_mut(&mut self) -> &mut TileWindow {
-        match &mut self.kind {
-            TileKind::Window(x) => x,
-            TileKind::Layout(_) => panic!("Expected `Tile` to be a `Window`, but found a `Layout`"),
-        }
-    }
-
-    fn as_layout(self) -> TileLayout {
-        match self.kind {
-            TileKind::Layout(x) => x,
-            TileKind::Window(_) => panic!("Expected `Tile` to be a `Layout`, but found a `Window`"),
-        }
-    }
-
-    fn get_layout(&self) -> &TileLayout {
+    fn as_window(&self) -> &TileWindow {
         match &self.kind {
-            TileKind::Layout(x) => x,
-            TileKind::Window(_) => panic!("Expected `Tile` to be a `Layout`, but found a `Window`"),
+            TileKind::Window(window) => window,
+            TileKind::Layout(_) => panic!("{}", Self::EXPECTED_WINDOW),
         }
     }
 
-    fn get_layout_mut(&mut self) -> &mut TileLayout {
+    fn as_window_mut(&mut self) -> &mut TileWindow {
         match &mut self.kind {
-            TileKind::Layout(x) => x,
-            TileKind::Window(_) => panic!("Expected `Tile` to be a `Layout`, but found a `Window`"),
+            TileKind::Window(window) => window,
+            TileKind::Layout(_) => panic!("{}", Self::EXPECTED_WINDOW),
+        }
+    }
+
+    fn into_layout(self) -> TileLayout {
+        match self.kind {
+            TileKind::Layout(layout) => layout,
+            TileKind::Window(_) => panic!("{}", Self::EXPECTED_LAYOUT),
+        }
+    }
+
+    fn as_layout(&self) -> &TileLayout {
+        match &self.kind {
+            TileKind::Layout(layout) => layout,
+            TileKind::Window(_) => panic!("{}", Self::EXPECTED_LAYOUT),
+        }
+    }
+
+    fn as_layout_mut(&mut self) -> &mut TileLayout {
+        match &mut self.kind {
+            TileKind::Layout(layout) => layout,
+            TileKind::Window(_) => panic!("{}", Self::EXPECTED_LAYOUT),
         }
     }
 }
@@ -215,7 +225,7 @@ impl TileTree {
                     let tile_id = self.arena.insert(new_tile);
 
                     self.arena[self.current_tile]
-                        .get_layout_mut()
+                        .as_layout_mut()
                         .tiles
                         .push(tile_id);
 
@@ -231,7 +241,7 @@ impl TileTree {
                     let tile_id = self.arena.insert(new_tile);
 
                     self.arena[self.current_tile]
-                        .get_layout_mut()
+                        .as_layout_mut()
                         .tiles
                         .push(tile_id);
 
@@ -280,7 +290,7 @@ impl TileTree {
             F: Fn(&MappedWindow) -> bool,
         {
             let mut res = None;
-            for (index, tile_id) in arena[layout_id].get_layout().tiles.iter().enumerate() {
+            for (index, tile_id) in arena[layout_id].as_layout().tiles.iter().enumerate() {
                 match &arena[*tile_id] {
                     Tile {
                         kind: TileKind::Window(TileWindow { window }),
@@ -305,11 +315,11 @@ impl TileTree {
         }
 
         if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, &predicate) {
-            let remove_id = self.arena[parent].get_layout_mut().tiles.remove(index);
-            let window = self.arena.remove(remove_id).unwrap().as_window().window;
+            let remove_id = self.arena[parent].as_layout_mut().tiles.remove(index);
+            let window = self.arena.remove(remove_id).unwrap().into_window().window;
 
             let mut handle_ids = Vec::new();
-            for id in &self.arena[self.root].get_layout().tiles {
+            for id in &self.arena[self.root].as_layout().tiles {
                 handle_ids.push(*id);
             }
 
@@ -322,7 +332,7 @@ impl TileTree {
                         kind: TileKind::Window(..),
                         ..
                     } => {
-                        extracted_windows.push(self.arena.remove(id).unwrap().as_window().window);
+                        extracted_windows.push(self.arena.remove(id).unwrap().into_window().window);
                     }
                     Tile {
                         kind: TileKind::Layout(..),
@@ -330,7 +340,7 @@ impl TileTree {
                     } => {
                         handle_ids.splice(
                             i + 1..i + 1,
-                            self.arena.remove(id).unwrap().as_layout().tiles,
+                            self.arena.remove(id).unwrap().into_layout().tiles,
                         );
                     }
                 }
@@ -364,7 +374,7 @@ impl TileTree {
         ) -> Vec<UpdateWindow> {
             let mut updates = Vec::new();
 
-            let layout = arena[layout_id].get_layout();
+            let layout = arena[layout_id].as_layout();
             let total_weight = layout
                 .tiles
                 .iter()
@@ -419,7 +429,7 @@ impl TileTree {
 
         let updates = traverse(&self.arena, self.root, origin, area);
         for update in updates {
-            let window = &mut self.arena[update.id].get_window_mut().window;
+            let window = &mut self.arena[update.id].as_window_mut().window;
             #[cfg(test)]
             {
                 window.location = update.origin;
