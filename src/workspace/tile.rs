@@ -7,7 +7,7 @@ use {
     smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
 };
 
-use crate::utils::distribute_evenly;
+use crate::utils::partition;
 use slotmap::{SlotMap, new_key_type};
 use smithay::utils::{Logical, Point, Size};
 use std::{borrow::Cow, collections::HashMap, rc::Rc};
@@ -380,12 +380,12 @@ impl TileTree {
                 .iter()
                 .fold(0, |acc, tile_id| acc + arena[*tile_id].size.0);
 
-            let mut lengths = distribute_evenly(
+            let mut lengths = partition(
                 match layout.split {
                     TileSplit::Vertical => area.w,
                     TileSplit::Horizontal => area.h,
                 },
-                total_weight as i32,
+                total_weight as usize,
             );
 
             let tile_iter: Box<dyn Iterator<Item = &_>> =
