@@ -46,10 +46,9 @@ impl PointerGrab<WaylandState> for MoveGrab {
         let delta = event.location - self.start_data.location;
         let new_location = self.last_location + delta;
         if let Some(mapped) =
-            data.mapped_window_lookup(self.window.toplevel().unwrap().wl_surface())
+            data.floating_window_lookup_mut(self.window.toplevel().unwrap().wl_surface())
         {
-            // TODO
-            // mapped.location = new_location.to_i32_round();
+            mapped.location = new_location.to_i32_round();
         }
     }
 

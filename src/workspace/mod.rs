@@ -34,8 +34,16 @@ impl Workspaces {
 
     pub fn window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         for workspace in self.workspaces.values() {
-            let window = workspace.window_lookup(surface);
-            if window.is_some() {
+            if let window @ Some(_) = workspace.window_lookup(surface) {
+                return window;
+            }
+        }
+        None
+    }
+
+    pub fn floating_window_lookup_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        for workspace in self.workspaces.values_mut() {
+            if let window @ Some(_) = workspace.floating_window_lookup_mut(surface) {
                 return window;
             }
         }
@@ -44,8 +52,7 @@ impl Workspaces {
 
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         for workspace in self.workspaces.values_mut() {
-            let window = workspace.remove_window(surface);
-            if window.is_some() {
+            if let window @ Some(_) = workspace.remove_window(surface) {
                 return window;
             }
         }
@@ -78,8 +85,9 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new_window(&mut self, mapped: MappedWindow) {
-        self.tiling.insert(mapped);
-        // self.floating.insert(0, mapped);
+        if let Some(mapped) = self.tiling.insert(mapped) {
+            self.floating.insert(0, mapped);
+        }
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
@@ -109,7 +117,7 @@ impl Workspace {
         point: T,
     ) -> Option<(&Window, Point<i32, Logical>)> {
         let point = point.into();
-        self.floating.iter().find_map(|mapped| {
+        self.windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
             if mapped
                 .inner
@@ -123,11 +131,17 @@ impl Workspace {
     }
 
     pub fn windows_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
-        Box::new(self.floating.iter().chain(self.tiling.windows()))
+        Box::new(self.floating.iter().chain(self.tiling.windows_iter()))
     }
 
     pub fn window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
+            .find(|w| w.toplevel().wl_surface() == surface)
+    }
+
+    pub fn floating_window_lookup_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        self.floating
+            .iter_mut()
             .find(|w| w.toplevel().wl_surface() == surface)
     }
 
@@ -148,6 +162,9 @@ impl Workspace {
             .position(|mapped| mapped.toplevel().wl_surface() == surface)
         {
             return Some(self.floating.remove(index));
+        }
+        if let window @ Some(_) = self.tiling.remove(surface) {
+            return window;
         }
         None
     }

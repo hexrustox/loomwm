@@ -25,6 +25,10 @@ impl WaylandState {
         self.workspaces.window_lookup(surface)
     }
 
+    pub fn floating_window_lookup_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        self.workspaces.floating_window_lookup_mut(surface)
+    }
+
     pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         self.workspaces.remove_window(surface)
     }

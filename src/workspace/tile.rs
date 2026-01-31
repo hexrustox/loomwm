@@ -95,6 +95,7 @@ pub trait TileTreeWindow {
 
 #[derive(Clone, Copy)]
 pub enum TileTreeWindowId<'a> {
+    #[allow(unused)]
     Id(u32),
     WlSurface(&'a WlSurface),
 }
@@ -220,9 +221,9 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn insert(&mut self, window: T) -> bool {
+    pub fn insert(&mut self, window: T) -> Option<T> {
         let Some(trace) = self.layout_trace.last_mut() else {
-            return false;
+            return Some(window);
         };
 
         let layout = self.layouts.get(&trace.layout);
@@ -264,13 +265,13 @@ impl<T: TileTreeWindow> TileTree<T> {
 
                     trace.tile_count += 1;
                 }
-                return true;
+                return None;
             }
             trace.tile_count = 0;
         }
 
         let Some(parent) = self.arena[self.current_tile].parent else {
-            return false;
+            return Some(window);
         };
         self.current_tile = parent;
         self.layout_trace.pop();
@@ -447,24 +448,42 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn windows(&self) -> Vec<&T> {
-        fn traverse<T: TileTreeWindow>(arena: &TileArena<T>, layout_id: TileId) -> Vec<&T> {
-            let mut windows = Vec::new();
-            for tile_id in arena[layout_id].as_layout_tiles() {
-                match &arena[*tile_id] {
-                    Tile {
-                        kind: TileKind::Window(window),
-                        ..
-                    } => {
-                        windows.push(window);
-                    }
-                    _ => windows.extend(traverse(arena, *tile_id)),
-                }
-            }
-
-            windows
+    pub fn windows_iter(&self) -> impl Iterator<Item = &T> + '_ {
+        struct WindowsIter<'a, T> {
+            arena: &'a TileArena<T>,
+            stack: Vec<TileId>,
         }
-        traverse(&self.arena, self.root)
+
+        impl<'a, T: TileTreeWindow> Iterator for WindowsIter<'a, T> {
+            type Item = &'a T;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                while let Some(tile_id) = self.stack.pop() {
+                    match &self.arena[tile_id] {
+                        Tile {
+                            kind: TileKind::Window(window),
+                            ..
+                        } => return Some(window),
+                        _ => {
+                            for &child_id in self.arena[tile_id].as_layout_tiles().iter().rev() {
+                                self.stack.push(child_id);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+        }
+
+        let mut stack = Vec::new();
+        for &id in self.arena[self.root].as_layout_tiles().iter().rev() {
+            stack.push(id);
+        }
+
+        WindowsIter {
+            arena: &self.arena,
+            stack,
+        }
     }
 }
 
@@ -489,7 +508,7 @@ pub fn test_layout_set() -> LayoutSet {
             LayoutSchema {
                 split: TileSplit::Horizontal,
                 nodes: vec![LayoutNode {
-                    repeat: TileRepeat::MAX,
+                    repeat: TileRepeat(2),
                     ..Default::default()
                 }],
                 ..Default::default()
@@ -967,7 +986,7 @@ mod tests {
         for _ in 0..tiles - 1 {
             tree.insert(TestWindow::new());
         }
-        tree.insert(TestWindow::new())
+        tree.insert(TestWindow::new()).is_none()
     }
 
     #[test_case("1 window repeat 3", 3, 0,
