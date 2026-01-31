@@ -8,8 +8,11 @@ use smithay::{
         wayland_server::{Display, DisplayHandle, protocol::wl_surface::WlSurface},
     },
     wayland::{
-        compositor::CompositorState, output::OutputManagerState,
-        selection::data_device::DataDeviceState, shell::xdg::XdgShellState, shm::ShmState,
+        compositor::CompositorState,
+        output::OutputManagerState,
+        selection::data_device::DataDeviceState,
+        shell::xdg::{XdgShellState, decoration::XdgDecorationState},
+        shm::ShmState,
         socket::ListeningSocketSource,
     },
 };
@@ -31,6 +34,8 @@ pub struct WaylandState {
     pub data_device_state: DataDeviceState,
     pub popups: PopupManager,
     pub seat: Seat<Self>,
+
+    pub xdg_decoration_state: XdgDecorationState,
 
     pub space: Space<Window>,
     pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
@@ -56,6 +61,8 @@ impl WaylandState {
         let mut seat = seat_state.new_wl_seat(&dh, "winit");
         seat.add_keyboard(Default::default(), 200, 25).unwrap();
         seat.add_pointer();
+
+        let xdg_decoration_state = XdgDecorationState::new::<Self>(&dh);
 
         let socket_name = {
             {
@@ -106,6 +113,8 @@ impl WaylandState {
             data_device_state,
             popups,
             seat,
+
+            xdg_decoration_state,
 
             space: Space::default(),
             unmapped_windows: HashMap::new(),

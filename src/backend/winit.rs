@@ -72,7 +72,7 @@ impl Winit {
                             &mut framebuffer,
                             age,
                             &elements,
-                            [0.1, 0.1, 0.1, 1.0],
+                            [0.0, 0.0, 0.0, 1.0],
                         )
                     };
 

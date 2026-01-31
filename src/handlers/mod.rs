@@ -17,6 +17,7 @@ use smithay::{
 use crate::state::WaylandState;
 
 mod compositor;
+mod xdg_decoration;
 mod xdg_shell;
 
 pub use compositor::ClientState;
