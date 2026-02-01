@@ -30,7 +30,8 @@ impl WaylandState {
     }
 
     pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.workspaces.remove_window(surface)
+        self.workspaces
+            .remove_window(self.space.outputs().last().unwrap(), surface)
     }
 
     pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
@@ -41,13 +42,11 @@ impl WaylandState {
             && let Some(mapped) = self.mapped_window_lookup(&surface)
         {
             mapped.inner.set_activated(false);
-            mapped.toplevel().send_pending_configure();
         }
         keyboard.set_focus(self, Some(surface.clone()), serial);
 
         if let Some(mapped) = self.workspaces.get_active().window_lookup(surface) {
             mapped.inner.set_activated(true);
-            mapped.toplevel().send_pending_configure();
         }
         self.workspaces.get_active().raise_floating_window(surface);
     }
@@ -131,6 +130,5 @@ impl TileTreeWindow for MappedWindow {
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
         });
-        self.toplevel().send_configure();
     }
 }

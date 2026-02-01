@@ -49,9 +49,10 @@ impl CompositorHandler for WaylandState {
             if is_mapped(surface) {
                 let unmapped = entry.remove();
                 unmapped.inner.on_commit();
-                self.workspaces
-                    .get_active()
-                    .new_window(MappedWindow::new(unmapped.inner));
+                self.workspaces.get_active().new_window(
+                    self.space.outputs().last().unwrap(),
+                    MappedWindow::new(unmapped.inner),
+                );
                 self.focus_window(surface, Some(SERIAL_COUNTER.next_serial()));
             } else {
                 let unmapped = entry.get();
@@ -74,8 +75,11 @@ impl CompositorHandler for WaylandState {
             }
         } else if let Some(mapped) = self.mapped_window_lookup(surface) {
             mapped.inner.on_commit();
+
+            // assume window surface will not be unmapped
         }
-        // assume window surface will not be unmapped
+
+        // popup, layer shell & other surface
     }
 }
 

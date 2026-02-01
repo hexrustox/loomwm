@@ -50,9 +50,9 @@ impl Workspaces {
         None
     }
 
-    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+    pub fn remove_window(&mut self, output: &Output, surface: &WlSurface) -> Option<MappedWindow> {
         for workspace in self.workspaces.values_mut() {
-            if let window @ Some(_) = workspace.remove_window(surface) {
+            if let window @ Some(_) = workspace.remove_window(output, surface) {
                 return window;
             }
         }
@@ -84,31 +84,34 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new_window(&mut self, mapped: MappedWindow) {
+    pub fn new_window(&mut self, output: &Output, mapped: MappedWindow) {
         if let Some(mapped) = self.tiling.insert(mapped) {
             self.floating.insert(0, mapped);
+        } else {
+            self.tiling.update_toplevel_state(
+                output.current_location(),
+                output
+                    .current_mode()
+                    .unwrap()
+                    .size
+                    .to_logical(output.current_scale().integer_scale()),
+            );
         }
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
         &mut self,
-        output: &Output,
         renderer: &mut R,
         scale: Scale<f64>,
     ) -> Vec<WaylandSurfaceRenderElement<R>>
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
-        self.tiling.update_toplevel_state(
-            output.current_location(),
-            output
-                .current_mode()
-                .unwrap()
-                .size
-                .to_logical(output.current_scale().integer_scale()),
-        );
         self.windows_iter()
-            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
+            .flat_map(|mapped| {
+                mapped.toplevel().send_configure();
+                mapped.render_elements::<R>(renderer, scale)
+            })
             .collect()
     }
 
@@ -155,7 +158,7 @@ impl Workspace {
         }
     }
 
-    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+    pub fn remove_window(&mut self, output: &Output, surface: &WlSurface) -> Option<MappedWindow> {
         if let Some(index) = self
             .floating
             .iter()
@@ -164,6 +167,14 @@ impl Workspace {
             return Some(self.floating.remove(index));
         }
         if let window @ Some(_) = self.tiling.remove(surface) {
+            self.tiling.update_toplevel_state(
+                output.current_location(),
+                output
+                    .current_mode()
+                    .unwrap()
+                    .size
+                    .to_logical(output.current_scale().integer_scale()),
+            );
             return window;
         }
         None
