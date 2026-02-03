@@ -16,7 +16,7 @@ use crate::{
 
 impl WaylandState {
     pub fn new_window(&mut self, window: Window) {
-        self.workspaces.get_active().new_window(
+        self.workspaces.get_active().add_window(
             self.space.outputs().last().unwrap(),
             MappedWindow::new(window.clone()),
         );
@@ -30,12 +30,12 @@ impl WaylandState {
             .insert(key, UnmappedWindow::new(window));
     }
 
-    pub fn mapped_window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
-        self.workspaces.window_lookup(surface)
+    pub fn find_mapped_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
+        self.workspaces.find_window(surface)
     }
 
-    pub fn floating_window_lookup_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.workspaces.floating_window_lookup_mut(surface)
+    pub fn find_mapped_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+        self.workspaces.find_window_mut(surface)
     }
 
     pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
@@ -48,14 +48,14 @@ impl WaylandState {
         let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
 
         if let Some(surface) = keyboard.current_focus()
-            && let Some(mapped) = self.mapped_window_lookup(&surface)
+            && let Some(mapped) = self.find_mapped_window(&surface)
         {
             mapped.inner.set_activated(false);
             mapped.toplevel().send_pending_configure();
         }
         keyboard.set_focus(self, Some(surface.clone()), serial);
 
-        if let Some(mapped) = self.workspaces.get_active().window_lookup(surface) {
+        if let Some(mapped) = self.workspaces.get_active().find_window(surface) {
             mapped.inner.set_activated(true);
             mapped.toplevel().send_pending_configure();
         }

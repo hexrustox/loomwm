@@ -46,7 +46,7 @@ impl PointerGrab<WaylandState> for MoveGrab {
         let delta = event.location - self.start_data.location;
         let new_location = self.last_location + delta;
         if let Some(mapped) =
-            data.floating_window_lookup_mut(self.window.toplevel().unwrap().wl_surface())
+            data.find_mapped_window_mut(self.window.toplevel().unwrap().wl_surface())
         {
             mapped.location = new_location.to_i32_round();
         }
@@ -69,7 +69,6 @@ impl PointerGrab<WaylandState> for MoveGrab {
         event: &ButtonEvent,
     ) {
         handle.button(data, event);
-
         // The button is a button code as defined in the
         // Linux kernel's linux/input-event-codes.h header file, e.g. BTN_LEFT.
         const BTN_LEFT: u32 = 0x110;

@@ -8,7 +8,6 @@ use smithay::{
         backend::ClientData,
         protocol::{wl_buffer::WlBuffer, wl_surface::WlSurface},
     },
-    utils::SERIAL_COUNTER,
     wayland::{
         buffer::BufferHandler,
         compositor::{
@@ -19,11 +18,7 @@ use smithay::{
     },
 };
 
-use crate::{
-    state::WaylandState,
-    utils::is_mapped,
-    window::{MappedWindow, UnmappedWindowConfigurationState},
-};
+use crate::{state::WaylandState, utils::is_mapped, window::UnmappedWindowConfigurationState};
 
 impl CompositorHandler for WaylandState {
     fn compositor_state(&mut self) -> &mut CompositorState {
@@ -64,11 +59,15 @@ impl CompositorHandler for WaylandState {
                         && !unmapped.configured()
                     {
                         unmapped.state = UnmappedWindowConfigurationState::Configured;
+                        // TEMP
+                        toplevel.with_pending_state(|s| {
+                           s.decoration_mode = Some(smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode::ClientSide) ;
+                        });
                         toplevel.send_configure();
                     }
                 });
             }
-        } else if let Some(mapped) = self.mapped_window_lookup(surface) {
+        } else if let Some(mapped) = self.find_mapped_window(surface) {
             mapped.inner.on_commit();
 
             // assume window surface will not be unmapped

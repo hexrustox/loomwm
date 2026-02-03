@@ -291,7 +291,6 @@ impl<T: TileTreeWindow> TileTree<T> {
             layout_id: TileId,
             id: TileTreeWindowId<'_>,
         ) -> Option<RemoveTile> {
-            let mut res = None;
             for (index, tile_id) in arena[layout_id].as_layout_tiles().iter().enumerate() {
                 match &arena[*tile_id] {
                     Tile {
@@ -299,21 +298,21 @@ impl<T: TileTreeWindow> TileTree<T> {
                         ..
                     } => {
                         if window.match_id(id) {
-                            res = Some(RemoveTile {
+                            return Some(RemoveTile {
                                 parent: layout_id,
                                 index,
                             });
                         }
                     }
                     _ => {
-                        if let sub_res @ Some(_) = traverse(arena, *tile_id, id) {
-                            res = sub_res;
+                        if let res @ Some(_) = traverse(arena, *tile_id, id) {
+                            return res;
                         }
                     }
                 }
             }
 
-            res
+            None
         }
 
         if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, id.into()) {
@@ -484,6 +483,40 @@ impl<T: TileTreeWindow> TileTree<T> {
             arena: &self.arena,
             stack,
         }
+    }
+
+    pub fn find_window_mut<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
+        &mut self,
+        id: I,
+    ) -> Option<&mut T> {
+        fn traverse<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            layout_id: TileId,
+            id: TileTreeWindowId,
+        ) -> Option<TileId> {
+            for tile_id in arena[layout_id].as_layout_tiles().iter() {
+                match &arena[*tile_id] {
+                    Tile {
+                        kind: TileKind::Window(window),
+                        ..
+                    } => {
+                        if window.match_id(id) {
+                            return Some(*tile_id);
+                        }
+                    }
+                    _ => {
+                        if let res @ Some(_) = traverse(arena, *tile_id, id) {
+                            return res;
+                        }
+                    }
+                }
+            }
+
+            None
+        }
+        let tile_id = traverse(&self.arena, self.root, id.into());
+
+        tile_id.map(|id| self.arena[id].as_window_mut())
     }
 }
 

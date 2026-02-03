@@ -83,6 +83,18 @@ impl WaylandState {
                         state: button_state,
                     },
                 );
+
+                if button == 0x112
+                    && button_state == ButtonState::Pressed
+                    && let Some((window, _)) = self
+                        .workspaces
+                        .get_active()
+                        .window_under(pointer.current_location())
+                {
+                    let s = window.toplevel().unwrap().clone();
+                    self.move_window(s, serial);
+                }
+
                 pointer.frame(self);
             }
             _ => {}

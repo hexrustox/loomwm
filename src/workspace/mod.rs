@@ -32,18 +32,18 @@ impl Workspaces {
             .expect("No active workspace")
     }
 
-    pub fn window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
+    pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         for workspace in self.workspaces.values() {
-            if let window @ Some(_) = workspace.window_lookup(surface) {
+            if let window @ Some(_) = workspace.find_window(surface) {
                 return window;
             }
         }
         None
     }
 
-    pub fn floating_window_lookup_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         for workspace in self.workspaces.values_mut() {
-            if let window @ Some(_) = workspace.floating_window_lookup_mut(surface) {
+            if let window @ Some(_) = workspace.find_window_mut(surface) {
                 return window;
             }
         }
@@ -84,19 +84,19 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new_window(&mut self, output: &Output, mapped: MappedWindow) {
-        if let Some(mapped) = self.tiling.insert(mapped) {
-            self.floating.insert(0, mapped);
-        } else {
-            self.tiling.update_toplevel_state(
-                output.current_location(),
-                output
-                    .current_mode()
-                    .unwrap()
-                    .size
-                    .to_logical(output.current_scale().integer_scale()),
-            );
-        }
+    pub fn add_window(&mut self, output: &Output, mapped: MappedWindow) {
+        // if let Some(mapped) = self.tiling.insert(mapped) {
+        self.floating.insert(0, mapped);
+        // } else {
+        //     self.tiling.update_toplevel_state(
+        //         output.current_location(),
+        //         output
+        //             .current_mode()
+        //             .unwrap()
+        //             .size
+        //             .to_logical(output.current_scale().integer_scale()),
+        //     );
+        // }
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
@@ -134,15 +134,16 @@ impl Workspace {
         Box::new(self.floating.iter().chain(self.tiling.windows_iter()))
     }
 
-    pub fn window_lookup(&self, surface: &WlSurface) -> Option<&MappedWindow> {
+    pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
             .find(|w| w.toplevel().wl_surface() == surface)
     }
 
-    pub fn floating_window_lookup_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         self.floating
             .iter_mut()
             .find(|w| w.toplevel().wl_surface() == surface)
+            .or(self.tiling.find_window_mut(surface))
     }
 
     pub fn raise_floating_window(&mut self, surface: &WlSurface) {
