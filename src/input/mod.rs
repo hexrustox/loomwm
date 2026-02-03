@@ -8,6 +8,7 @@ pub use pointer::{PointerBindings, test_pointer_bindings};
 mod keyboard;
 pub mod move_grab;
 mod pointer;
+pub mod resize_grab;
 
 impl WaylandState {
     pub fn process_input_event<T: InputBackend>(&mut self, event: InputEvent<T>) {

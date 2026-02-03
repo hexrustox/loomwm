@@ -18,7 +18,10 @@ use smithay::{
     },
 };
 
-use crate::{state::WaylandState, utils::is_mapped, window::UnmappedWindowConfigurationState};
+use crate::{
+    input::resize_grab, state::WaylandState, utils::is_mapped,
+    window::UnmappedWindowConfigurationState,
+};
 
 impl CompositorHandler for WaylandState {
     fn compositor_state(&mut self) -> &mut CompositorState {
@@ -67,8 +70,9 @@ impl CompositorHandler for WaylandState {
                     }
                 });
             }
-        } else if let Some(mapped) = self.find_mapped_window(surface) {
+        } else if let Some(mapped) = self.find_mapped_window_mut(surface) {
             mapped.inner.on_commit();
+            resize_grab::handle_commit(mapped);
 
             // assume window surface will not be unmapped
         }
