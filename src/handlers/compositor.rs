@@ -49,11 +49,6 @@ impl CompositorHandler for WaylandState {
             if is_mapped(surface) {
                 let unmapped = entry.remove();
                 unmapped.inner.on_commit();
-                self.workspaces.get_active().new_window(
-                    self.space.outputs().last().unwrap(),
-                    MappedWindow::new(unmapped.inner),
-                );
-                self.focus_window(surface, Some(SERIAL_COUNTER.next_serial()));
             } else {
                 let unmapped = entry.get();
                 let toplevel = unmapped.toplevel().clone();

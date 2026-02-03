@@ -108,10 +108,7 @@ impl Workspace {
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
         self.windows_iter()
-            .flat_map(|mapped| {
-                mapped.toplevel().send_configure();
-                mapped.render_elements::<R>(renderer, scale)
-            })
+            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()
     }
 

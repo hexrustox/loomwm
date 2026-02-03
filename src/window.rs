@@ -16,6 +16,15 @@ use crate::{
 
 impl WaylandState {
     pub fn new_window(&mut self, window: Window) {
+        self.workspaces.get_active().new_window(
+            self.space.outputs().last().unwrap(),
+            MappedWindow::new(window.clone()),
+        );
+        self.focus_window(
+            window.toplevel().unwrap().wl_surface(),
+            Some(SERIAL_COUNTER.next_serial()),
+        );
+
         let key = window.toplevel().unwrap().wl_surface().clone();
         self.unmapped_windows
             .insert(key, UnmappedWindow::new(window));
@@ -42,11 +51,13 @@ impl WaylandState {
             && let Some(mapped) = self.mapped_window_lookup(&surface)
         {
             mapped.inner.set_activated(false);
+            mapped.toplevel().send_pending_configure();
         }
         keyboard.set_focus(self, Some(surface.clone()), serial);
 
         if let Some(mapped) = self.workspaces.get_active().window_lookup(surface) {
             mapped.inner.set_activated(true);
+            mapped.toplevel().send_pending_configure();
         }
         self.workspaces.get_active().raise_floating_window(surface);
     }
@@ -130,5 +141,6 @@ impl TileTreeWindow for MappedWindow {
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
         });
+        self.toplevel().send_pending_configure();
     }
 }
