@@ -2,11 +2,11 @@
   "nodes": {
     "capsule": {
       "locked": {
-        "lastModified": 1769449550,
-        "narHash": "sha256-PJTVlo8CqMC97ElxHWcZWSqr0r669LgiEfwwVIk8Fyc=",
+        "lastModified": 1770145932,
+        "narHash": "sha256-bAQs+cls6JZXAEVUG+YrTDBGyqbhyC+SMcN0DHd9BEg=",
         "owner": "codnixus",
         "repo": "capsule",
-        "rev": "497f5f612cffc1b28bc1184ed7763fafc070cefe",
+        "rev": "e4d4b51f41b9aa907de01791245a68c284fd15fe",
         "type": "gitlab"
       },
       "original": {

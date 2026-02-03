@@ -58,29 +58,32 @@
           extraOpts = [
             "--pid host"
             "--uts host"
-            "--env=HOME"
-            "--env=TERM=xterm-256color"
-            "--env=COLORTERM=truecolor"
-            "--tmpfs=\"$HOME\""
-            "--tmpfs=/tmp"
-            "--volume=\"$XDG_DATA_HOME/cargo\":\"$HOME/.cargo\""
-            "--volume=\"$HOME/.cache\":\"$HOME/.cache\""
 
-            "--env=XDG_RUNTIME_DIR=/tmp/runtime"
-            "--env=WAYLAND_DISPLAY"
-            "--volume=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/runtime/$WAYLAND_DISPLAY:ro"
-            "--device=/dev/dri"
+            "--env=CARGO_HOME"
+            "--env=COLORTERM=truecolor"
+            "--env=GBM_BACKENDS_PATH"
+            "--env=HOME"
+            "--env=LD_LIBRARY_PATH"
+            "--env=LIBGL_DRIVERS_PATH"
+            "--env=LIBRARY_PATH"
+            "--env=LIBVA_DRIVERS_PATH"
+            "--env=PKG_CONFIG_PATH"
+            "--env=RUST_SRC_PATH"
+            "--env=TERM=xterm-256color"
+            "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
+
+            "--tmpfs=/tmp"
+            "--tmpfs=\"$HOME\""
 
             "--volume=/etc/fonts:/etc/fonts:ro"
+            "--volume=\"$HOME/.cache\":\"$HOME/.cache\""
+            "--volume=\"$XDG_DATA_HOME/cargo\":\"$HOME/.cargo\""
 
-            "--env=RUST_SRC_PATH"
-            "--env=LIBRARY_PATH=\"${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}\""
-            "--env=PKG_CONFIG_PATH=\"${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}\""
-            "--env=GBM_BACKENDS_PATH"
-            "--env=LIBGL_DRIVERS_PATH"
-            "--env=LIBVA_DRIVERS_PATH"
-            "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
-            "--env=LD_LIBRARY_PATH"
+            "--env=WAYLAND_DISPLAY"
+            "--env=XDG_RUNTIME_DIR=/tmp/runtime"
+            "--volume=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/runtime/$WAYLAND_DISPLAY:ro"
+
+            "--device=/dev/dri"
           ];
           image = "alpine:latest";
         };
@@ -102,13 +105,18 @@
             inherit (capsule-lib) packages;
             shellHook = ''
               export XDG_DATA_HOME=''${XDG_DATA_HOME:-~/.local/share}
+              export CARGO_HOME="$XDG_DATA_HOME/cargo"
 
-              mkdir -p "$XDG_DATA_HOME/cargo"
+              mkdir -p "$CARGO_HOME"
 
               ${capsule-lib.shellHook}
             '';
 
             RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+
+            LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}";
+            PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}";
+
             GBM_BACKENDS_PATH = "${lib.makeSearchPathOutput "lib" "lib/gbm" mesa-drivers}";
             LIBGL_DRIVERS_PATH = "${lib.makeSearchPathOutput "lib" "lib/dri" mesa-drivers}";
             LIBVA_DRIVERS_PATH = "${lib.makeSearchPathOutput "out" "lib/dri" (mesa-drivers ++ vadrivers)}";
