@@ -17,7 +17,13 @@ use smithay::{
     },
 };
 
-use crate::{AppState, handlers::ClientState, window::UnmappedWindow, workspace::Workspaces};
+use crate::{
+    AppState,
+    handlers::ClientState,
+    input::{KeyModifiers, PointerBindings, test_pointer_bindings},
+    window::UnmappedWindow,
+    workspace::Workspaces,
+};
 
 pub struct WaylandState {
     pub socket_name: OsString,
@@ -40,6 +46,9 @@ pub struct WaylandState {
     pub space: Space<Window>,
     pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
     pub workspaces: Workspaces,
+
+    pub pointer_bindings: PointerBindings,
+    pub key_modifiers: KeyModifiers,
 }
 
 impl WaylandState {
@@ -119,6 +128,9 @@ impl WaylandState {
             space: Space::default(),
             unmapped_windows: HashMap::new(),
             workspaces: Workspaces::default(),
+
+            pointer_bindings: test_pointer_bindings(),
+            key_modifiers: KeyModifiers::empty(),
         }
     }
 }

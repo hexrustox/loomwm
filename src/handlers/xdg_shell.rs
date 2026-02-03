@@ -45,25 +45,12 @@ impl XdgShellHandler for WaylandState {
     ) {
     }
 
-    fn move_request(&mut self, surface: ToplevelSurface, _: WlSeat, serial: Serial) {
-        self.move_window(surface, serial);
-    }
-
-    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        self.remove_mapped_window(surface.wl_surface());
-    }
-}
-
-delegate_xdg_shell!(WaylandState);
-
-impl WaylandState {
-    // IMPROVE
-    pub fn move_window(&mut self, surface: ToplevelSurface, serial: Serial) {
-        let seat = &self.seat;
+    fn move_request(&mut self, surface: ToplevelSurface, seat: WlSeat, serial: Serial) {
+        let seat = Seat::from_resource(&seat).unwrap();
 
         let wl_surface = surface.wl_surface();
 
-        if let Some(start_data) = check_grab(seat, wl_surface, serial) {
+        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
             let window = self.find_mapped_window(wl_surface);
@@ -76,7 +63,13 @@ impl WaylandState {
             }
         }
     }
+
+    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
+        self.remove_mapped_window(surface.wl_surface());
+    }
 }
+
+delegate_xdg_shell!(WaylandState);
 
 fn check_grab(
     seat: &Seat<WaylandState>,

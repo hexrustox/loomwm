@@ -4,7 +4,7 @@ use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
     },
-    desktop::{Window, space::SpaceElement},
+    desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale},
@@ -112,10 +112,10 @@ impl Workspace {
             .collect()
     }
 
-    pub fn window_under<T: Into<Point<f64, Logical>>>(
+    pub fn mapped_window_under<T: Into<Point<f64, Logical>>>(
         &self,
         point: T,
-    ) -> Option<(&Window, Point<i32, Logical>)> {
+    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
         let point = point.into();
         self.windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
@@ -123,7 +123,7 @@ impl Workspace {
                 .inner
                 .is_in_input_region(&(point - render_location.to_f64()))
             {
-                Some((&mapped.inner, render_location))
+                Some((mapped, render_location))
             } else {
                 None
             }
