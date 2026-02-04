@@ -3,7 +3,7 @@ use smithay::backend::input::{InputBackend, InputEvent};
 use crate::state::WaylandState;
 
 pub use keyboard::KeyModifiers;
-pub use pointer::{PointerBindings, test_pointer_bindings};
+pub use pointer::{PointerBindings, ResizeLocation, test_pointer_bindings};
 
 mod keyboard;
 pub mod move_grab;

@@ -5,12 +5,19 @@ use smithay::{
     backend::input::{ButtonState, InputBackend, PointerButtonEvent, PointerMotionAbsoluteEvent},
     desktop::WindowSurfaceType,
     input::pointer::{ButtonEvent, Focus, GrabStartData as PointerGrabStartData, MotionEvent},
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, SERIAL_COUNTER},
+    reexports::{
+        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_server::protocol::wl_surface::WlSurface,
+    },
+    utils::{Logical, Point, Rectangle, SERIAL_COUNTER},
 };
 
 use crate::{
-    input::{KeyModifiers, move_grab::MoveGrab},
+    input::{
+        KeyModifiers,
+        move_grab::MoveGrab,
+        resize_grab::{ResizeEdge, ResizeGrab},
+    },
     state::WaylandState,
 };
 
@@ -25,16 +32,32 @@ pub struct PointerBinding {
 #[derive(Debug)]
 pub enum PointerActions {
     Move,
+    Resize,
 }
 
+pub enum ResizeLocation {
+    Corner,
+    Edge,
+}
+
+// TEMP
 pub fn test_pointer_bindings() -> PointerBindings {
-    HashMap::from_iter([(
-        PointerBinding {
-            modifiers: KeyModifiers::ALT,
-            code: KeyCode(0x110),
-        },
-        PointerActions::Move,
-    )])
+    HashMap::from_iter([
+        (
+            PointerBinding {
+                modifiers: KeyModifiers::ALT,
+                code: KeyCode(0x110),
+            },
+            PointerActions::Move,
+        ),
+        (
+            PointerBinding {
+                modifiers: KeyModifiers::ALT,
+                code: KeyCode(0x111),
+            },
+            PointerActions::Resize,
+        ),
+    ])
 }
 
 impl WaylandState {
@@ -88,8 +111,9 @@ impl WaylandState {
                 code: KeyCode(button as u16),
             })
         {
+            use PointerActions::*;
             match action {
-                PointerActions::Move => {
+                Move => {
                     if let Some((mapped, _)) = self
                         .workspaces
                         .get_active()
@@ -106,6 +130,86 @@ impl WaylandState {
                             start_data,
                             mapped.inner.clone(),
                             mapped.location.to_f64(),
+                        );
+                        pointer.set_grab(self, grab, serial, Focus::Clear);
+                    }
+                }
+                Resize => {
+                    if let Some((mapped, _)) = self
+                        .workspaces
+                        .get_active()
+                        .mapped_window_under(pointer.current_location())
+                        && !pointer.is_grabbed()
+                    {
+                        let location = pointer.current_location();
+                        let start_data = PointerGrabStartData {
+                            focus: None,
+                            button,
+                            location,
+                        };
+
+                        let toplevel = mapped.toplevel();
+                        toplevel.with_pending_state(|state| {
+                            state.states.set(xdg_toplevel::State::Resizing);
+                        });
+
+                        toplevel.send_pending_configure();
+
+                        let edge = match self.resize_location {
+                            ResizeLocation::Corner => {
+                                let center = mapped.center_location().to_f64();
+                                if location.x <= center.x && location.y <= center.y {
+                                    ResizeEdge::TOP_LEFT
+                                } else if location.x >= center.x && location.y <= center.y {
+                                    ResizeEdge::TOP_RIGHT
+                                } else if location.x <= center.x && location.y >= center.y {
+                                    ResizeEdge::BOTTOM_LEFT
+                                } else {
+                                    ResizeEdge::BOTTOM_RIGHT
+                                }
+                            }
+                            ResizeLocation::Edge => {
+                                let size = mapped.inner.geometry().size;
+                                let x1 = size.w as f64 * 1. / 3.;
+                                let x2 = size.w as f64 * 2. / 3.;
+                                let y1 = size.h as f64 * 1. / 3.;
+                                let y2 = size.h as f64 * 2. / 3.;
+
+                                let loc = mapped.location.to_f64();
+                                let x = location.x - loc.x;
+                                let y = location.y - loc.y;
+
+                                if x <= x1 {
+                                    if y <= y1 {
+                                        ResizeEdge::TOP_LEFT
+                                    } else if y <= y2 {
+                                        ResizeEdge::LEFT
+                                    } else {
+                                        ResizeEdge::BOTTOM_LEFT
+                                    }
+                                } else if x <= x2 {
+                                    if y <= y1 {
+                                        ResizeEdge::TOP
+                                    } else if y <= y2 {
+                                        return;
+                                    } else {
+                                        ResizeEdge::BOTTOM
+                                    }
+                                } else if y <= y1 {
+                                    ResizeEdge::TOP_RIGHT
+                                } else if y <= y2 {
+                                    ResizeEdge::RIGHT
+                                } else {
+                                    ResizeEdge::BOTTOM_RIGHT
+                                }
+                            }
+                        };
+
+                        let grab = ResizeGrab::new(
+                            start_data,
+                            mapped.inner.clone(),
+                            edge,
+                            Rectangle::new(mapped.location, mapped.inner.geometry().size),
                         );
                         pointer.set_grab(self, grab, serial, Focus::Clear);
                     }

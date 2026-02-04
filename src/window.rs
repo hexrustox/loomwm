@@ -123,6 +123,11 @@ impl MappedWindow {
         let loc = self.render_location().to_physical_precise_round(scale);
         self.inner.render_elements(renderer, loc, scale, 1.0)
     }
+
+    pub fn center_location(&self) -> Point<i32, Logical> {
+        let size = self.inner.geometry().size;
+        Point::new(size.w / 2 + self.location.x, size.h / 2 + self.location.y)
+    }
 }
 
 impl TileTreeWindow for MappedWindow {
