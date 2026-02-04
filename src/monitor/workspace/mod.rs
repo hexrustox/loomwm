@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use smithay::{
     backend::renderer::{
@@ -17,7 +17,7 @@ mod tile;
 pub use tile::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
 pub struct Monitor {
-    output: Output,
+    output: Rc<RefCell<Output>>,
 
     active_workspace: u8,
     workspaces: Vec<(u8, Workspace)>,
@@ -28,10 +28,11 @@ pub struct Monitor {
 
 impl Monitor {
     pub fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
+        let output = Rc::new(RefCell::new(output));
         Self {
-            output,
+            output: output.clone(),
             active_workspace: 1,
-            workspaces: vec![(1, Workspace::new(layouts.clone(), &layout_name))],
+            workspaces: vec![(1, Workspace::new(output, layouts.clone(), &layout_name))],
             layouts,
             layout_name,
         }
@@ -51,7 +52,7 @@ impl Monitor {
             index,
             (
                 name,
-                Workspace::new(self.layouts.clone(), &self.layout_name),
+                Workspace::new(self.output.clone(), self.layouts.clone(), &self.layout_name),
             ),
         );
     }
@@ -94,7 +95,7 @@ impl Monitor {
                 }
             }
         };
-        self.workspaces[idx].1.add_window(&self.output, mapped);
+        self.workspaces[idx].1.add_window(mapped);
         if focus {
             self.switch_workspace(name);
         }
@@ -119,38 +120,36 @@ impl Monitor {
     }
 
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        let output = &self.output;
         for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.remove_window(output, surface) {
+            if let window @ Some(_) = workspace.remove_window(surface) {
                 return window;
             }
         }
         None
     }
-
-    pub fn get_output(&self) -> &Output {
-        &self.output
-    }
 }
 
 #[derive(Debug)]
 pub struct Workspace {
+    output: Rc<RefCell<Output>>,
     tiling: TileTree,
     floating: Vec<MappedWindow>,
 }
 
 impl Workspace {
-    fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+    fn new(output: Rc<RefCell<Output>>, layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
         Self {
+            output,
             tiling: TileTree::new(layouts, layout_name),
             floating: Vec::new(),
         }
     }
 
-    pub fn add_window(&mut self, output: &Output, mapped: MappedWindow) {
+    pub fn add_window(&mut self, mapped: MappedWindow) {
         if let Some(mapped) = self.tiling.insert(mapped) {
             self.floating.insert(0, mapped);
         } else {
+            let output = self.output.borrow();
             self.tiling.update_toplevel_state(
                 output.current_location(),
                 output
@@ -219,7 +218,7 @@ impl Workspace {
         }
     }
 
-    pub fn remove_window(&mut self, output: &Output, surface: &WlSurface) -> Option<MappedWindow> {
+    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         if let Some(index) = self
             .floating
             .iter()
@@ -228,6 +227,7 @@ impl Workspace {
             return Some(self.floating.remove(index));
         }
         if let window @ Some(_) = self.tiling.remove(surface) {
+            let output = self.output.borrow();
             self.tiling.update_toplevel_state(
                 output.current_location(),
                 output

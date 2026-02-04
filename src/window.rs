@@ -19,10 +19,7 @@ impl WaylandState {
         self.monitors
             .get_monitor_mut()
             .get_active_workspace()
-            .add_window(
-                self.space.outputs().last().unwrap(),
-                MappedWindow::new(window.clone()),
-            );
+            .add_window(MappedWindow::new(window.clone()));
         self.focus_window(
             window.toplevel().unwrap().wl_surface(),
             Some(SERIAL_COUNTER.next_serial()),
