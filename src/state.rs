@@ -18,10 +18,7 @@ use smithay::{
 };
 
 use crate::{
-    AppState,
-    handlers::ClientState,
-    input::{KeyModifiers, PointerBindings, ResizeLocation, test_pointer_bindings},
-    window::UnmappedWindow,
+    AppState, config::Config, handlers::ClientState, input::KeyModifiers, window::UnmappedWindow,
     workspace::Workspaces,
 };
 
@@ -46,11 +43,9 @@ pub struct WaylandState {
     pub space: Space<Window>,
     pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
     pub workspaces: Workspaces,
-
-    pub pointer_bindings: PointerBindings,
     pub key_modifiers: KeyModifiers,
 
-    pub resize_location: ResizeLocation,
+    pub config: Config,
 }
 
 impl WaylandState {
@@ -58,6 +53,7 @@ impl WaylandState {
         event_loop: LoopHandle<'static, AppState>,
         event_signal: LoopSignal,
         display: Display<Self>,
+        config: Config,
     ) -> Self {
         let dh = display.handle();
 
@@ -130,11 +126,9 @@ impl WaylandState {
             space: Space::default(),
             unmapped_windows: HashMap::new(),
             workspaces: Workspaces::default(),
-
-            pointer_bindings: test_pointer_bindings(),
             key_modifiers: KeyModifiers::empty(),
 
-            resize_location: ResizeLocation::Corner,
+            config,
         }
     }
 }

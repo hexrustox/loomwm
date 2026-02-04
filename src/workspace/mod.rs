@@ -10,14 +10,11 @@ use smithay::{
     utils::{Logical, Point, Scale},
 };
 
-use crate::{
-    window::MappedWindow,
-    workspace::tile::{TileTree, test_layout_set},
-};
+use crate::{window::MappedWindow, workspace::tile::TileTree};
 
 mod tile;
 
-pub use tile::{TileTreeWindow, TileTreeWindowId};
+pub use tile::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
 #[derive(Debug)]
 pub struct Workspaces {
