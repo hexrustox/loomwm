@@ -2,7 +2,7 @@ use crate::{
     input::{
         KeyBindings, PointerBindings, ResizeLocation, test_key_bindings, test_pointer_bindings,
     },
-    workspace::{LayoutSet, test_layout_set},
+    monitor::workspace::{LayoutSet, test_layout_set},
 };
 
 pub struct Config {

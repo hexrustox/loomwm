@@ -19,7 +19,7 @@ where
     root: TileId,
     current_tile: TileId,
     layouts: Rc<LayoutSet>,
-    current_layout: String,
+    layout_name: String,
     layout_trace: Vec<TileLayoutTrace>,
 }
 
@@ -216,7 +216,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             root,
             current_tile: root,
             layouts,
-            current_layout: layout_name.to_string(),
+            layout_name: layout_name.to_string(),
             layout_trace: vec![TileLayoutTrace::new(layout_name)],
         }
     }
@@ -349,7 +349,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 i += 1;
             }
 
-            *self = Self::new(self.layouts.clone(), &self.current_layout);
+            *self = Self::new(self.layouts.clone(), &self.layout_name);
             for window in extracted_windows {
                 self.insert(window);
             }
@@ -802,7 +802,7 @@ mod tests {
                 root,
                 current_tile: root,
                 layouts: Rc::new(LayoutSet(HashMap::new())),
-                current_layout: "".to_string(),
+                layout_name: "".to_string(),
                 layout_trace: Vec::new(),
             }
         }};

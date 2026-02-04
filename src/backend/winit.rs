@@ -63,8 +63,9 @@ impl Winit {
                         let scale = output.current_scale().fractional_scale().into();
                         let elements = state
                             .compositor
-                            .workspaces
-                            .get_active()
+                            .monitors
+                            .get_monitor_mut()
+                            .get_active_workspace()
                             .render_elements(renderer, scale);
 
                         winit.damage_tracker.render_output(
@@ -80,8 +81,9 @@ impl Winit {
                         backend.submit(render_output.damage.map(|v| &**v)).unwrap();
                         state
                             .compositor
-                            .workspaces
-                            .get_active()
+                            .monitors
+                            .get_monitor_mut()
+                            .get_active_workspace()
                             .windows_iter()
                             .for_each(|w| {
                                 w.inner
@@ -110,7 +112,12 @@ impl Winit {
         })
     }
 
-    pub fn init(&mut self, compositor: &mut WaylandState) {
-        compositor.space.map_output(&self.output, (0, 0));
+    pub fn init(&mut self, data: &mut WaylandState) {
+        data.space.map_output(&self.output, (0, 0));
+        data.monitors.push(
+            self.output.clone(),
+            data.layout_set.clone(),
+            data.default_layout.clone(),
+        );
     }
 }

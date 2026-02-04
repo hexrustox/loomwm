@@ -97,8 +97,9 @@ impl WaylandState {
 
         if button_state == ButtonState::Pressed
             && let Some((mapped, _)) = self
-                .workspaces
-                .get_active()
+                .monitors
+                .get_monitor_mut()
+                .get_active_workspace()
                 .mapped_window_under(pointer.current_location())
         {
             let surface = mapped.toplevel().wl_surface().clone();
@@ -115,8 +116,9 @@ impl WaylandState {
             match action {
                 Move => {
                     if let Some((mapped, _)) = self
-                        .workspaces
-                        .get_active()
+                        .monitors
+                        .get_monitor_mut()
+                        .get_active_workspace()
                         .mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
@@ -136,8 +138,9 @@ impl WaylandState {
                 }
                 Resize => {
                     if let Some((mapped, _)) = self
-                        .workspaces
-                        .get_active()
+                        .monitors
+                        .get_monitor_mut()
+                        .get_active_workspace()
                         .mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
@@ -233,8 +236,9 @@ impl WaylandState {
         &mut self,
         pos: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.workspaces
-            .get_active()
+        self.monitors
+            .get_monitor_mut()
+            .get_active_workspace()
             .mapped_window_under(pos)
             .and_then(|(window, location)| {
                 window

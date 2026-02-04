@@ -12,10 +12,10 @@ mod backend;
 mod config;
 mod handlers;
 mod input;
+mod monitor;
 mod state;
 mod utils;
 mod window;
-mod workspace;
 
 pub struct AppState {
     pub compositor: WaylandState,

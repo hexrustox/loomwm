@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsString, sync::Arc};
+use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc};
 
 use smithay::{
     desktop::{PopupManager, Space, Window},
@@ -22,8 +22,8 @@ use crate::{
     config::{Config, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::KeyModifiers,
+    monitor::{Monitors, workspace::LayoutSet},
     window::UnmappedWindow,
-    workspace::Workspaces,
 };
 
 pub struct WaylandState {
@@ -46,9 +46,12 @@ pub struct WaylandState {
 
     pub space: Space<Window>,
     pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
-    pub workspaces: Workspaces,
+    pub monitors: Monitors,
+
     pub key_modifiers: KeyModifiers,
 
+    pub layout_set: Rc<LayoutSet>,
+    pub default_layout: Rc<str>,
     pub key_config: KeyConfig,
     pub pointer_config: PointerConfig,
 }
@@ -130,9 +133,12 @@ impl WaylandState {
 
             space: Space::default(),
             unmapped_windows: HashMap::new(),
-            workspaces: Workspaces::new(config.layout),
+            monitors: Monitors::default(),
+
             key_modifiers: KeyModifiers::empty(),
 
+            layout_set: Rc::new(config.layout.layouts),
+            default_layout: Rc::from(config.layout.default),
             key_config: config.key,
             pointer_config: config.pointer,
         }

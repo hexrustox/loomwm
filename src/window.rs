@@ -10,16 +10,19 @@ use smithay::{
 };
 
 use crate::{
+    monitor::workspace::{TileTreeWindow, TileTreeWindowId},
     state::WaylandState,
-    workspace::{TileTreeWindow, TileTreeWindowId},
 };
 
 impl WaylandState {
     pub fn new_window(&mut self, window: Window) {
-        self.workspaces.get_active().add_window(
-            self.space.outputs().last().unwrap(),
-            MappedWindow::new(window.clone()),
-        );
+        self.monitors
+            .get_monitor_mut()
+            .get_active_workspace()
+            .add_window(
+                self.space.outputs().last().unwrap(),
+                MappedWindow::new(window.clone()),
+            );
         self.focus_window(
             window.toplevel().unwrap().wl_surface(),
             Some(SERIAL_COUNTER.next_serial()),
@@ -31,16 +34,15 @@ impl WaylandState {
     }
 
     pub fn find_mapped_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
-        self.workspaces.find_window(surface)
+        self.monitors.get_monitor().find_window(surface)
     }
 
     pub fn find_mapped_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.workspaces.find_window_mut(surface)
+        self.monitors.get_monitor_mut().find_window_mut(surface)
     }
 
     pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.workspaces
-            .remove_window(self.space.outputs().last().unwrap(), surface)
+        self.monitors.get_monitor_mut().remove_window(surface)
     }
 
     pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
@@ -55,11 +57,19 @@ impl WaylandState {
         }
         keyboard.set_focus(self, Some(surface.clone()), serial);
 
-        if let Some(mapped) = self.workspaces.get_active().find_window(surface) {
+        if let Some(mapped) = self
+            .monitors
+            .get_monitor_mut()
+            .get_active_workspace()
+            .find_window(surface)
+        {
             mapped.inner.set_activated(true);
             mapped.toplevel().send_pending_configure();
         }
-        self.workspaces.get_active().raise_floating_window(surface);
+        self.monitors
+            .get_monitor_mut()
+            .get_active_workspace()
+            .raise_floating_window(surface);
     }
 }
 

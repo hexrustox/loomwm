@@ -28,7 +28,8 @@ pub struct KeyBinding {
 }
 
 pub enum KeyAction {
-    SwitchWorkspace(u8),
+    SwitchWorkspace { name: u8 },
+    MoveToWorkspace { name: u8, focus: bool },
 }
 
 // TEMP
@@ -39,14 +40,34 @@ pub fn test_key_bindings() -> KeyBindings {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::_1,
             },
-            KeyAction::SwitchWorkspace(1),
+            KeyAction::SwitchWorkspace { name: 1 },
         ),
         (
             KeyBinding {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::_2,
             },
-            KeyAction::SwitchWorkspace(2),
+            KeyAction::SwitchWorkspace { name: 2 },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
+                key: Keysym::_1,
+            },
+            KeyAction::MoveToWorkspace {
+                name: 1,
+                focus: true,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
+                key: Keysym::_2,
+            },
+            KeyAction::MoveToWorkspace {
+                name: 2,
+                focus: true,
+            },
         ),
     ])
 }
@@ -56,7 +77,8 @@ impl WaylandState {
         let serial = SERIAL_COUNTER.next_serial();
         let time = Event::time_msec(&event);
 
-        self.seat.get_keyboard().unwrap().input::<(), _>(
+        let keyboard = self.seat.get_keyboard().unwrap();
+        keyboard.input::<(), _>(
             self,
             event.key_code(),
             event.state(),
@@ -80,15 +102,26 @@ impl WaylandState {
                     key_modifiers
                 };
 
-                let key = keysym_handle.modified_sym();
-                if let Some(action) = data.key_config.bindings.get(&KeyBinding {
+                let key = keysym_handle.raw_syms().swap_remove(0);
+                let bind = KeyBinding {
                     modifiers: data.key_modifiers,
                     key,
-                }) {
+                };
+
+                if let Some(action) = data.key_config.bindings.get(&bind) {
                     use KeyAction::*;
                     match action {
-                        SwitchWorkspace(n) => {
-                            data.workspaces.switch_workspace(*n);
+                        SwitchWorkspace { name } => {
+                            data.monitors.get_monitor_mut().switch_workspace(*name);
+                        }
+                        MoveToWorkspace { name, focus } => {
+                            if let Some(wl_surface) = keyboard.current_focus() {
+                                data.monitors.get_monitor_mut().move_window_to_workspace(
+                                    &wl_surface,
+                                    *name,
+                                    *focus,
+                                );
+                            }
                         }
                     }
                     return FilterResult::Intercept(());
