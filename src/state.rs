@@ -18,7 +18,11 @@ use smithay::{
 };
 
 use crate::{
-    AppState, config::Config, handlers::ClientState, input::KeyModifiers, window::UnmappedWindow,
+    AppState,
+    config::{Config, PointerConfig},
+    handlers::ClientState,
+    input::KeyModifiers,
+    window::UnmappedWindow,
     workspace::Workspaces,
 };
 
@@ -45,7 +49,7 @@ pub struct WaylandState {
     pub workspaces: Workspaces,
     pub key_modifiers: KeyModifiers,
 
-    pub config: Config,
+    pub pointer_config: PointerConfig,
 }
 
 impl WaylandState {
@@ -125,10 +129,10 @@ impl WaylandState {
 
             space: Space::default(),
             unmapped_windows: HashMap::new(),
-            workspaces: Workspaces::default(),
+            workspaces: Workspaces::new(config.layout),
             key_modifiers: KeyModifiers::empty(),
 
-            config,
+            pointer_config: config.pointer,
         }
     }
 }

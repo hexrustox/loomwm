@@ -106,7 +106,7 @@ impl WaylandState {
         }
 
         if button_state == ButtonState::Pressed
-            && let Some(action) = self.config.pointer.bindings.get(&PointerBinding {
+            && let Some(action) = self.pointer_config.bindings.get(&PointerBinding {
                 modifiers: self.key_modifiers,
                 code: KeyCode(button as u16),
             })
@@ -155,7 +155,7 @@ impl WaylandState {
 
                         toplevel.send_pending_configure();
 
-                        let edge = match self.config.pointer.resize {
+                        let edge = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
                                 let center = mapped.center_location().to_f64();
                                 if location.x <= center.x && location.y <= center.y {
