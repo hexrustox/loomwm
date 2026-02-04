@@ -84,6 +84,9 @@
             "--volume=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/runtime/$WAYLAND_DISPLAY:ro"
 
             "--device=/dev/dri"
+
+            "--cpus=4"
+            "--memory=8g"
           ];
           image = "alpine:latest";
         };
