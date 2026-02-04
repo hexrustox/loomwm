@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use bitflags::bitflags;
 use smithay::{
     backend::input::{Event, InputBackend, KeyboardKeyEvent},
-    input::keyboard::FilterResult,
+    input::keyboard::{FilterResult, Keysym},
     utils::SERIAL_COUNTER,
 };
 
@@ -15,6 +17,38 @@ bitflags! {
         const ALT =   0b0100;
         const SUPER = 0b1000;
     }
+}
+
+pub type KeyBindings = HashMap<KeyBinding, KeyAction>;
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub struct KeyBinding {
+    modifiers: KeyModifiers,
+    key: Keysym,
+}
+
+pub enum KeyAction {
+    SwitchWorkspace(u8),
+}
+
+// TEMP
+pub fn test_key_bindings() -> KeyBindings {
+    HashMap::from_iter([
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::_1,
+            },
+            KeyAction::SwitchWorkspace(1),
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::_2,
+            },
+            KeyAction::SwitchWorkspace(2),
+        ),
+    ])
 }
 
 impl WaylandState {
@@ -45,6 +79,21 @@ impl WaylandState {
                     }
                     key_modifiers
                 };
+
+                let key = keysym_handle.modified_sym();
+                if let Some(action) = data.key_config.bindings.get(&KeyBinding {
+                    modifiers: data.key_modifiers,
+                    key,
+                }) {
+                    use KeyAction::*;
+                    match action {
+                        SwitchWorkspace(n) => {
+                            data.workspaces.switch_workspace(*n);
+                        }
+                    }
+                    return FilterResult::Intercept(());
+                }
+
                 FilterResult::Forward
             },
         );
