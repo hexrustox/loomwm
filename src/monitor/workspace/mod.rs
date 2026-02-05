@@ -95,7 +95,7 @@ impl Monitor {
                 }
             }
         };
-        self.workspaces[idx].1.add_window(mapped);
+        self.workspaces[idx].1.add_tiling_window(mapped);
         if focus {
             self.switch_workspace(name);
         }
@@ -145,7 +145,11 @@ impl Workspace {
         }
     }
 
-    pub fn add_window(&mut self, mapped: MappedWindow) {
+    pub fn add_floating_window(&mut self, mapped: MappedWindow) {
+        self.floating.insert(0, mapped);
+    }
+
+    pub fn add_tiling_window(&mut self, mapped: MappedWindow) {
         if let Some(mapped) = self.tiling.insert(mapped) {
             self.floating.insert(0, mapped);
         } else {
@@ -218,15 +222,15 @@ impl Workspace {
         }
     }
 
-    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        if let Some(index) = self
-            .floating
+    fn remove_floating_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+        self.floating
             .iter()
             .position(|mapped| mapped.toplevel().wl_surface() == surface)
-        {
-            return Some(self.floating.remove(index));
-        }
-        if let window @ Some(_) = self.tiling.remove(surface) {
+            .map(|i| self.floating.remove(i))
+    }
+
+    fn remove_tiling_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+        self.tiling.remove(surface).inspect(|_| {
             let output = self.output.borrow();
             self.tiling.update_toplevel_state(
                 output.current_location(),
@@ -236,8 +240,37 @@ impl Workspace {
                     .size
                     .to_logical(output.current_scale().integer_scale()),
             );
-            return window;
+        })
+    }
+
+    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+        self.remove_floating_window(surface)
+            .or(self.remove_tiling_window(surface))
+    }
+
+    pub fn move_window_to_floating(&mut self, surface: &WlSurface) {
+        if let Some(mut mapped) = self.remove_tiling_window(surface) {
+            mapped.floating = true;
+            self.add_floating_window(mapped);
         }
-        None
+    }
+
+    pub fn move_window_to_tiling(&mut self, surface: &WlSurface) {
+        if let Some(mut mapped) = self.remove_floating_window(surface) {
+            mapped.floating = false;
+            self.add_tiling_window(mapped);
+        }
+    }
+
+    pub fn toggle_window_floating(&mut self, surface: &WlSurface) {
+        if let Some(mut mapped) = self.remove_window(surface) {
+            mapped.floating = !mapped.floating;
+            println!("{}", mapped.floating);
+            if mapped.floating {
+                self.add_floating_window(mapped);
+            } else {
+                self.add_tiling_window(mapped);
+            }
+        }
     }
 }

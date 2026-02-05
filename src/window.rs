@@ -19,7 +19,7 @@ impl WaylandState {
         self.monitors
             .get_monitor_mut()
             .get_active_workspace()
-            .add_window(MappedWindow::new(window.clone()));
+            .add_tiling_window(MappedWindow::new(window.clone(), false));
         self.focus_window(
             window.toplevel().unwrap().wl_surface(),
             Some(SERIAL_COUNTER.next_serial()),
@@ -101,13 +101,15 @@ pub enum UnmappedWindowConfigurationState {
 pub struct MappedWindow {
     pub inner: Window,
     pub location: Point<i32, Logical>,
+    pub floating: bool,
 }
 
 impl MappedWindow {
-    pub fn new(window: Window) -> Self {
+    pub fn new(window: Window, floating: bool) -> Self {
         Self {
             inner: window,
             location: (0, 0).into(),
+            floating,
         }
     }
 

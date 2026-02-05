@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bitflags::bitflags;
 use smithay::{
-    backend::input::{Event, InputBackend, KeyboardKeyEvent},
+    backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
     input::keyboard::{FilterResult, Keysym},
     utils::SERIAL_COUNTER,
 };
@@ -30,6 +30,7 @@ pub struct KeyBinding {
 pub enum KeyAction {
     SwitchWorkspace { name: u8 },
     MoveToWorkspace { name: u8, focus: bool },
+    ToggleFloating,
 }
 
 // TEMP
@@ -69,6 +70,13 @@ pub fn test_key_bindings() -> KeyBindings {
                 focus: true,
             },
         ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::space,
+            },
+            KeyAction::ToggleFloating,
+        ),
     ])
 }
 
@@ -107,8 +115,9 @@ impl WaylandState {
                     modifiers: data.key_modifiers,
                     key,
                 };
+                let pressed = event.state() == KeyState::Pressed;
 
-                if let Some(action) = data.key_config.bindings.get(&bind) {
+                if pressed && let Some(action) = data.key_config.bindings.get(&bind) {
                     use KeyAction::*;
                     match action {
                         SwitchWorkspace { name } => {
@@ -121,6 +130,14 @@ impl WaylandState {
                                     *name,
                                     *focus,
                                 );
+                            }
+                        }
+                        ToggleFloating => {
+                            if let Some(wl_surface) = keyboard.current_focus() {
+                                data.monitors
+                                    .get_monitor_mut()
+                                    .get_active_workspace()
+                                    .toggle_window_floating(&wl_surface);
                             }
                         }
                     }
