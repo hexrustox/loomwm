@@ -16,119 +16,6 @@ mod tile;
 
 pub use tile::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
-pub struct Monitor {
-    output: Rc<RefCell<Output>>,
-
-    active_workspace: u8,
-    workspaces: Vec<(u8, Workspace)>,
-
-    layouts: Rc<LayoutSet>,
-    layout_name: Rc<str>,
-}
-
-impl Monitor {
-    pub fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
-        let output = Rc::new(RefCell::new(output));
-        Self {
-            output: output.clone(),
-            active_workspace: 1,
-            workspaces: vec![(1, Workspace::new(output, layouts.clone(), &layout_name))],
-            layouts,
-            layout_name,
-        }
-    }
-
-    pub fn get_active_workspace(&mut self) -> &mut Workspace {
-        for (name, workspace) in self.workspaces.iter_mut() {
-            if *name == self.active_workspace {
-                return workspace;
-            }
-        }
-        panic!("No active workspace")
-    }
-
-    fn insert_workspace(&mut self, index: usize, name: u8) {
-        self.workspaces.insert(
-            index,
-            (
-                name,
-                Workspace::new(self.output.clone(), self.layouts.clone(), &self.layout_name),
-            ),
-        );
-    }
-
-    fn add_workspace(&mut self, name: u8) -> &mut Workspace {
-        match self.workspaces.binary_search_by_key(&name, |(n, _)| *n) {
-            Ok(_) => panic!("Workspace {name} exist"),
-            Err(idx) => {
-                self.insert_workspace(idx, name);
-                &mut self.workspaces[idx].1
-            }
-        }
-    }
-
-    fn find_workspace(&self, name: u8) -> Option<&Workspace> {
-        self.workspaces
-            .iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, w)| w)
-    }
-
-    pub fn switch_workspace(&mut self, name: u8) {
-        if self.find_workspace(name).is_none() {
-            self.add_workspace(name);
-        }
-        self.active_workspace = name;
-    }
-
-    pub fn move_window_to_workspace(&mut self, surface: &WlSurface, name: u8, focus: bool) {
-        let Some(mapped) = self.remove_window(surface) else {
-            return;
-        };
-
-        let idx = {
-            match self.workspaces.binary_search_by_key(&name, |(n, _)| *n) {
-                Ok(idx) => idx,
-                Err(idx) => {
-                    self.insert_workspace(idx, name);
-                    idx
-                }
-            }
-        };
-        self.workspaces[idx].1.add_tiling_window(mapped);
-        if focus {
-            self.switch_workspace(name);
-        }
-    }
-
-    pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
-        for workspace in self.workspaces.iter().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.find_window(surface) {
-                return window;
-            }
-        }
-        None
-    }
-
-    pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.find_window_mut(surface) {
-                return window;
-            }
-        }
-        None
-    }
-
-    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.remove_window(surface) {
-                return window;
-            }
-        }
-        None
-    }
-}
-
 #[derive(Debug)]
 pub struct Workspace {
     output: Rc<RefCell<Output>>,
@@ -137,7 +24,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn new(output: Rc<RefCell<Output>>, layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+    pub fn new(output: Rc<RefCell<Output>>, layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
         Self {
             output,
             tiling: TileTree::new(layouts, layout_name),
@@ -165,24 +52,10 @@ impl Workspace {
         }
     }
 
-    pub fn render_elements<R: Renderer + ImportAll>(
-        &mut self,
-        renderer: &mut R,
-        scale: Scale<f64>,
-    ) -> Vec<WaylandSurfaceRenderElement<R>>
-    where
-        <R as RendererSuper>::TextureId: Clone + 'static,
-    {
-        self.windows_iter()
-            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
-            .collect()
-    }
-
-    pub fn mapped_window_under<T: Into<Point<f64, Logical>>>(
+    pub fn mapped_window_under(
         &self,
-        point: T,
+        point: Point<f64, Logical>,
     ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
-        let point = point.into();
         self.windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
             if mapped
@@ -272,5 +145,18 @@ impl Workspace {
                 self.add_tiling_window(mapped);
             }
         }
+    }
+
+    pub fn render_elements<R: Renderer + ImportAll>(
+        &mut self,
+        renderer: &mut R,
+        scale: Scale<f64>,
+    ) -> Vec<WaylandSurfaceRenderElement<R>>
+    where
+        <R as RendererSuper>::TextureId: Clone + 'static,
+    {
+        self.windows_iter()
+            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
+            .collect()
     }
 }

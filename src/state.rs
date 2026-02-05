@@ -22,7 +22,7 @@ use crate::{
     config::{Config, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::KeyModifiers,
-    monitor::{Monitors, workspace::LayoutSet},
+    monitor::{LayoutSet, Monitors},
     window::UnmappedWindow,
 };
 

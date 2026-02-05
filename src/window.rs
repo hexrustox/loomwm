@@ -4,71 +4,11 @@ use smithay::{
         element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
     },
     desktop::Window,
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, SERIAL_COUNTER, Scale, Serial},
+    utils::{Logical, Point, Scale},
     wayland::shell::xdg::ToplevelSurface,
 };
 
-use crate::{
-    monitor::workspace::{TileTreeWindow, TileTreeWindowId},
-    state::WaylandState,
-};
-
-impl WaylandState {
-    pub fn new_window(&mut self, window: Window) {
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace()
-            .add_tiling_window(MappedWindow::new(window.clone(), false));
-        self.focus_window(
-            window.toplevel().unwrap().wl_surface(),
-            Some(SERIAL_COUNTER.next_serial()),
-        );
-
-        let key = window.toplevel().unwrap().wl_surface().clone();
-        self.unmapped_windows
-            .insert(key, UnmappedWindow::new(window));
-    }
-
-    pub fn find_mapped_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
-        self.monitors.get_monitor().find_window(surface)
-    }
-
-    pub fn find_mapped_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.monitors.get_monitor_mut().find_window_mut(surface)
-    }
-
-    pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.monitors.get_monitor_mut().remove_window(surface)
-    }
-
-    pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
-        let keyboard = self.seat.get_keyboard().unwrap();
-        let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
-
-        if let Some(surface) = keyboard.current_focus()
-            && let Some(mapped) = self.find_mapped_window(&surface)
-        {
-            mapped.inner.set_activated(false);
-            mapped.toplevel().send_pending_configure();
-        }
-        keyboard.set_focus(self, Some(surface.clone()), serial);
-
-        if let Some(mapped) = self
-            .monitors
-            .get_monitor_mut()
-            .get_active_workspace()
-            .find_window(surface)
-        {
-            mapped.inner.set_activated(true);
-            mapped.toplevel().send_pending_configure();
-        }
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace()
-            .raise_floating_window(surface);
-    }
-}
+use crate::monitor::{TileTreeWindow, TileTreeWindowId};
 
 pub struct UnmappedWindow {
     pub inner: Window,
@@ -76,7 +16,7 @@ pub struct UnmappedWindow {
 }
 
 impl UnmappedWindow {
-    fn new(window: Window) -> Self {
+    pub fn new(window: Window) -> Self {
         Self {
             inner: window,
             state: UnmappedWindowConfigurationState::NotConfigured,

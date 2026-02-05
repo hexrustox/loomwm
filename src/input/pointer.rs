@@ -3,13 +3,9 @@ use std::collections::HashMap;
 use evdev::KeyCode;
 use smithay::{
     backend::input::{ButtonState, InputBackend, PointerButtonEvent, PointerMotionAbsoluteEvent},
-    desktop::WindowSurfaceType,
     input::pointer::{ButtonEvent, Focus, GrabStartData as PointerGrabStartData, MotionEvent},
-    reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::protocol::wl_surface::WlSurface,
-    },
-    utils::{Logical, Point, Rectangle, SERIAL_COUNTER},
+    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
+    utils::{Rectangle, SERIAL_COUNTER},
 };
 
 use crate::{
@@ -96,11 +92,7 @@ impl WaylandState {
         let button_state = event.state();
 
         if button_state == ButtonState::Pressed
-            && let Some((mapped, _)) = self
-                .monitors
-                .get_monitor_mut()
-                .get_active_workspace()
-                .mapped_window_under(pointer.current_location())
+            && let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
         {
             let surface = mapped.toplevel().wl_surface().clone();
             self.focus_window(&surface, Some(serial));
@@ -115,11 +107,7 @@ impl WaylandState {
             use PointerActions::*;
             match action {
                 Move => {
-                    if let Some((mapped, _)) = self
-                        .monitors
-                        .get_monitor_mut()
-                        .get_active_workspace()
-                        .mapped_window_under(pointer.current_location())
+                    if let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
                         let location = pointer.current_location();
@@ -137,11 +125,7 @@ impl WaylandState {
                     }
                 }
                 Resize => {
-                    if let Some((mapped, _)) = self
-                        .monitors
-                        .get_monitor_mut()
-                        .get_active_workspace()
-                        .mapped_window_under(pointer.current_location())
+                    if let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
                         let location = pointer.current_location();
@@ -230,21 +214,5 @@ impl WaylandState {
             },
         );
         pointer.frame(self);
-    }
-
-    pub fn surface_under(
-        &mut self,
-        pos: Point<f64, Logical>,
-    ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace()
-            .mapped_window_under(pos)
-            .and_then(|(window, location)| {
-                window
-                    .inner
-                    .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-                    .map(|(s, p)| (s, (p + location).to_f64()))
-            })
     }
 }

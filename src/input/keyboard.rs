@@ -121,23 +121,16 @@ impl WaylandState {
                     use KeyAction::*;
                     match action {
                         SwitchWorkspace { name } => {
-                            data.monitors.get_monitor_mut().switch_workspace(*name);
+                            data.switch_workspace(*name);
                         }
                         MoveToWorkspace { name, focus } => {
                             if let Some(wl_surface) = keyboard.current_focus() {
-                                data.monitors.get_monitor_mut().move_window_to_workspace(
-                                    &wl_surface,
-                                    *name,
-                                    *focus,
-                                );
+                                data.move_window_to_workspace(&wl_surface, *name, *focus);
                             }
                         }
                         ToggleFloating => {
                             if let Some(wl_surface) = keyboard.current_focus() {
-                                data.monitors
-                                    .get_monitor_mut()
-                                    .get_active_workspace()
-                                    .toggle_window_floating(&wl_surface);
+                                data.toggle_window_floating(&wl_surface);
                             }
                         }
                     }
