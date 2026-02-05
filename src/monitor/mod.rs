@@ -13,7 +13,7 @@ use smithay::{
 use crate::{
     monitor::workspace::Workspace,
     state::WaylandState,
-    window::{MappedWindow, UnmappedWindow},
+    window::{MappedWindow, UnmappedWindow, rule::WindowFloat},
 };
 
 pub use workspace::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
@@ -183,10 +183,10 @@ impl WaylandState {
         &mut self,
         window: Window,
         focus: bool,
-        floating: bool,
+        floating: Option<WindowFloat>,
         workspace: Option<u8>,
     ) {
-        let mapped = MappedWindow::new(window, floating);
+        let mapped = MappedWindow::new(window, floating.is_some());
         let wl_surface = if focus {
             Some(mapped.toplevel().wl_surface().clone())
         } else {
@@ -197,8 +197,8 @@ impl WaylandState {
             self.switch_workspace(name);
         }
         let workspace = self.monitors.get_monitor_mut().get_active_workspace_mut();
-        if floating {
-            workspace.add_floating_window(mapped);
+        if floating.is_some() {
+            workspace.add_floating_window(mapped, floating);
         } else {
             workspace.add_tiling_window(mapped);
         }

@@ -10,7 +10,7 @@ use smithay::{
 
 use crate::{
     monitor::{TileTreeWindow, TileTreeWindowId},
-    window::rule::WindowLocation,
+    window::rule::WindowFloat,
 };
 
 pub mod rule;
@@ -43,8 +43,7 @@ impl UnmappedWindow {
 pub enum UnmappedWindowConfigurationState {
     Configured {
         focus: bool,
-        floating: bool,
-        location: Option<WindowLocation>,
+        floating: Option<WindowFloat>,
         workspace: Option<u8>,
     },
     NotConfigured,
@@ -107,8 +106,9 @@ impl TileTreeWindow for MappedWindow {
     fn update_size(&mut self, size: smithay::utils::Size<i32, Logical>) {
         // TODO
         self.toplevel().with_pending_state(|state| {
+            // println!("{size:?}");
             // state.size = Some(size);
-            state.size = Some((1000, 800).into());
+            // state.size = Some((887, 1094).into());
         });
         self.toplevel().send_pending_configure();
     }

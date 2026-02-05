@@ -53,7 +53,6 @@ impl CompositorHandler for WaylandState {
                 let UnmappedWindowConfigurationState::Configured {
                     focus,
                     floating,
-                    location,
                     workspace,
                 } = unmapped.state
                 else {
@@ -85,8 +84,7 @@ impl CompositorHandler for WaylandState {
 
                 let config_state = UnmappedWindowConfigurationState::Configured {
                     focus: properties.focus,
-                    floating: properties.float.is_some(),
-                    location: properties.float.and_then(|f| f.location),
+                    floating: properties.float,
                     workspace: properties.workspace,
                 };
 

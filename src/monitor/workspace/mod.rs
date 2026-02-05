@@ -10,7 +10,13 @@ use smithay::{
     utils::{Logical, Point, Scale},
 };
 
-use crate::{monitor::workspace::tile::TileTree, window::MappedWindow};
+use crate::{
+    monitor::workspace::tile::TileTree,
+    window::{
+        MappedWindow,
+        rule::{WindowFloat, WindowLocation},
+    },
+};
 
 mod tile;
 
@@ -32,7 +38,27 @@ impl Workspace {
         }
     }
 
-    pub fn add_floating_window(&mut self, mapped: MappedWindow) {
+    pub fn add_floating_window(&mut self, mut mapped: MappedWindow, floating: Option<WindowFloat>) {
+        if let Some(data) = floating {
+            mapped.toplevel().with_pending_state(|state| {
+                state.size = data.size.map(|x| x.into());
+            });
+            mapped.toplevel().send_pending_configure();
+
+            if let Some(WindowLocation::Location(x, y)) = data.location {
+                mapped.location = (x, y).into();
+            } else if let Some(WindowLocation::Center) = data.location {
+                let output = self.output.borrow();
+                let (w, h) = output
+                    .current_mode()
+                    .unwrap()
+                    .size
+                    .to_logical(output.current_scale().integer_scale())
+                    .into();
+                let size = data.size.unwrap_or(mapped.inner.geometry().size.into());
+                mapped.location = (w / 2 - (size.0 / 2), h / 2 - (size.1 / 2)).into();
+            }
+        }
         self.floating.insert(0, mapped);
     }
 
@@ -118,7 +144,7 @@ impl Workspace {
         if let Some(mut mapped) = self.remove_window(surface) {
             mapped.floating = !mapped.floating;
             if mapped.floating {
-                self.add_floating_window(mapped);
+                self.add_floating_window(mapped, None);
             } else {
                 self.add_tiling_window(mapped);
             }
