@@ -31,6 +31,7 @@ pub enum KeyAction {
     SwitchWorkspace { name: u8 },
     MoveToWorkspace { name: u8, focus: bool },
     ToggleFloating,
+    CloseWindow,
     Execute(Vec<String>),
 }
 
@@ -84,6 +85,13 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::t,
             },
             KeyAction::Execute(vec!["alacritty".to_string()]),
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::q,
+            },
+            KeyAction::CloseWindow,
         ),
     ])
 }
@@ -139,6 +147,13 @@ impl WaylandState {
                         ToggleFloating => {
                             if let Some(wl_surface) = keyboard.current_focus() {
                                 data.toggle_window_floating(&wl_surface);
+                            }
+                        }
+                        CloseWindow => {
+                            if let Some(wl_surface) = keyboard.current_focus()
+                                && let Some(mapped) = data.find_mapped_window(&wl_surface)
+                            {
+                                mapped.toplevel().send_close();
                             }
                         }
                         Execute(args) => {
