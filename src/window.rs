@@ -53,12 +53,12 @@ impl MappedWindow {
         }
     }
 
-    pub fn render_location(&self) -> Point<i32, Logical> {
-        self.location - self.inner.geometry().loc
-    }
-
     pub fn toplevel(&self) -> &ToplevelSurface {
         self.inner.toplevel().expect("No X11 support")
+    }
+
+    pub fn render_location(&self) -> Point<i32, Logical> {
+        self.location - self.inner.geometry().loc
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(

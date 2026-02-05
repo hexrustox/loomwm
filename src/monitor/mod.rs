@@ -51,7 +51,7 @@ pub struct Monitor {
 }
 
 impl Monitor {
-    pub fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
+    fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
         let output = Rc::new(RefCell::new(output));
         Self {
             output: output.clone(),
@@ -62,7 +62,7 @@ impl Monitor {
         }
     }
 
-    pub fn get_active_workspace(&self) -> &Workspace {
+    fn get_active_workspace(&self) -> &Workspace {
         for (name, workspace) in self.workspaces.iter() {
             if *name == self.active_workspace {
                 return workspace;
@@ -71,7 +71,7 @@ impl Monitor {
         panic!("No active workspace")
     }
 
-    pub fn get_active_workspace_mut(&mut self) -> &mut Workspace {
+    fn get_active_workspace_mut(&mut self) -> &mut Workspace {
         for (name, workspace) in self.workspaces.iter_mut() {
             if *name == self.active_workspace {
                 return workspace;
@@ -107,14 +107,14 @@ impl Monitor {
             .map(|(_, w)| w)
     }
 
-    pub fn switch_workspace(&mut self, name: u8) {
+    fn switch_workspace(&mut self, name: u8) {
         if self.find_workspace(name).is_none() {
             self.add_workspace(name);
         }
         self.active_workspace = name;
     }
 
-    pub fn move_window_to_workspace(&mut self, surface: &WlSurface, name: u8, focus: bool) {
+    fn move_window_to_workspace(&mut self, surface: &WlSurface, name: u8, focus: bool) {
         let Some(mapped) = self.remove_window(surface) else {
             return;
         };
@@ -134,7 +134,7 @@ impl Monitor {
         }
     }
 
-    pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
+    fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         for workspace in self.workspaces.iter().map(|(_, w)| w) {
             if let window @ Some(_) = workspace.find_window(surface) {
                 return window;
@@ -143,7 +143,7 @@ impl Monitor {
         None
     }
 
-    pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
+    fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
             if let window @ Some(_) = workspace.find_window_mut(surface) {
                 return window;
@@ -152,7 +152,7 @@ impl Monitor {
         None
     }
 
-    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+    fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
             if let window @ Some(_) = workspace.remove_window(surface) {
                 return window;
@@ -163,6 +163,16 @@ impl Monitor {
 }
 
 impl WaylandState {
+    pub fn switch_workspace(&mut self, name: u8) {
+        self.monitors.get_monitor_mut().switch_workspace(name);
+    }
+
+    pub fn move_window_to_workspace(&mut self, wl_surface: &WlSurface, name: u8, focus: bool) {
+        self.monitors
+            .get_monitor_mut()
+            .move_window_to_workspace(wl_surface, name, focus);
+    }
+
     pub fn new_window(&mut self, window: Window) {
         self.monitors
             .get_monitor_mut()
@@ -217,23 +227,6 @@ impl WaylandState {
             .raise_floating_window(surface);
     }
 
-    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        self.monitors
-            .get_monitor()
-            .get_active_workspace()
-            .windows_iter()
-    }
-
-    pub fn switch_workspace(&mut self, name: u8) {
-        self.monitors.get_monitor_mut().switch_workspace(name);
-    }
-
-    pub fn move_window_to_workspace(&mut self, wl_surface: &WlSurface, name: u8, focus: bool) {
-        self.monitors
-            .get_monitor_mut()
-            .move_window_to_workspace(wl_surface, name, focus);
-    }
-
     pub fn toggle_window_floating(&mut self, wl_surface: &WlSurface) {
         self.monitors
             .get_monitor_mut()
@@ -249,6 +242,13 @@ impl WaylandState {
             .get_monitor()
             .get_active_workspace()
             .mapped_window_under(point)
+    }
+
+    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        self.monitors
+            .get_monitor()
+            .get_active_workspace()
+            .windows_iter()
     }
 
     pub fn surface_under(

@@ -52,27 +52,6 @@ impl Workspace {
         }
     }
 
-    pub fn mapped_window_under(
-        &self,
-        point: Point<f64, Logical>,
-    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
-        self.windows_iter().find_map(|mapped| {
-            let render_location = mapped.render_location();
-            if mapped
-                .inner
-                .is_in_input_region(&(point - render_location.to_f64()))
-            {
-                Some((mapped, render_location))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        self.floating.iter().chain(self.tiling.windows_iter())
-    }
-
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
             .find(|w| w.toplevel().wl_surface() == surface)
@@ -145,6 +124,27 @@ impl Workspace {
                 self.add_tiling_window(mapped);
             }
         }
+    }
+
+    pub fn mapped_window_under(
+        &self,
+        point: Point<f64, Logical>,
+    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
+        self.windows_iter().find_map(|mapped| {
+            let render_location = mapped.render_location();
+            if mapped
+                .inner
+                .is_in_input_region(&(point - render_location.to_f64()))
+            {
+                Some((mapped, render_location))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        self.floating.iter().chain(self.tiling.windows_iter())
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
