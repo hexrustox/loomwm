@@ -105,6 +105,7 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn update_size(&mut self, size: smithay::utils::Size<i32, Logical>) {
+        // TODO
         self.toplevel().with_pending_state(|state| {
             // state.size = Some(size);
             state.size = Some((1000, 800).into());

@@ -279,7 +279,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.insert(window)
     }
 
-    // IMPROVE
+    // TODO
     pub fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
         struct RemoveTile {
             parent: TileId,

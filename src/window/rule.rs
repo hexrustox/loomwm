@@ -22,7 +22,6 @@ struct WindowRule {
 impl WindowRule {
     fn is_match(&self, candidate: &WindowRuleMatch) -> bool {
         self.matches.iter().any(|target| {
-            // REFACTOR
             match (&target.app_id, &candidate.app_id) {
                 (Some(re), Some(hay)) => {
                     let re = Regex::new(re).unwrap();
