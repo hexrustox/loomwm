@@ -8,7 +8,12 @@ use smithay::{
     wayland::shell::xdg::ToplevelSurface,
 };
 
-use crate::monitor::{TileTreeWindow, TileTreeWindowId};
+use crate::{
+    monitor::{TileTreeWindow, TileTreeWindowId},
+    window::rule::WindowLocation,
+};
+
+pub mod rule;
 
 pub struct UnmappedWindow {
     pub inner: Window,
@@ -28,12 +33,20 @@ impl UnmappedWindow {
     }
 
     pub fn configured(&self) -> bool {
-        matches!(self.state, UnmappedWindowConfigurationState::Configured)
+        matches!(
+            self.state,
+            UnmappedWindowConfigurationState::Configured { .. }
+        )
     }
 }
 
 pub enum UnmappedWindowConfigurationState {
-    Configured,
+    Configured {
+        focus: bool,
+        floating: bool,
+        location: Option<WindowLocation>,
+        workspace: Option<u8>,
+    },
     NotConfigured,
 }
 
@@ -93,7 +106,8 @@ impl TileTreeWindow for MappedWindow {
 
     fn update_size(&mut self, size: smithay::utils::Size<i32, Logical>) {
         self.toplevel().with_pending_state(|state| {
-            state.size = Some(size);
+            // state.size = Some(size);
+            state.size = Some((1000, 800).into());
         });
         self.toplevel().send_pending_configure();
     }

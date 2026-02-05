@@ -100,24 +100,23 @@ impl Workspace {
             .or(self.remove_tiling_window(surface))
     }
 
-    pub fn move_window_to_floating(&mut self, surface: &WlSurface) {
-        if let Some(mut mapped) = self.remove_tiling_window(surface) {
-            mapped.floating = true;
-            self.add_floating_window(mapped);
-        }
-    }
+    // pub fn move_window_to_floating(&mut self, surface: &WlSurface) {
+    //     if let Some(mut mapped) = self.remove_tiling_window(surface) {
+    //         mapped.floating = true;
+    //         self.add_floating_window(mapped);
+    //     }
+    // }
 
-    pub fn move_window_to_tiling(&mut self, surface: &WlSurface) {
-        if let Some(mut mapped) = self.remove_floating_window(surface) {
-            mapped.floating = false;
-            self.add_tiling_window(mapped);
-        }
-    }
+    // pub fn move_window_to_tiling(&mut self, surface: &WlSurface) {
+    //     if let Some(mut mapped) = self.remove_floating_window(surface) {
+    //         mapped.floating = false;
+    //         self.add_tiling_window(mapped);
+    //     }
+    // }
 
     pub fn toggle_window_floating(&mut self, surface: &WlSurface) {
         if let Some(mut mapped) = self.remove_window(surface) {
             mapped.floating = !mapped.floating;
-            println!("{}", mapped.floating);
             if mapped.floating {
                 self.add_floating_window(mapped);
             } else {

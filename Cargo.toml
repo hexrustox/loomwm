@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1.0.100"
 bitflags = "2.10.0"
 evdev = "0.13.2"
+regex = "1.12.3"
 slotmap = "1.1.1"
 smithay = { version = "0.7.0", default-features = false, features = [
   "backend_winit",

@@ -12,15 +12,18 @@ use smithay::{
         buffer::BufferHandler,
         compositor::{
             CompositorClientState, CompositorHandler, CompositorState, get_parent,
-            is_sync_subsurface,
+            is_sync_subsurface, with_states,
         },
+        shell::xdg::XdgToplevelSurfaceData,
         shm::{ShmHandler, ShmState},
     },
 };
 
 use crate::{
-    input::resize_grab, state::WaylandState, utils::is_mapped,
-    window::UnmappedWindowConfigurationState,
+    input::resize_grab,
+    state::WaylandState,
+    utils::is_mapped,
+    window::{UnmappedWindowConfigurationState, rule::WindowRuleMatch},
 };
 
 impl CompositorHandler for WaylandState {
@@ -46,9 +49,47 @@ impl CompositorHandler for WaylandState {
         if let Entry::Occupied(entry) = self.unmapped_windows.entry(root_surface) {
             if is_mapped(surface) {
                 let unmapped = entry.remove();
-                unmapped.inner.on_commit();
+                let window = unmapped.inner;
+                let UnmappedWindowConfigurationState::Configured {
+                    focus,
+                    floating,
+                    location,
+                    workspace,
+                } = unmapped.state
+                else {
+                    unreachable!()
+                };
+
+                window.on_commit();
+                self.add_window(window, focus, floating, workspace);
             } else {
                 let unmapped = entry.get();
+
+                let (app_id, title) = with_states(surface, |surface_data| {
+                    if let Some(attrs) = surface_data.data_map.get::<XdgToplevelSurfaceData>() {
+                        let attrs = attrs.lock().unwrap();
+                        (attrs.app_id.clone(), attrs.title.clone())
+                    } else {
+                        (None, None)
+                    }
+                });
+
+                let candidate = WindowRuleMatch {
+                    app_id,
+                    title,
+                    focus: None,
+                    float: None,
+                    workspace: None,
+                };
+                let properties = self.window_rules.get_config(&candidate);
+
+                let config_state = UnmappedWindowConfigurationState::Configured {
+                    focus: properties.focus,
+                    floating: properties.float.is_some(),
+                    location: properties.float.and_then(|f| f.location),
+                    workspace: properties.workspace,
+                };
+
                 let toplevel = unmapped.toplevel().clone();
                 self.event_loop.insert_idle(move |state| {
                     if !toplevel.alive() {
@@ -61,10 +102,9 @@ impl CompositorHandler for WaylandState {
                         .get_mut(toplevel.wl_surface())
                         && !unmapped.configured()
                     {
-                        unmapped.state = UnmappedWindowConfigurationState::Configured;
-                        // TEMP
-                        toplevel.with_pending_state(|s| {
-                           s.decoration_mode = Some(smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode::ClientSide) ;
+                        unmapped.state = config_state;
+                        toplevel.with_pending_state(|state| {
+                            state.decoration_mode = Some(properties.decoration.into());
                         });
                         toplevel.send_configure();
                     }

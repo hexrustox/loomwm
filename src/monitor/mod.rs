@@ -174,18 +174,38 @@ impl WaylandState {
     }
 
     pub fn new_window(&mut self, window: Window) {
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace_mut()
-            .add_tiling_window(MappedWindow::new(window.clone(), false));
-        self.focus_window(
-            window.toplevel().unwrap().wl_surface(),
-            Some(SERIAL_COUNTER.next_serial()),
-        );
-
-        let key = window.toplevel().unwrap().wl_surface().clone();
+        let wl_surface = window.toplevel().unwrap().wl_surface().clone();
         self.unmapped_windows
-            .insert(key, UnmappedWindow::new(window));
+            .insert(wl_surface, UnmappedWindow::new(window));
+    }
+
+    pub fn add_window(
+        &mut self,
+        window: Window,
+        focus: bool,
+        floating: bool,
+        workspace: Option<u8>,
+    ) {
+        let mapped = MappedWindow::new(window, floating);
+        let wl_surface = if focus {
+            Some(mapped.toplevel().wl_surface().clone())
+        } else {
+            None
+        };
+
+        if let Some(name) = workspace {
+            self.switch_workspace(name);
+        }
+        let workspace = self.monitors.get_monitor_mut().get_active_workspace_mut();
+        if floating {
+            workspace.add_floating_window(mapped);
+        } else {
+            workspace.add_tiling_window(mapped);
+        }
+
+        if let Some(wl_surface) = wl_surface {
+            self.focus_window(&wl_surface, None);
+        }
     }
 
     pub fn find_mapped_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {

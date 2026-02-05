@@ -23,7 +23,7 @@ use crate::{
     handlers::ClientState,
     input::KeyModifiers,
     monitor::{LayoutSet, Monitors},
-    window::UnmappedWindow,
+    window::{UnmappedWindow, rule::WindowRules},
 };
 
 pub struct WaylandState {
@@ -50,6 +50,7 @@ pub struct WaylandState {
 
     pub key_modifiers: KeyModifiers,
 
+    pub window_rules: WindowRules,
     pub layout_set: Rc<LayoutSet>,
     pub default_layout: Rc<str>,
     pub key_config: KeyConfig,
@@ -137,6 +138,7 @@ impl WaylandState {
 
             key_modifiers: KeyModifiers::empty(),
 
+            window_rules: config.window_rules,
             layout_set: Rc::new(config.layout.layouts),
             default_layout: Rc::from(config.layout.default),
             key_config: config.key,
