@@ -31,7 +31,7 @@ impl Monitors {
             .push(Monitor::new(output, layouts, layout_name));
     }
 
-    // TEMP
+    // TODO
     fn get_monitor(&self) -> &Monitor {
         self.monitors.last().unwrap()
     }

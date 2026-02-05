@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, process::Command};
 
 use bitflags::bitflags;
 use smithay::{
@@ -31,6 +31,7 @@ pub enum KeyAction {
     SwitchWorkspace { name: u8 },
     MoveToWorkspace { name: u8, focus: bool },
     ToggleFloating,
+    Execute(Vec<String>),
 }
 
 // TEMP
@@ -76,6 +77,13 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::space,
             },
             KeyAction::ToggleFloating,
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::t,
+            },
+            KeyAction::Execute(vec!["alacritty".to_string()]),
         ),
     ])
 }
@@ -131,6 +139,12 @@ impl WaylandState {
                         ToggleFloating => {
                             if let Some(wl_surface) = keyboard.current_focus() {
                                 data.toggle_window_floating(&wl_surface);
+                            }
+                        }
+                        Execute(args) => {
+                            if let Some(program) = args.first() {
+                                // TODO
+                                let _ = Command::new(program).args(args.iter().skip(1)).spawn();
                             }
                         }
                     }
