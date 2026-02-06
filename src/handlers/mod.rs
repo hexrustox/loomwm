@@ -33,7 +33,7 @@ impl SeatHandler for WaylandState {
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
         let dh = &self.display_handle;
-        let client = focused.and_then(|s| dh.get_client(s.id()).ok());
+        let client = focused.and_then(|surface| dh.get_client(surface.id()).ok());
         set_data_device_focus(dh, seat, client.clone());
     }
 }

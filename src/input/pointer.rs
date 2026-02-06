@@ -64,19 +64,19 @@ impl WaylandState {
         let output = self.space.outputs().next().unwrap();
         let output_geo = self.space.output_geometry(output).unwrap();
 
-        let pos = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
+        let location = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
 
         let serial = SERIAL_COUNTER.next_serial();
 
         let pointer = self.seat.get_pointer().unwrap();
 
-        let under = self.surface_under(pos);
+        let under = self.surface_under(location);
 
         pointer.motion(
             self,
             under,
             &MotionEvent {
-                location: pos,
+                location,
                 serial,
                 time: event.time_msec(),
             },
@@ -118,7 +118,7 @@ impl WaylandState {
                         };
                         let grab = MoveGrab::new(
                             start_data,
-                            mapped.inner.clone(),
+                            mapped.window.clone(),
                             mapped.location.to_f64(),
                         );
                         pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -156,47 +156,50 @@ impl WaylandState {
                                 }
                             }
                             ResizeLocation::Edge => {
-                                let size = mapped.inner.geometry().size;
-                                let x1 = size.w as f64 * 1. / 3.;
-                                let x2 = size.w as f64 * 2. / 3.;
-                                let y1 = size.h as f64 * 1. / 3.;
-                                let y2 = size.h as f64 * 2. / 3.;
+                                let size = mapped.window.geometry().size;
+                                let width_1_3 = size.w as f64 * 1. / 3.;
+                                let width_2_3 = size.w as f64 * 2. / 3.;
+                                let height_1_3 = size.h as f64 * 1. / 3.;
+                                let height_2_3 = size.h as f64 * 2. / 3.;
 
-                                let loc = mapped.location.to_f64();
-                                let x = location.x - loc.x;
-                                let y = location.y - loc.y;
+                                let window_location = mapped.location.to_f64();
+                                let x = location.x - window_location.x;
+                                let y = location.y - window_location.y;
 
-                                if x <= x1 {
-                                    if y <= y1 {
+                                if x <= width_1_3 {
+                                    if y <= height_1_3 {
                                         ResizeEdge::TOP_LEFT
-                                    } else if y <= y2 {
+                                    } else if y <= height_2_3 {
                                         ResizeEdge::LEFT
                                     } else {
                                         ResizeEdge::BOTTOM_LEFT
                                     }
-                                } else if x <= x2 {
-                                    if y <= y1 {
+                                } else if x <= width_2_3 {
+                                    if y <= height_1_3 {
                                         ResizeEdge::TOP
-                                    } else if y <= y2 {
+                                    } else if y <= height_2_3 {
                                         return;
                                     } else {
                                         ResizeEdge::BOTTOM
                                     }
-                                } else if y <= y1 {
-                                    ResizeEdge::TOP_RIGHT
-                                } else if y <= y2 {
-                                    ResizeEdge::RIGHT
                                 } else {
-                                    ResizeEdge::BOTTOM_RIGHT
+                                    // #[allow(clippy::collapsible_else_if)]
+                                    if y <= height_1_3 {
+                                        ResizeEdge::TOP_RIGHT
+                                    } else if y <= height_2_3 {
+                                        ResizeEdge::RIGHT
+                                    } else {
+                                        ResizeEdge::BOTTOM_RIGHT
+                                    }
                                 }
                             }
                         };
 
                         let grab = ResizeGrab::new(
                             start_data,
-                            mapped.inner.clone(),
+                            mapped.window.clone(),
                             edge,
-                            Rectangle::new(mapped.location, mapped.inner.geometry().size),
+                            Rectangle::new(mapped.location, mapped.window.geometry().size),
                         );
                         pointer.set_grab(self, grab, serial, Focus::Clear);
                     }

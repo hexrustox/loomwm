@@ -49,7 +49,7 @@ impl CompositorHandler for WaylandState {
         if let Entry::Occupied(entry) = self.unmapped_windows.entry(root_surface) {
             if is_mapped(surface) {
                 let unmapped = entry.remove();
-                let window = unmapped.inner;
+                let window = unmapped.window;
                 let UnmappedWindowConfigurationState::Configured {
                     focus,
                     floating,
@@ -109,7 +109,7 @@ impl CompositorHandler for WaylandState {
                 });
             }
         } else if let Some(mapped) = self.find_mapped_window_mut(surface) {
-            mapped.inner.on_commit();
+            mapped.window.on_commit();
             resize_grab::handle_commit(mapped);
 
             mapped.render = true;
@@ -128,7 +128,7 @@ pub struct ClientState {
 impl ClientData for ClientState {}
 
 impl BufferHandler for WaylandState {
-    fn buffer_destroyed(&mut self, buffer: &WlBuffer) {}
+    fn buffer_destroyed(&mut self, _buffer: &WlBuffer) {}
 }
 
 impl ShmHandler for WaylandState {

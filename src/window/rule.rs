@@ -7,8 +7,8 @@ impl WindowRules {
     pub fn get_config(&self, candidate: &WindowRuleMatch) -> WindowProperties {
         self.0
             .iter()
-            .find(|r| r.is_match(candidate))
-            .map(|r| r.properties.clone())
+            .find(|rule| rule.is_match(candidate))
+            .map(|rule| rule.properties.clone())
             .unwrap_or_default()
     }
 }

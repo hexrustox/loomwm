@@ -140,18 +140,18 @@ impl WaylandState {
                             data.switch_workspace(*name);
                         }
                         MoveToWorkspace { name, focus } => {
-                            if let Some(wl_surface) = keyboard.current_focus() {
-                                data.move_window_to_workspace(&wl_surface, *name, *focus);
+                            if let Some(surface) = keyboard.current_focus() {
+                                data.move_window_to_workspace(&surface, *name, *focus);
                             }
                         }
                         ToggleFloating => {
-                            if let Some(wl_surface) = keyboard.current_focus() {
-                                data.toggle_window_floating(&wl_surface);
+                            if let Some(surface) = keyboard.current_focus() {
+                                data.toggle_window_floating(&surface);
                             }
                         }
                         CloseWindow => {
-                            if let Some(wl_surface) = keyboard.current_focus()
-                                && let Some(mapped) = data.find_mapped_window(&wl_surface)
+                            if let Some(surface) = keyboard.current_focus()
+                                && let Some(mapped) = data.find_mapped_window(&surface)
                             {
                                 mapped.toplevel().send_close();
                             }

@@ -29,26 +29,26 @@ impl XdgShellHandler for WaylandState {
         &mut self.xdg_shell_state
     }
 
-    fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        let window = Window::new_wayland_window(surface);
+    fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
+        let window = Window::new_wayland_window(toplevel);
         self.new_window(window);
     }
 
-    fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {}
+    fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
 
     fn grab(
         &mut self,
-        surface: smithay::wayland::shell::xdg::PopupSurface,
-        seat: smithay::reexports::wayland_server::protocol::wl_seat::WlSeat,
-        serial: smithay::utils::Serial,
+        _surface: smithay::wayland::shell::xdg::PopupSurface,
+        _seat: smithay::reexports::wayland_server::protocol::wl_seat::WlSeat,
+        _serial: smithay::utils::Serial,
     ) {
     }
 
     fn reposition_request(
         &mut self,
-        surface: smithay::wayland::shell::xdg::PopupSurface,
-        positioner: PositionerState,
-        token: u32,
+        _surface: smithay::wayland::shell::xdg::PopupSurface,
+        _positioner: PositionerState,
+        _token: u32,
     ) {
     }
 
@@ -62,7 +62,9 @@ impl XdgShellHandler for WaylandState {
 
             let window = self.find_mapped_window(wl_surface);
             if let Some(MappedWindow {
-                inner, location, ..
+                window: inner,
+                location,
+                ..
             }) = window
             {
                 let grab = MoveGrab::new(start_data, inner.clone(), location.to_f64());
@@ -73,31 +75,31 @@ impl XdgShellHandler for WaylandState {
 
     fn resize_request(
         &mut self,
-        surface: ToplevelSurface,
+        toplevel: ToplevelSurface,
         seat: smithay::reexports::wayland_server::protocol::wl_seat::WlSeat,
         serial: Serial,
         edges: smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,
     ) {
         let seat = Seat::from_resource(&seat).unwrap();
 
-        let wl_surface = surface.wl_surface();
+        let surface = toplevel.wl_surface();
 
-        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
+        if let Some(start_data) = check_grab(&seat, surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let mapped = self.find_mapped_window(surface.wl_surface()).unwrap();
+            let mapped = self.find_mapped_window(surface).unwrap();
             let initial_window_location = mapped.location;
-            let initial_window_size = mapped.inner.geometry().size;
+            let initial_window_size = mapped.window.geometry().size;
 
-            surface.with_pending_state(|state| {
+            toplevel.with_pending_state(|state| {
                 state.states.set(xdg_toplevel::State::Resizing);
             });
 
-            surface.send_pending_configure();
+            toplevel.send_pending_configure();
 
             let grab = ResizeGrab::new(
                 start_data,
-                mapped.inner.clone(),
+                mapped.window.clone(),
                 edges.into(),
                 Rectangle::new(initial_window_location, initial_window_size),
             );
@@ -106,8 +108,8 @@ impl XdgShellHandler for WaylandState {
         }
     }
 
-    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        self.remove_mapped_window(surface.wl_surface());
+    fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
+        self.remove_mapped_window(toplevel.wl_surface());
     }
 }
 

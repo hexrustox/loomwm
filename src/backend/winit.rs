@@ -73,9 +73,12 @@ impl Winit {
                     };
 
                     if let Ok(render_output) = result {
-                        backend.submit(render_output.damage.map(|v| &**v)).unwrap();
-                        state.compositor.windows_iter().for_each(|w| {
-                            w.inner
+                        backend
+                            .submit(render_output.damage.map(|damage| &**damage))
+                            .unwrap();
+                        state.compositor.windows_iter().for_each(|mapped| {
+                            mapped
+                                .window
                                 .send_frame(output, get_monotonic_time(), None, |_, _| {
                                     Some(output.clone())
                                 });

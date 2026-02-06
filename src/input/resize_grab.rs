@@ -85,7 +85,6 @@ impl PointerGrab<WaylandState> for ResizeGrab {
         _focus: Option<(WlSurface, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
-        // While the grab is active, no client has pointer focus
         handle.motion(data, None, event);
 
         let mut delta = event.location - self.start_data.location;
@@ -163,7 +162,6 @@ impl PointerGrab<WaylandState> for ResizeGrab {
         handle.button(data, event);
 
         if !handle.current_pressed().contains(&self.start_data.button) {
-            // No more buttons are pressed, release the grab.
             handle.unset_grab(self, data, event.serial, event.time, true);
 
             let xdg = self.window.toplevel().unwrap();
@@ -285,13 +283,10 @@ enum ResizeSurfaceState {
     Idle,
     Resizing {
         edges: ResizeEdge,
-        /// The initial window size and location.
         initial_rect: Rectangle<i32, Logical>,
     },
-    /// Resize is done, we are now waiting for last commit, to do the final move
     WaitingForLastCommit {
         edges: ResizeEdge,
-        /// The initial window size and location.
         initial_rect: Rectangle<i32, Logical>,
     },
 }
@@ -319,7 +314,6 @@ impl ResizeSurfaceState {
                 edges,
                 initial_rect,
             } => {
-                // The resize is done, let's go back to idle
                 *self = Self::Idle;
 
                 Some((edges, initial_rect))
@@ -331,15 +325,13 @@ impl ResizeSurfaceState {
 
 pub fn handle_commit(mapped: &mut MappedWindow) -> Option<()> {
     let mut window_loc = mapped.location;
-    let geometry = mapped.inner.geometry();
+    let geometry = mapped.window.geometry();
 
     let new_loc: Point<Option<i32>, Logical> =
         ResizeSurfaceState::with(mapped.toplevel().wl_surface(), |state| {
             state
                 .commit()
                 .and_then(|(edges, initial_rect)| {
-                    // If the window is being resized by top or left, its location must be adjusted
-                    // accordingly.
                     edges.intersects(ResizeEdge::TOP_LEFT).then(|| {
                         let new_x = edges.intersects(ResizeEdge::LEFT).then_some(
                             initial_rect.loc.x + (initial_rect.size.w - geometry.size.w),
@@ -363,7 +355,6 @@ pub fn handle_commit(mapped: &mut MappedWindow) -> Option<()> {
     }
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
-        // If TOP or LEFT side of the window got resized, we have to move it
         mapped.location = window_loc;
     }
 

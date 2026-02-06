@@ -40,7 +40,6 @@ impl PointerGrab<WaylandState> for MoveGrab {
         _focus: Option<(WlSurface, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
-        // While the grab is active, no client has pointer focus
         handle.motion(data, None, event);
 
         let delta = event.location - self.start_data.location;
@@ -71,7 +70,6 @@ impl PointerGrab<WaylandState> for MoveGrab {
         handle.button(data, event);
 
         if !handle.current_pressed().contains(&self.start_data.button) {
-            // No more buttons are pressed, release the grab.
             handle.unset_grab(self, data, event.serial, event.time, true);
         }
     }

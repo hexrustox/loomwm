@@ -167,16 +167,16 @@ impl WaylandState {
         self.monitors.get_monitor_mut().switch_workspace(name);
     }
 
-    pub fn move_window_to_workspace(&mut self, wl_surface: &WlSurface, name: u8, focus: bool) {
+    pub fn move_window_to_workspace(&mut self, surface: &WlSurface, name: u8, focus: bool) {
         self.monitors
             .get_monitor_mut()
-            .move_window_to_workspace(wl_surface, name, focus);
+            .move_window_to_workspace(surface, name, focus);
     }
 
     pub fn new_window(&mut self, window: Window) {
-        let wl_surface = window.toplevel().unwrap().wl_surface().clone();
+        let surface = window.toplevel().unwrap().wl_surface().clone();
         self.unmapped_windows
-            .insert(wl_surface, UnmappedWindow::new(window));
+            .insert(surface, UnmappedWindow::new(window));
     }
 
     pub fn add_window(
@@ -187,7 +187,7 @@ impl WaylandState {
         workspace: Option<u8>,
     ) {
         let mapped = MappedWindow::new(window, floating.is_some());
-        let wl_surface = if focus {
+        let surface = if focus {
             Some(mapped.toplevel().wl_surface().clone())
         } else {
             None
@@ -203,8 +203,8 @@ impl WaylandState {
             workspace.add_tiling_window(mapped);
         }
 
-        if let Some(wl_surface) = wl_surface {
-            self.focus_window(&wl_surface, None);
+        if let Some(surface) = surface {
+            self.focus_window(&surface, None);
         }
     }
 
@@ -227,7 +227,7 @@ impl WaylandState {
         if let Some(surface) = keyboard.current_focus()
             && let Some(mapped) = self.find_mapped_window(&surface)
         {
-            mapped.inner.set_activated(false);
+            mapped.window.set_activated(false);
             mapped.toplevel().send_pending_configure();
         }
         keyboard.set_focus(self, Some(surface.clone()), serial);
@@ -238,7 +238,7 @@ impl WaylandState {
             .get_active_workspace_mut()
             .find_window(surface)
         {
-            mapped.inner.set_activated(true);
+            mapped.window.set_activated(true);
             mapped.toplevel().send_pending_configure();
         }
         self.monitors
@@ -247,11 +247,11 @@ impl WaylandState {
             .raise_floating_window(surface);
     }
 
-    pub fn toggle_window_floating(&mut self, wl_surface: &WlSurface) {
+    pub fn toggle_window_floating(&mut self, surface: &WlSurface) {
         self.monitors
             .get_monitor_mut()
             .get_active_workspace_mut()
-            .toggle_window_floating(wl_surface);
+            .toggle_window_floating(surface);
     }
 
     pub fn mapped_window_under(
@@ -278,7 +278,7 @@ impl WaylandState {
         self.mapped_window_under(point)
             .and_then(|(window, location)| {
                 window
-                    .inner
+                    .window
                     .surface_under(point - location.to_f64(), WindowSurfaceType::ALL)
                     .map(|(s, p)| (s, (p + location).to_f64()))
             })

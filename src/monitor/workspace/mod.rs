@@ -41,7 +41,7 @@ impl Workspace {
     pub fn add_floating_window(&mut self, mut mapped: MappedWindow, floating: Option<WindowFloat>) {
         if let Some(data) = floating {
             mapped.toplevel().with_pending_state(|state| {
-                state.size = data.size.map(|x| x.into());
+                state.size = data.size.map(|size| size.into());
             });
             mapped.toplevel().send_pending_configure();
 
@@ -55,7 +55,7 @@ impl Workspace {
                     .size
                     .to_logical(output.current_scale().integer_scale())
                     .into();
-                let size = data.size.unwrap_or(mapped.inner.geometry().size.into());
+                let size = data.size.unwrap_or(mapped.window.geometry().size.into());
                 mapped.location = (w / 2 - (size.0 / 2), h / 2 - (size.1 / 2)).into();
             }
         }
@@ -80,13 +80,13 @@ impl Workspace {
 
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
-            .find(|w| w.toplevel().wl_surface() == surface)
+            .find(|mapped| mapped.toplevel().wl_surface() == surface)
     }
 
     pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         self.floating
             .iter_mut()
-            .find(|w| w.toplevel().wl_surface() == surface)
+            .find(|mapped| mapped.toplevel().wl_surface() == surface)
             .or(self.tiling.find_window_mut(surface))
     }
 
@@ -158,7 +158,7 @@ impl Workspace {
         self.windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
             if mapped
-                .inner
+                .window
                 .is_in_input_region(&(point - render_location.to_f64()))
             {
                 Some((mapped, render_location))

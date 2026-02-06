@@ -16,20 +16,20 @@ use crate::{
 pub mod rule;
 
 pub struct UnmappedWindow {
-    pub inner: Window,
+    pub window: Window,
     pub state: UnmappedWindowConfigurationState,
 }
 
 impl UnmappedWindow {
     pub fn new(window: Window) -> Self {
         Self {
-            inner: window,
+            window,
             state: UnmappedWindowConfigurationState::NotConfigured,
         }
     }
 
     pub fn toplevel(&self) -> &ToplevelSurface {
-        self.inner.toplevel().expect("No X11 support")
+        self.window.toplevel().expect("No X11 support")
     }
 
     pub fn configured(&self) -> bool {
@@ -51,7 +51,7 @@ pub enum UnmappedWindowConfigurationState {
 
 #[derive(Debug)]
 pub struct MappedWindow {
-    pub inner: Window,
+    pub window: Window,
     pub location: Point<i32, Logical>,
     pub floating: bool,
     pub render: bool,
@@ -60,7 +60,7 @@ pub struct MappedWindow {
 impl MappedWindow {
     pub fn new(window: Window, floating: bool) -> Self {
         Self {
-            inner: window,
+            window,
             location: (0, 0).into(),
             floating,
             render: false,
@@ -68,11 +68,11 @@ impl MappedWindow {
     }
 
     pub fn toplevel(&self) -> &ToplevelSurface {
-        self.inner.toplevel().expect("No X11 support")
+        self.window.toplevel().expect("No X11 support")
     }
 
     pub fn render_location(&self) -> Point<i32, Logical> {
-        self.location - self.inner.geometry().loc
+        self.location - self.window.geometry().loc
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
@@ -83,12 +83,12 @@ impl MappedWindow {
     where
         <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
     {
-        let loc = self.render_location().to_physical_precise_round(scale);
-        self.inner.render_elements(renderer, loc, scale, 1.0)
+        let location = self.render_location().to_physical_precise_round(scale);
+        self.window.render_elements(renderer, location, scale, 1.0)
     }
 
     pub fn center_location(&self) -> Point<i32, Logical> {
-        let size = self.inner.geometry().size;
+        let size = self.window.geometry().size;
         Point::new(size.w / 2 + self.location.x, size.h / 2 + self.location.y)
     }
 }
@@ -96,7 +96,7 @@ impl MappedWindow {
 impl TileTreeWindow for MappedWindow {
     fn match_id(&self, id: TileTreeWindowId) -> bool {
         match id {
-            TileTreeWindowId::WlSurface(wl_surface) => self.toplevel().wl_surface() == wl_surface,
+            TileTreeWindowId::WlSurface(surface) => self.toplevel().wl_surface() == surface,
             _ => false,
         }
     }
