@@ -112,6 +112,7 @@ impl CompositorHandler for WaylandState {
             mapped.inner.on_commit();
             resize_grab::handle_commit(mapped);
 
+            mapped.render = true;
             // assume window surface will not be unmapped
         }
 

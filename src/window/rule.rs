@@ -123,10 +123,10 @@ pub fn test_window_rules() -> WindowRules {
             ..Default::default()
         }],
         properties: WindowProperties {
-            float: Some(WindowFloat {
-                location: Some(WindowLocation::Center),
-                size: None,
-            }),
+            // float: Some(WindowFloat {
+            //     location: Some(WindowLocation::Center),
+            //     size: None,
+            // }),
             ..Default::default()
         },
     }])

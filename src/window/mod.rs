@@ -54,6 +54,7 @@ pub struct MappedWindow {
     pub inner: Window,
     pub location: Point<i32, Logical>,
     pub floating: bool,
+    pub render: bool,
 }
 
 impl MappedWindow {
@@ -62,6 +63,7 @@ impl MappedWindow {
             inner: window,
             location: (0, 0).into(),
             floating,
+            render: false,
         }
     }
 
@@ -106,9 +108,7 @@ impl TileTreeWindow for MappedWindow {
     fn update_size(&mut self, size: smithay::utils::Size<i32, Logical>) {
         // TODO
         self.toplevel().with_pending_state(|state| {
-            // println!("{size:?}");
-            // state.size = Some(size);
-            // state.size = Some((887, 1094).into());
+            state.size = Some(size);
         });
         self.toplevel().send_pending_configure();
     }
