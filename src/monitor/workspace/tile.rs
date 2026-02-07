@@ -26,7 +26,7 @@ where
 #[derive(Debug)]
 struct Tile<T> {
     kind: TileKind<T>,
-    size: TileSize,
+    ratio: TileRatio,
     parent: Option<TileId>,
 }
 
@@ -69,11 +69,11 @@ impl<T> Tile<T> {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
-struct TileSize(u32);
+struct TileRatio(f64);
 
-impl Default for TileSize {
+impl Default for TileRatio {
     fn default() -> Self {
-        Self(1)
+        Self(1.0)
     }
 }
 
@@ -162,7 +162,7 @@ struct LayoutSchema {
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
-    size: TileSize,
+    size: TileRatio,
 }
 
 #[derive(Debug, Clone)]
@@ -202,7 +202,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 orientation: layout.orientation,
                 tiles: Vec::new(),
             },
-            size: TileSize(1),
+            ratio: TileRatio::default(),
             parent: None,
         };
         let root = arena.insert(new_tile);
@@ -237,7 +237,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                             orientation: layout.orientation,
                             tiles: Vec::new(),
                         },
-                        size: node.size,
+                        ratio: node.size,
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
@@ -254,7 +254,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 } else {
                     let new_tile = Tile {
                         kind: TileKind::Window(window),
-                        size: node.size,
+                        ratio: node.size,
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
@@ -397,7 +397,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
             let total_weight = tiles
                 .iter()
-                .fold(0, |acc, tile_id| acc + arena[*tile_id].size.0);
+                .fold(0.0, |acc, tile_id| acc + arena[*tile_id].ratio.0);
 
             let mut lengths = partition(
                 match split {
@@ -417,7 +417,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 let tile = &arena[*tile_id];
                 let new_area = {
                     let len = lengths
-                        .drain(lengths.len().saturating_sub(tile.size.0 as usize)..)
+                        .drain(lengths.len().saturating_sub(tile.ratio.0 as usize)..)
                         .sum();
                     match split {
                         TileSplit::Vertical => Size::new(len, area.h),
@@ -611,7 +611,7 @@ mod tests {
                     None => return false,
                 };
 
-                if tile_a.size != tile_b.size {
+                if tile_a.ratio != tile_b.ratio {
                     return false;
                 }
 
@@ -697,7 +697,7 @@ mod tests {
                         window.location.y,
                         window.size.w,
                         window.size.h,
-                        tile.size.0
+                        tile.ratio.0
                     ));
                 }
                 TileKind::Layout {
@@ -707,7 +707,7 @@ mod tests {
                 } => {
                     f.push_str(&format!(
                         "Layout [{:?}, {:?}, size: {}]\n",
-                        split, orientation, tile.size.0
+                        split, orientation, tile.ratio.0
                     ));
 
                     let new_prefix = format!(
@@ -735,9 +735,9 @@ mod tests {
         // ==================== Window Option Parsing ====================
         (@window_opt $window:ident $size:ident) => {};
 
-        (@window_opt $window:ident $size:ident ratio: $ratio:expr $(, $($rest:tt)*)?) => {
-            $size = $ratio;
-            $(tile_tree!(@window_opt $window $size $($rest)*);)?
+        (@window_opt $window:ident $ratio:ident ratio: $r:expr $(, $($rest:tt)*)?) => {
+            $ratio = $r;
+            $(tile_tree!(@window_opt $window $ratio $($rest)*);)?
         };
 
         (@window_opt $window:ident $size:ident id: $id:expr $(, $($rest:tt)*)?) => {
@@ -754,8 +754,8 @@ mod tests {
         // ==================== Layout Option Parsing ====================
         (@layout_opt $split:ident $orient:ident $size:ident) => {};
 
-        (@layout_opt $split:ident $orient:ident $size:ident ratio: $ratio:expr $(, $($rest:tt)*)?) => {
-            $size = $ratio;
+        (@layout_opt $split:ident $orient:ident $ratio:ident ratio: $r:expr $(, $($rest:tt)*)?) => {
+            $ratio = $r;
             $(tile_tree!(@layout_opt $split $orient $size $($rest)*);)?
         };
 
@@ -774,11 +774,11 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut window = TestWindow::new();
             #[allow(unused_mut, unused_assignments)]
-            let mut size = 1;
-            tile_tree!(@window_opt window size $($opts)*);
+            let mut ratio = 1;
+            tile_tree!(@window_opt window ratio $($opts)*);
             $arena.insert(Tile {
                 kind: TileKind::Window(window),
-                size: TileSize(size),
+                ratio: TileRatio(ratio as f64),
                 parent: $parent,
             })
         }};
@@ -790,8 +790,8 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut orient = TileOrientation::default();
             #[allow(unused_mut, unused_assignments)]
-            let mut size = 1;
-            tile_tree!(@layout_opt split orient size $($opts)*);
+            let mut ratio = 1;
+            tile_tree!(@layout_opt split orient ratio $($opts)*);
 
             let layout_id = $arena.insert(Tile {
                 kind: TileKind::Layout {
@@ -799,7 +799,7 @@ mod tests {
                     orientation: orient,
                     tiles: Vec::new(),
                 },
-                size: TileSize(size),
+                ratio: TileRatio(ratio as f64),
                 parent: $parent,
             });
 
@@ -838,7 +838,7 @@ mod tests {
             $(node!(@opt $layout $repeat $ratio $($rest)*);)?
         };
         (@opt $layout:ident $repeat:ident $ratio:ident ratio: $s:expr $(, $($rest:tt)*)?) => {
-            $ratio = TileSize($s);
+            $ratio = $s;
             $(node!(@opt $layout $repeat $ratio $($rest)*);)?
         };
 
@@ -849,9 +849,9 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut repeat = TileRepeat(1);
             #[allow(unused_mut, unused_assignments)]
-            let mut size = TileSize(1);
-            $(node!(@opt layout repeat size $($opts)*);)?
-            LayoutNode { layout, repeat, size }
+            let mut ratio = 1;
+            $(node!(@opt layout repeat ratio $($opts)*);)?
+            LayoutNode { layout, repeat, size: TileRatio(ratio as f64) }
         }};
 
         // Entry point for Layout Reference Node
@@ -861,9 +861,9 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut repeat = TileRepeat(1);
             #[allow(unused_mut, unused_assignments)]
-            let mut size = TileSize(1);
-            $(node!(@opt layout repeat size $($opts)*);)?
-            LayoutNode { layout, repeat, size }
+            let mut ratio = 1;
+            $(node!(@opt layout repeat ratio $($opts)*);)?
+            LayoutNode { layout, repeat, size: TileRatio(ratio as f64) }
         }};
     }
 
