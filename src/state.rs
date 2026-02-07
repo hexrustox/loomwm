@@ -18,7 +18,7 @@ use smithay::{
 };
 
 use crate::{
-    AppState,
+    CompositorData,
     config::{Config, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::KeyModifiers,
@@ -30,7 +30,7 @@ pub struct WaylandState {
     pub socket_name: OsString,
     pub display_handle: DisplayHandle,
 
-    pub event_loop: LoopHandle<'static, AppState>,
+    pub event_loop: LoopHandle<'static, CompositorData>,
     pub event_signal: LoopSignal,
 
     pub compositor_state: CompositorState,
@@ -59,7 +59,7 @@ pub struct WaylandState {
 
 impl WaylandState {
     pub fn new(
-        event_loop: LoopHandle<'static, AppState>,
+        event_loop: LoopHandle<'static, CompositorData>,
         event_signal: LoopSignal,
         display: Display<Self>,
         config: Config,

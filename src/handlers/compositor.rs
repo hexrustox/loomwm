@@ -81,12 +81,12 @@ impl CompositorHandler for WaylandState {
                     let config_state = UnmappedWindowState::Configured(properties);
 
                     let toplevel = unmapped.toplevel().clone();
-                    self.event_loop.insert_idle(move |state| {
+                    self.event_loop.insert_idle(move |data| {
                         if !toplevel.alive() {
                             return;
                         }
 
-                        if let Some(unmapped) = state
+                        if let Some(unmapped) = data
                             .compositor
                             .unmapped_windows
                             .get_mut(toplevel.wl_surface())

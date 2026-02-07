@@ -8,7 +8,7 @@ use smithay::{
     utils::Transform,
 };
 
-use crate::{AppState, state::WaylandState, utils::get_monotonic_time};
+use crate::{CompositorData, state::WaylandState, utils::get_monotonic_time};
 
 pub struct Winit {
     output: Output,
@@ -17,7 +17,7 @@ pub struct Winit {
 }
 
 impl Winit {
-    pub fn new(event_loop: LoopHandle<AppState>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(event_loop: LoopHandle<CompositorData>) -> Result<Self, Box<dyn std::error::Error>> {
         let (backend, winit) = winit::init()?;
 
         let output = Output::new(
@@ -39,20 +39,20 @@ impl Winit {
 
         let damage_tracker = OutputDamageTracker::from_output(&output);
 
-        event_loop.insert_source(winit, |event, _, state| {
+        event_loop.insert_source(winit, |event, _, data| {
             use WinitEvent::*;
             match event {
                 Resized { size, .. } => {
-                    state.backend.winit().unwrap().output.change_current_state(
+                    data.backend.winit().unwrap().output.change_current_state(
                         Some(Mode { size, refresh: 60 }),
                         None,
                         None,
                         None,
                     );
                 }
-                Input(event) => state.compositor.process_input_event(event),
+                Input(event) => data.compositor.process_input_event(event),
                 Redraw => {
-                    let winit = &mut state.backend.winit().unwrap();
+                    let winit = &mut data.backend.winit().unwrap();
                     let output = &winit.output;
                     let backend = &mut winit.backend;
 
@@ -61,7 +61,7 @@ impl Winit {
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
                         let scale = output.current_scale().fractional_scale().into();
-                        let elements = state.compositor.render_elements(renderer, scale);
+                        let elements = data.compositor.render_elements(renderer, scale);
 
                         winit.damage_tracker.render_output(
                             renderer,
@@ -76,7 +76,7 @@ impl Winit {
                         backend
                             .submit(render_output.damage.map(|damage| &**damage))
                             .unwrap();
-                        state.compositor.active_windows_iter().for_each(|mapped| {
+                        data.compositor.active_windows_iter().for_each(|mapped| {
                             mapped
                                 .window
                                 .send_frame(output, get_monotonic_time(), None, |_, _| {
@@ -85,14 +85,14 @@ impl Winit {
                         });
                     }
 
-                    state.compositor.popups.cleanup();
-                    let _ = state.compositor.display_handle.flush_clients();
+                    data.compositor.popups.cleanup();
+                    let _ = data.compositor.display_handle.flush_clients();
 
                     backend.window().request_redraw();
                 }
                 Focus(_) => {}
                 CloseRequested => {
-                    state.compositor.event_signal.stop();
+                    data.compositor.event_signal.stop();
                 }
             }
         })?;
