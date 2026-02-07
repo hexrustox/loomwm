@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use smithay::{
     backend::renderer::{
@@ -44,7 +44,7 @@ impl Monitors {
 }
 
 pub struct Monitor {
-    output: Rc<RefCell<Output>>,
+    output: Output,
 
     active_workspace: u8,
     workspaces: Vec<(u8, Workspace)>,
@@ -55,7 +55,6 @@ pub struct Monitor {
 
 impl Monitor {
     fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
-        let output = Rc::new(RefCell::new(output));
         Self {
             output: output.clone(),
             active_workspace: 1,
@@ -209,12 +208,7 @@ impl WaylandState {
                     mapped.location = (x, y).into();
                 }
                 Some(WindowLocation::Center) => {
-                    let output = workspace.output.borrow();
-                    let output_size = output
-                        .current_mode()
-                        .unwrap()
-                        .size
-                        .to_logical(output.current_scale().integer_scale());
+                    let output_size = &workspace.output_size();
                     let window_size = float
                         .size
                         .map(|(w, h)| (w, h).into())

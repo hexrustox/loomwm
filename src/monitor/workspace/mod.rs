@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use smithay::{
     backend::renderer::{
@@ -7,7 +7,7 @@ use smithay::{
     desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Scale},
+    utils::{Logical, Point, Scale, Size},
 };
 
 use crate::{monitor::workspace::tile::TileTree, window::MappedWindow};
@@ -18,13 +18,13 @@ pub use tile::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
 #[derive(Debug)]
 pub struct Workspace {
-    pub output: Rc<RefCell<Output>>,
+    output: Output,
     tiling: TileTree,
     floating: Vec<MappedWindow>,
 }
 
 impl Workspace {
-    pub fn new(output: Rc<RefCell<Output>>, layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+    pub fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
         Self {
             output,
             tiling: TileTree::new(layouts, layout_name),
@@ -40,7 +40,7 @@ impl Workspace {
         if let Some(mapped) = self.tiling.insert(mapped) {
             self.floating.insert(0, mapped);
         } else {
-            let output = self.output.borrow();
+            let output = &self.output;
             self.tiling.update_toplevel_state(
                 output.current_location(),
                 output
@@ -83,7 +83,7 @@ impl Workspace {
 
     fn remove_tiling_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         self.tiling.remove(surface).inspect(|_| {
-            let output = self.output.borrow();
+            let output = &self.output;
             self.tiling.update_toplevel_state(
                 output.current_location(),
                 output
@@ -144,6 +144,15 @@ impl Workspace {
 
     pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
         self.floating.iter().chain(self.tiling.windows_iter())
+    }
+
+    pub fn output_size(&self) -> Size<i32, Logical> {
+        let output = &self.output;
+        output
+            .current_mode()
+            .unwrap()
+            .size
+            .to_logical(output.current_scale().integer_scale())
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
