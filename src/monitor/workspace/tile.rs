@@ -69,7 +69,7 @@ impl<T> Tile<T> {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
-struct TileRatio(f64);
+pub struct TileRatio(f64);
 
 impl Default for TileRatio {
     fn default() -> Self {
@@ -162,7 +162,7 @@ struct LayoutSchema {
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
-    size: TileRatio,
+    ratio: TileRatio,
 }
 
 #[derive(Debug, Clone)]
@@ -218,12 +218,10 @@ impl<T: TileTreeWindow> TileTree<T> {
     }
 
     pub fn insert(&mut self, window: T) -> Option<T> {
-        println!("fn");
         let Some(trace) = self.layout_trace.last_mut() else {
             return Some(window);
         };
 
-        println!("{:?}", trace);
         let layout = self.layouts.get(&trace.layout);
         for i in trace.index..layout.nodes.len() {
             trace.index = i;
@@ -237,7 +235,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                             orientation: layout.orientation,
                             tiles: Vec::new(),
                         },
-                        ratio: node.size,
+                        ratio: node.ratio,
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
@@ -249,12 +247,11 @@ impl<T: TileTreeWindow> TileTree<T> {
                     self.current_tile = tile_id;
                     trace.repeat += 1;
                     self.layout_trace.push(TileLayoutTrace::new(layout_name));
-                    println!("nested");
                     self.insert(window);
                 } else {
                     let new_tile = Tile {
                         kind: TileKind::Window(window),
-                        ratio: node.size,
+                        ratio: node.ratio,
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
@@ -851,7 +848,7 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut ratio = 1;
             $(node!(@opt layout repeat ratio $($opts)*);)?
-            LayoutNode { layout, repeat, size: TileRatio(ratio as f64) }
+            LayoutNode { layout, repeat, ratio: TileRatio(ratio as f64) }
         }};
 
         // Entry point for Layout Reference Node
@@ -863,7 +860,7 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut ratio = 1;
             $(node!(@opt layout repeat ratio $($opts)*);)?
-            LayoutNode { layout, repeat, size: TileRatio(ratio as f64) }
+            LayoutNode { layout, repeat, ratio: TileRatio(ratio as f64) }
         }};
     }
 
