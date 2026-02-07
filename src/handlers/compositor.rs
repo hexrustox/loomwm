@@ -46,74 +46,88 @@ impl CompositorHandler for WaylandState {
             root_surface = parent;
         }
 
-        if let Entry::Occupied(entry) = self.unmapped_windows.entry(root_surface) {
-            if is_mapped(surface) {
-                let unmapped = entry.remove();
-                let window = unmapped.window;
-                let UnmappedWindowConfigurationState::Configured {
-                    focus,
-                    floating,
-                    workspace,
-                } = unmapped.state
-                else {
-                    unreachable!()
-                };
+        if surface == &root_surface {
+            if let Entry::Occupied(entry) = self.unmapped_windows.entry(surface.clone()) {
+                if is_mapped(surface) {
+                    let unmapped = entry.remove();
+                    let window = unmapped.window;
+                    let UnmappedWindowConfigurationState::Configured {
+                        focus,
+                        floating,
+                        workspace,
+                    } = unmapped.state
+                    else {
+                        unreachable!()
+                    };
 
-                window.on_commit();
-                self.add_window(window, focus, floating, workspace);
-            } else {
-                let unmapped = entry.get();
+                    window.on_commit();
+                    self.add_window(window, focus, floating, workspace);
+                } else {
+                    let unmapped = entry.get();
 
-                let (app_id, title) = with_states(surface, |surface_data| {
-                    if let Some(attrs) = surface_data.data_map.get::<XdgToplevelSurfaceData>() {
-                        let attrs = attrs.lock().unwrap();
-                        (attrs.app_id.clone(), attrs.title.clone())
-                    } else {
-                        (None, None)
-                    }
-                });
+                    let (app_id, title) = with_states(surface, |surface_data| {
+                        if let Some(attrs) = surface_data.data_map.get::<XdgToplevelSurfaceData>() {
+                            let attrs = attrs.lock().unwrap();
+                            (attrs.app_id.clone(), attrs.title.clone())
+                        } else {
+                            (None, None)
+                        }
+                    });
 
-                let candidate = WindowRuleMatch {
-                    app_id,
-                    title,
-                    focus: None,
-                    float: None,
-                    workspace: None,
-                };
-                let properties = self.window_rules.get_config(&candidate);
+                    let candidate = WindowRuleMatch {
+                        app_id,
+                        title,
+                        focus: None,
+                        float: None,
+                        workspace: None,
+                    };
+                    let properties = self.window_rules.get_config(&candidate);
 
-                let config_state = UnmappedWindowConfigurationState::Configured {
-                    focus: properties.focus,
-                    floating: properties.float,
-                    workspace: properties.workspace,
-                };
+                    let config_state = UnmappedWindowConfigurationState::Configured {
+                        focus: properties.focus,
+                        floating: properties.float,
+                        workspace: properties.workspace,
+                    };
 
-                let toplevel = unmapped.toplevel().clone();
-                self.event_loop.insert_idle(move |state| {
-                    if !toplevel.alive() {
-                        return;
-                    }
+                    let toplevel = unmapped.toplevel().clone();
+                    self.event_loop.insert_idle(move |state| {
+                        if !toplevel.alive() {
+                            return;
+                        }
 
-                    if let Some(unmapped) = state
-                        .compositor
-                        .unmapped_windows
-                        .get_mut(toplevel.wl_surface())
-                        && !unmapped.configured()
-                    {
-                        unmapped.state = config_state;
-                        toplevel.with_pending_state(|state| {
-                            state.decoration_mode = Some(properties.decoration.into());
-                        });
-                        toplevel.send_configure();
-                    }
-                });
+                        if let Some(unmapped) = state
+                            .compositor
+                            .unmapped_windows
+                            .get_mut(toplevel.wl_surface())
+                            && !unmapped.configured()
+                        {
+                            unmapped.state = config_state;
+                            toplevel.with_pending_state(|state| {
+                                state.decoration_mode = Some(properties.decoration.into());
+                            });
+                            toplevel.send_configure();
+                        }
+                    });
+                }
+
+                return;
             }
-        } else if let Some(mapped) = self.find_mapped_window_mut(surface) {
-            mapped.window.on_commit();
-            resize_grab::handle_commit(mapped);
 
-            mapped.render = true;
-            // assume window surface will not be unmapped
+            // previously-mapped root
+            if let Some(mapped) = self.find_mapped_window_mut(surface) {
+                mapped.window.on_commit();
+                resize_grab::handle_commit(mapped);
+
+                mapped.render = true;
+
+                // handle toplevel unmapped
+                return;
+            }
+        }
+
+        // non-root
+        if let Some(mapped) = self.find_mapped_window(&root_surface) {
+            mapped.window.on_commit();
         }
 
         // popup, layer shell & other surface
