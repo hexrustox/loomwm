@@ -4,12 +4,20 @@ use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_to
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
-    pub fn get_config(&self, candidate: &WindowRuleMatch) -> WindowProperties {
-        self.0
-            .iter()
-            .find(|rule| rule.is_match(candidate))
-            .map(|rule| rule.properties.clone())
-            .unwrap_or_default()
+    pub fn get_properties(&self, mut candidate: WindowRuleMatch) -> WindowProperties {
+        let mut properties = WindowProperties::default();
+        for rule in &self.0 {
+            if rule.is_match(&candidate) {
+                properties = properties.merge(rule.properties.clone());
+                candidate.focus = properties.focus;
+                if properties.float.is_some() {
+                    candidate.float = Some(true);
+                }
+                candidate.workspace = properties.workspace;
+            }
+        }
+
+        properties
     }
 }
 
@@ -57,21 +65,21 @@ impl WindowRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct WindowProperties {
-    pub decoration: WindowDecoration,
-    pub focus: bool,
+    pub decoration: Option<WindowDecoration>,
+    pub focus: Option<bool>,
     pub float: Option<WindowFloat>,
     pub workspace: Option<u8>,
 }
 
-impl Default for WindowProperties {
-    fn default() -> Self {
+impl WindowProperties {
+    fn merge(self, rhs: Self) -> Self {
         Self {
-            decoration: WindowDecoration::default(),
-            focus: true,
-            float: None,
-            workspace: None,
+            decoration: rhs.decoration.or(self.decoration),
+            focus: rhs.focus.or(self.focus),
+            float: rhs.float.or(self.float),
+            workspace: rhs.workspace.or(self.workspace),
         }
     }
 }
@@ -117,17 +125,29 @@ pub enum WindowLocation {
 
 // TEMP
 pub fn test_window_rules() -> WindowRules {
-    WindowRules(vec![WindowRule {
-        matches: vec![WindowRuleMatch {
-            // app_id: Some("Alacritty".to_string()),
-            ..Default::default()
-        }],
-        properties: WindowProperties {
-            // float: Some(WindowFloat {
-            //     location: Some(WindowLocation::Center),
-            //     size: None,
-            // }),
-            ..Default::default()
+    WindowRules(vec![
+        WindowRule {
+            matches: vec![WindowRuleMatch {
+                app_id: Some("Alacritty".to_string()),
+                ..Default::default()
+            }],
+            properties: WindowProperties {
+                float: Some(WindowFloat {
+                    location: Some(WindowLocation::Center),
+                    size: None,
+                }),
+                ..Default::default()
+            },
         },
-    }])
+        WindowRule {
+            matches: vec![WindowRuleMatch {
+                float: Some(true),
+                ..Default::default()
+            }],
+            properties: WindowProperties {
+                decoration: Some(WindowDecoration::ClientSide),
+                ..Default::default()
+            },
+        },
+    ])
 }

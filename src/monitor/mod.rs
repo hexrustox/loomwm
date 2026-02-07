@@ -13,7 +13,10 @@ use smithay::{
 use crate::{
     monitor::workspace::Workspace,
     state::WaylandState,
-    window::{MappedWindow, UnmappedWindow, rule::WindowFloat},
+    window::{
+        MappedWindow,
+        rule::{WindowLocation, WindowProperties},
+    },
 };
 
 pub use workspace::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
@@ -91,26 +94,18 @@ impl Monitor {
     }
 
     fn add_workspace(&mut self, name: u8) -> &mut Workspace {
-        match self.workspaces.binary_search_by_key(&name, |(n, _)| *n) {
-            Ok(_) => panic!("Workspace {name} exist"),
-            Err(idx) => {
-                self.insert_workspace(idx, name);
-                &mut self.workspaces[idx].1
+        let index = match self.workspaces.binary_search_by_key(&name, |(n, _)| *n) {
+            Ok(i) => i,
+            Err(i) => {
+                self.insert_workspace(i, name);
+                i
             }
-        }
-    }
-
-    fn find_workspace(&self, name: u8) -> Option<&Workspace> {
-        self.workspaces
-            .iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, w)| w)
+        };
+        &mut self.workspaces[index].1
     }
 
     fn switch_workspace(&mut self, name: u8) {
-        if self.find_workspace(name).is_none() {
-            self.add_workspace(name);
-        }
+        self.add_workspace(name);
         self.active_workspace = name;
     }
 
@@ -173,33 +168,77 @@ impl WaylandState {
             .move_window_to_workspace(surface, name, focus);
     }
 
-    pub fn new_window(&mut self, window: Window) {
-        let surface = window.toplevel().unwrap().wl_surface().clone();
-        self.unmapped_windows
-            .insert(surface, UnmappedWindow::new(window));
-    }
-
     pub fn add_window(
         &mut self,
         window: Window,
-        focus: bool,
-        floating: Option<WindowFloat>,
-        workspace: Option<u8>,
+        WindowProperties {
+            decoration,
+            focus,
+            float,
+            workspace,
+        }: WindowProperties,
     ) {
-        let mapped = MappedWindow::new(window, floating.is_some());
+        let mut mapped = MappedWindow::new(window, float.is_some());
+
+        if let Some(decoration) = decoration {
+            mapped.toplevel().with_pending_state(|state| {
+                state.decoration_mode = Some(decoration.into());
+            });
+        }
+
+        let focus = focus.unwrap_or(true);
         let surface = if focus {
             Some(mapped.toplevel().wl_surface().clone())
         } else {
             None
         };
 
-        if let Some(name) = workspace {
-            self.switch_workspace(name);
-        }
-        let workspace = self.monitors.get_monitor_mut().get_active_workspace_mut();
-        if floating.is_some() {
-            workspace.add_floating_window(mapped, floating);
+        let workspace = if let Some(name) = workspace {
+            if focus {
+                self.switch_workspace(name);
+                self.monitors.get_monitor_mut().get_active_workspace_mut()
+            } else {
+                self.monitors.get_monitor_mut().add_workspace(name)
+            }
         } else {
+            self.monitors.get_monitor_mut().get_active_workspace_mut()
+        };
+        if let Some(float) = float {
+            match float.location {
+                Some(WindowLocation::Location(x, y)) => {
+                    mapped.location = (x, y).into();
+                }
+                Some(WindowLocation::Center) => {
+                    let output = workspace.output.borrow();
+                    let output_size = output
+                        .current_mode()
+                        .unwrap()
+                        .size
+                        .to_logical(output.current_scale().integer_scale());
+                    let window_size = float
+                        .size
+                        .map(|(w, h)| (w, h).into())
+                        .unwrap_or(mapped.window.geometry().size);
+                    mapped.location = (
+                        output_size.w / 2 - window_size.w / 2,
+                        output_size.h / 2 - window_size.h / 2,
+                    )
+                        .into();
+                }
+                _ => {}
+            }
+            let size = float
+                .size
+                .map(|(w, h)| (w, h).into())
+                .unwrap_or(mapped.window.geometry().size);
+            mapped.toplevel().with_pending_state(|state| {
+                state.size = Some(size);
+            });
+
+            mapped.toplevel().send_pending_configure();
+            workspace.add_floating_window(mapped);
+        } else {
+            mapped.toplevel().send_pending_configure();
             workspace.add_tiling_window(mapped);
         }
 

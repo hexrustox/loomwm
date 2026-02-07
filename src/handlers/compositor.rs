@@ -23,7 +23,10 @@ use crate::{
     input::resize_grab,
     state::WaylandState,
     utils::is_mapped,
-    window::{UnmappedWindowConfigurationState, rule::WindowRuleMatch},
+    window::{
+        UnmappedWindowState,
+        rule::{WindowProperties, WindowRuleMatch},
+    },
 };
 
 impl CompositorHandler for WaylandState {
@@ -51,17 +54,13 @@ impl CompositorHandler for WaylandState {
                 if is_mapped(surface) {
                     let unmapped = entry.remove();
                     let window = unmapped.window;
-                    let UnmappedWindowConfigurationState::Configured {
-                        focus,
-                        floating,
-                        workspace,
-                    } = unmapped.state
-                    else {
-                        unreachable!()
+                    let properties = match unmapped.state {
+                        UnmappedWindowState::Configured(x) => x,
+                        UnmappedWindowState::NotConfigured => WindowProperties::default(),
                     };
 
                     window.on_commit();
-                    self.add_window(window, focus, floating, workspace);
+                    self.add_window(window, properties);
                 } else {
                     let unmapped = entry.get();
 
@@ -81,13 +80,9 @@ impl CompositorHandler for WaylandState {
                         float: None,
                         workspace: None,
                     };
-                    let properties = self.window_rules.get_config(&candidate);
+                    let properties = self.window_rules.get_properties(candidate);
 
-                    let config_state = UnmappedWindowConfigurationState::Configured {
-                        focus: properties.focus,
-                        floating: properties.float,
-                        workspace: properties.workspace,
-                    };
+                    let config_state = UnmappedWindowState::Configured(properties);
 
                     let toplevel = unmapped.toplevel().clone();
                     self.event_loop.insert_idle(move |state| {
@@ -102,9 +97,6 @@ impl CompositorHandler for WaylandState {
                             && !unmapped.configured()
                         {
                             unmapped.state = config_state;
-                            toplevel.with_pending_state(|state| {
-                                state.decoration_mode = Some(properties.decoration.into());
-                            });
                             toplevel.send_configure();
                         }
                     });

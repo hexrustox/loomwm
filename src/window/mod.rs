@@ -10,21 +10,21 @@ use smithay::{
 
 use crate::{
     monitor::{TileTreeWindow, TileTreeWindowId},
-    window::rule::WindowFloat,
+    window::rule::WindowProperties,
 };
 
 pub mod rule;
 
 pub struct UnmappedWindow {
     pub window: Window,
-    pub state: UnmappedWindowConfigurationState,
+    pub state: UnmappedWindowState,
 }
 
 impl UnmappedWindow {
     pub fn new(window: Window) -> Self {
         Self {
             window,
-            state: UnmappedWindowConfigurationState::NotConfigured,
+            state: UnmappedWindowState::NotConfigured,
         }
     }
 
@@ -33,19 +33,12 @@ impl UnmappedWindow {
     }
 
     pub fn configured(&self) -> bool {
-        matches!(
-            self.state,
-            UnmappedWindowConfigurationState::Configured { .. }
-        )
+        matches!(self.state, UnmappedWindowState::Configured { .. })
     }
 }
 
-pub enum UnmappedWindowConfigurationState {
-    Configured {
-        focus: bool,
-        floating: Option<WindowFloat>,
-        workspace: Option<u8>,
-    },
+pub enum UnmappedWindowState {
+    Configured(WindowProperties),
     NotConfigured,
 }
 

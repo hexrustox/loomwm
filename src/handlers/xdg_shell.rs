@@ -21,7 +21,7 @@ use smithay::{
 use crate::{
     input::{move_grab::MoveGrab, resize_grab::ResizeGrab},
     state::WaylandState,
-    window::MappedWindow,
+    window::{MappedWindow, UnmappedWindow},
 };
 
 impl XdgShellHandler for WaylandState {
@@ -31,7 +31,9 @@ impl XdgShellHandler for WaylandState {
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
         let window = Window::new_wayland_window(toplevel);
-        self.new_window(window);
+        let surface = window.toplevel().unwrap().wl_surface().clone();
+        self.unmapped_windows
+            .insert(surface, UnmappedWindow::new(window));
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
