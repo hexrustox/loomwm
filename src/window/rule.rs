@@ -1,7 +1,7 @@
 use regex::Regex;
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
 
-use crate::monitor::WorkspaceName;
+use crate::monitor::{TileRatio, WorkspaceName};
 
 #[derive(Debug)]
 pub struct WindowRules(Vec<WindowRule>);
@@ -15,7 +15,7 @@ impl WindowRules {
                 if let Some(focus) = properties.focus {
                     candidate.focus = focus;
                 }
-                if properties.float.is_some() {
+                if matches!(properties.layout, Some(WindowLayout::Float { .. })) {
                     candidate.float = true;
                 }
                 if let Some(workspace) = properties.workspace.as_ref() {
@@ -81,7 +81,7 @@ pub struct WindowRuleMatch {
 pub struct WindowProperties {
     pub decoration: Option<WindowDecoration>,
     pub focus: Option<bool>,
-    pub float: Option<WindowFloat>,
+    pub layout: Option<WindowLayout>,
     pub workspace: Option<WorkspaceName>,
 }
 
@@ -90,12 +90,13 @@ impl WindowProperties {
         Self {
             decoration: rhs.decoration.or(self.decoration),
             focus: rhs.focus.or(self.focus),
-            float: rhs.float.or(self.float),
+            layout: rhs.layout.or(self.layout),
             workspace: rhs.workspace.or(self.workspace),
         }
     }
 }
 
+#[derive(Debug)]
 pub struct WindowRuleCandidate {
     pub app_id: String,
     pub title: String,
@@ -104,10 +105,9 @@ pub struct WindowRuleCandidate {
     pub workspace: WorkspaceName,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub enum WindowDecoration {
     ClientSide,
-    #[default]
     ServerSide,
 }
 
@@ -123,9 +123,18 @@ impl From<WindowDecoration> for Mode {
 type N = i32;
 
 #[derive(Debug, Clone)]
-pub struct WindowFloat {
-    pub location: Option<WindowLocation>,
-    pub size: Option<(N, N)>,
+pub enum WindowLayout {
+    Float {
+        location: Option<WindowLocation>,
+        size: Option<(N, N)>,
+    },
+    Tile(Option<TileRatio>),
+}
+
+impl Default for WindowLayout {
+    fn default() -> Self {
+        Self::Tile(None)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -153,7 +162,7 @@ pub fn test_window_rules() -> WindowRules {
             }],
             properties: WindowProperties {
                 decoration: Some(WindowDecoration::ClientSide),
-                float: Some(WindowFloat {
+                layout: Some(WindowLayout::Float {
                     location: Some(WindowLocation::Center),
                     size: Some((800, 600)),
                 }),

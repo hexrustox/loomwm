@@ -52,11 +52,11 @@ pub struct MappedWindow {
 }
 
 impl MappedWindow {
-    pub fn new(window: Window, focus: bool, floating: bool) -> Self {
+    pub fn new(window: Window, focus: bool) -> Self {
         Self {
             window,
             focus,
-            floating,
+            floating: false,
             location: (0, 0).into(),
             render: false,
         }

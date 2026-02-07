@@ -14,7 +14,7 @@ use crate::{monitor::workspace::tile::TileTree, window::MappedWindow};
 
 mod tile;
 
-pub use tile::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
+pub use tile::{LayoutSet, TileRatio, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WorkspaceName {
@@ -59,9 +59,9 @@ impl Workspace {
         self.floating.insert(0, mapped);
     }
 
-    pub fn add_tiling_window(&mut self, mapped: MappedWindow) {
+    pub fn add_tiling_window(&mut self, mapped: MappedWindow, ratio: Option<TileRatio>) {
         self.insert_focus_queue(mapped.window.clone());
-        if let Some(mapped) = self.tiling.insert(mapped) {
+        if let Some(mapped) = self.tiling.insert(mapped, ratio) {
             self.floating.insert(0, mapped);
         } else {
             let output = &self.output;
@@ -156,31 +156,6 @@ impl Workspace {
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         self.remove_floating_window(surface)
             .or(self.remove_tiling_window(surface))
-    }
-
-    // pub fn move_window_to_floating(&mut self, surface: &WlSurface) {
-    //     if let Some(mut mapped) = self.remove_tiling_window(surface) {
-    //         mapped.floating = true;
-    //         self.add_floating_window(mapped);
-    //     }
-    // }
-
-    // pub fn move_window_to_tiling(&mut self, surface: &WlSurface) {
-    //     if let Some(mut mapped) = self.remove_floating_window(surface) {
-    //         mapped.floating = false;
-    //         self.add_tiling_window(mapped);
-    //     }
-    // }
-
-    pub fn toggle_window_floating(&mut self, surface: &WlSurface) {
-        if let Some(mut mapped) = self.remove_window(surface) {
-            mapped.floating = !mapped.floating;
-            if mapped.floating {
-                self.add_floating_window(mapped);
-            } else {
-                self.add_tiling_window(mapped);
-            }
-        }
     }
 
     pub fn mapped_window_under(

@@ -69,7 +69,7 @@ impl<T> Tile<T> {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
-pub struct TileRatio(f64);
+pub struct TileRatio(pub f64);
 
 impl Default for TileRatio {
     fn default() -> Self {
@@ -217,7 +217,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn insert(&mut self, window: T) -> Option<T> {
+    pub fn insert(&mut self, window: T, ratio: Option<TileRatio>) -> Option<T> {
         let Some(trace) = self.layout_trace.last_mut() else {
             return Some(window);
         };
@@ -247,11 +247,11 @@ impl<T: TileTreeWindow> TileTree<T> {
                     self.current_tile = tile_id;
                     trace.repeat += 1;
                     self.layout_trace.push(TileLayoutTrace::new(layout_name));
-                    self.insert(window);
+                    self.insert(window, ratio);
                 } else {
                     let new_tile = Tile {
                         kind: TileKind::Window(window),
-                        ratio: node.ratio,
+                        ratio: ratio.unwrap_or(node.ratio),
                         parent: Some(self.current_tile),
                     };
                     let tile_id = self.arena.insert(new_tile);
@@ -280,7 +280,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 pre_trace.index += 1;
             }
         };
-        self.insert(window)
+        self.insert(window, ratio)
     }
 
     // TODO
@@ -335,9 +335,11 @@ impl<T: TileTreeWindow> TileTree<T> {
                 match self.arena[id] {
                     Tile {
                         kind: TileKind::Window(..),
+                        ratio,
                         ..
                     } => {
-                        extracted_windows.push(self.arena.remove(id).unwrap().into_window());
+                        extracted_windows
+                            .push((self.arena.remove(id).unwrap().into_window(), ratio));
                     }
                     Tile {
                         kind: TileKind::Layout { .. },
@@ -354,8 +356,8 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
 
             *self = Self::new(self.layouts.clone(), &self.layout_name);
-            for window in extracted_windows {
-                self.insert(window);
+            for (window, ratio) in extracted_windows {
+                self.insert(window, Some(ratio));
             }
 
             return Some(window);
@@ -1069,7 +1071,7 @@ mod tests {
         };
         let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
         for _ in 0..tiles {
-            tree.insert(TestWindow::new());
+            tree.insert(TestWindow::new(), None);
         }
         assert_tree_eq!(tree, expected);
     }
@@ -1085,12 +1087,12 @@ mod tests {
         let mut tree = TileTree::new(layouts, layout_name);
         for i in 0..tiles - 1 {
             assert!(
-                tree.insert(TestWindow::new()).is_none(),
+                tree.insert(TestWindow::new(), None).is_none(),
                 "Number {:?} insert failed",
                 i
             );
         }
-        tree.insert(TestWindow::new()).is_none()
+        tree.insert(TestWindow::new(), None).is_none()
     }
 
     #[test_case(
@@ -1164,10 +1166,13 @@ mod tests {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::<TestWindow>::new(layouts, layout_name);
         for i in 0..tiles {
-            tree.insert(TestWindow {
-                id: Some(i),
-                ..Default::default()
-            });
+            tree.insert(
+                TestWindow {
+                    id: Some(i),
+                    ..Default::default()
+                },
+                None,
+            );
         }
         assert_eq!(tree.remove(remove).map(|t| t.id), Some(Some(remove)));
         assert_tree_eq!(tree, expected);

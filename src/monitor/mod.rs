@@ -16,11 +16,13 @@ use crate::{
     utils::get_app_id_and_title,
     window::{
         MappedWindow,
-        rule::{WindowFloat, WindowLocation, WindowProperties, WindowRuleCandidate},
+        rule::{WindowLayout, WindowLocation, WindowProperties, WindowRuleCandidate},
     },
 };
 
-pub use workspace::{LayoutSet, TileTreeWindow, TileTreeWindowId, WorkspaceName, test_layout_set};
+pub use workspace::{
+    LayoutSet, TileRatio, TileTreeWindow, TileTreeWindowId, WorkspaceName, test_layout_set,
+};
 
 mod workspace;
 
@@ -124,12 +126,12 @@ impl WaylandState {
         WindowProperties {
             decoration,
             focus,
-            float,
+            layout,
             workspace,
         }: WindowProperties,
     ) {
         let focus = focus.unwrap_or(true);
-        let mut mapped = MappedWindow::new(window, focus, float.is_some());
+        let mut mapped = MappedWindow::new(window, focus);
 
         mapped.toplevel().with_pending_state(|state| {
             state.decoration_mode = decoration.map(|d| d.into());
@@ -152,38 +154,41 @@ impl WaylandState {
         }
         let workspace = &mut self.monitors.get_monitor_mut().get_workspace_mut(&name);
 
-        if let Some(float) = float {
-            match float.location {
-                Some(WindowLocation::Location(x, y)) => {
-                    mapped.location = (x, y).into();
+        match layout.unwrap_or_default() {
+            WindowLayout::Float { location, size } => {
+                match location {
+                    Some(WindowLocation::Location(x, y)) => {
+                        mapped.location = (x, y).into();
+                    }
+                    Some(WindowLocation::Center) => {
+                        let output_size = &workspace.output_size();
+                        let window_size = size
+                            .map(|(w, h)| (w, h).into())
+                            .unwrap_or(mapped.window.geometry().size);
+                        mapped.location = (
+                            output_size.w / 2 - window_size.w / 2,
+                            output_size.h / 2 - window_size.h / 2,
+                        )
+                            .into();
+                    }
+                    _ => {}
                 }
-                Some(WindowLocation::Center) => {
-                    let output_size = &workspace.output_size();
-                    let window_size = float
-                        .size
-                        .map(|(w, h)| (w, h).into())
-                        .unwrap_or(mapped.window.geometry().size);
-                    mapped.location = (
-                        output_size.w / 2 - window_size.w / 2,
-                        output_size.h / 2 - window_size.h / 2,
-                    )
-                        .into();
-                }
-                _ => {}
-            }
-            let size = float
-                .size
-                .map(|(w, h)| (w, h).into())
-                .unwrap_or(mapped.window.geometry().size);
-            mapped.toplevel().with_pending_state(|state| {
-                state.size = Some(size);
-            });
+                let size = size
+                    .map(|(w, h)| (w, h).into())
+                    .unwrap_or(mapped.window.geometry().size);
+                mapped.toplevel().with_pending_state(|state| {
+                    state.size = Some(size);
+                });
 
-            mapped.toplevel().send_configure();
-            workspace.add_floating_window(mapped);
-        } else {
-            mapped.toplevel().send_configure();
-            workspace.add_tiling_window(mapped);
+                mapped.floating = true;
+                mapped.toplevel().send_configure();
+                workspace.add_floating_window(mapped);
+            }
+            WindowLayout::Tile(ratio) => {
+                mapped.floating = false;
+                mapped.toplevel().send_configure();
+                workspace.add_tiling_window(mapped, ratio);
+            }
         }
 
         if let Some(surface) = surface {
@@ -369,13 +374,16 @@ impl WaylandState {
                 .get_active_workspace_name()
                 .clone(),
         });
-        if new_float && properties.float.is_none() {
-            properties.float = Some(WindowFloat {
+        if new_float
+            && (properties.layout.is_none()
+                || matches!(properties.layout, Some(WindowLayout::Tile(_))))
+        {
+            properties.layout = Some(WindowLayout::Float {
                 location: None,
                 size: None,
             });
-        } else if !new_float && properties.float.is_some() {
-            properties.float = None;
+        } else if !new_float && matches!(properties.layout, Some(WindowLayout::Float { .. })) {
+            properties.layout = None;
         }
         self.add_window(mapped.window, properties);
     }
