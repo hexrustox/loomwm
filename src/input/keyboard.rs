@@ -167,7 +167,9 @@ impl WaylandState {
                             data.move_focused_window_to_workspace(name.clone(), *focus);
                         }
                         ToggleFloating => {}
-                        CloseWindow => {}
+                        CloseWindow => {
+                            data.close_focused_window();
+                        }
                         Execute(args) => {
                             if let Some(program) = args.first() {
                                 // TODO

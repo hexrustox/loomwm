@@ -352,6 +352,18 @@ impl WaylandState {
         self.add_window(mapped.window, properties);
     }
 
+    pub fn close_focused_window(&self) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let Some(surface) = keyboard.current_focus() else {
+            return;
+        };
+        let Some((mapped, _)) = self.find_mapped_window(&surface) else {
+            return;
+        };
+
+        mapped.toplevel().send_close();
+    }
+
     pub fn active_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
         let monitor = self.monitors.get_monitor();
         monitor
