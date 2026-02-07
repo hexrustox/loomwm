@@ -16,7 +16,7 @@ use crate::{
     utils::get_app_id_and_title,
     window::{
         MappedWindow,
-        rule::{WindowLocation, WindowProperties, WindowRuleCandidate},
+        rule::{WindowFloat, WindowLocation, WindowProperties, WindowRuleCandidate},
     },
 };
 
@@ -77,7 +77,7 @@ impl Monitor {
 
     fn find_workspace(&self, name: &WorkspaceName) -> Option<usize> {
         self.workspaces
-            .binary_search_by_key(name, |workspace| workspace.get_name())
+            .binary_search_by_key(&name, |workspace| workspace.get_name())
             .ok()
     }
 
@@ -100,7 +100,7 @@ impl Monitor {
             WorkspaceName::Id(id) => {
                 if let Err(index) = self.workspaces.binary_search_by_key(&id, |workspace| {
                     let WorkspaceName::Id(id) = workspace.get_name();
-                    id
+                    *id
                 }) {
                     self.workspaces.insert(
                         index,
@@ -131,11 +131,9 @@ impl WaylandState {
         let focus = focus.unwrap_or(true);
         let mut mapped = MappedWindow::new(window, focus, float.is_some());
 
-        if let Some(decoration) = decoration {
-            mapped.toplevel().with_pending_state(|state| {
-                state.decoration_mode = Some(decoration.into());
-            });
-        }
+        mapped.toplevel().with_pending_state(|state| {
+            state.decoration_mode = decoration.map(|d| d.into());
+        });
 
         let surface = if focus {
             Some(mapped.toplevel().wl_surface().clone())
@@ -204,7 +202,7 @@ impl WaylandState {
             .find_map(|workspace| {
                 workspace
                     .find_window(surface)
-                    .map(|mapped| (mapped, workspace.get_name()))
+                    .map(|mapped| (mapped, workspace.get_name().clone()))
             })
     }
 
@@ -217,7 +215,7 @@ impl WaylandState {
             .workspaces
             .iter_mut()
             .find_map(|workspace| {
-                let name = workspace.get_name();
+                let name = workspace.get_name().clone();
                 workspace
                     .find_window_mut(surface)
                     .map(|mapped| (mapped, name))
@@ -233,7 +231,7 @@ impl WaylandState {
             .workspaces
             .iter_mut()
             .find_map(|workspace| {
-                let name = workspace.get_name();
+                let name = workspace.get_name().clone();
                 workspace
                     .remove_window(surface)
                     .map(|mapped| (mapped, name))
@@ -343,12 +341,42 @@ impl WaylandState {
             float: mapped.floating,
             workspace: name.clone(),
         });
-        properties = properties.merge(WindowProperties {
-            focus: Some(focus),
-            workspace: Some(name),
-            ..Default::default()
-        });
+        properties.focus = Some(focus);
+        properties.workspace = Some(name);
 
+        self.add_window(mapped.window, properties);
+    }
+
+    pub fn toggle_focused_window_floating(&mut self) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let Some(surface) = keyboard.current_focus() else {
+            return;
+        };
+        let Some((mapped, _)) = self.remove_mapped_window(&surface) else {
+            return;
+        };
+
+        let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+        let new_float = !mapped.floating;
+        let mut properties = self.window_rules.get_properties(WindowRuleCandidate {
+            app_id,
+            title,
+            focus: true,
+            float: new_float,
+            workspace: self
+                .monitors
+                .get_monitor()
+                .get_active_workspace_name()
+                .clone(),
+        });
+        if new_float && properties.float.is_none() {
+            properties.float = Some(WindowFloat {
+                location: None,
+                size: None,
+            });
+        } else if !new_float && properties.float.is_some() {
+            properties.float = None;
+        }
         self.add_window(mapped.window, properties);
     }
 

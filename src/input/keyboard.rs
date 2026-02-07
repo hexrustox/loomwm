@@ -166,7 +166,9 @@ impl WaylandState {
                         MoveToWorkspace { name, focus } => {
                             data.move_focused_window_to_workspace(name.clone(), *focus);
                         }
-                        ToggleFloating => {}
+                        ToggleFloating => {
+                            data.toggle_focused_window_floating();
+                        }
                         CloseWindow => {
                             data.close_focused_window();
                         }

@@ -86,7 +86,7 @@ pub struct WindowProperties {
 }
 
 impl WindowProperties {
-    pub fn merge(self, rhs: Self) -> Self {
+    fn merge(self, rhs: Self) -> Self {
         Self {
             decoration: rhs.decoration.or(self.decoration),
             focus: rhs.focus.or(self.focus),
@@ -139,14 +139,10 @@ pub fn test_window_rules() -> WindowRules {
     WindowRules(vec![
         WindowRule {
             matches: vec![WindowRuleMatch {
-                app_id: Some("Alacritty".to_string()),
                 ..Default::default()
             }],
             properties: WindowProperties {
-                float: Some(WindowFloat {
-                    location: Some(WindowLocation::Center),
-                    size: None,
-                }),
+                decoration: Some(WindowDecoration::ServerSide),
                 ..Default::default()
             },
         },
@@ -157,6 +153,10 @@ pub fn test_window_rules() -> WindowRules {
             }],
             properties: WindowProperties {
                 decoration: Some(WindowDecoration::ClientSide),
+                float: Some(WindowFloat {
+                    location: Some(WindowLocation::Center),
+                    size: Some((800, 600)),
+                }),
                 ..Default::default()
             },
         },

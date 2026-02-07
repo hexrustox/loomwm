@@ -50,8 +50,8 @@ impl Workspace {
         }
     }
 
-    pub fn get_name(&self) -> WorkspaceName {
-        self.name.clone()
+    pub fn get_name(&self) -> &WorkspaceName {
+        &self.name
     }
 
     pub fn add_floating_window(&mut self, mapped: MappedWindow) {
