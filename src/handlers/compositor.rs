@@ -12,9 +12,8 @@ use smithay::{
         buffer::BufferHandler,
         compositor::{
             CompositorClientState, CompositorHandler, CompositorState, get_parent,
-            is_sync_subsurface, with_states,
+            is_sync_subsurface,
         },
-        shell::xdg::XdgToplevelSurfaceData,
         shm::{ShmHandler, ShmState},
     },
 };
@@ -22,7 +21,7 @@ use smithay::{
 use crate::{
     input::resize_grab,
     state::WaylandState,
-    utils::is_mapped,
+    utils::{get_app_id_and_title, is_mapped},
     window::{
         UnmappedWindowState,
         rule::{WindowProperties, WindowRuleCandidate},
@@ -64,18 +63,11 @@ impl CompositorHandler for WaylandState {
                 } else {
                     let unmapped = entry.get();
 
-                    let (app_id, title) = with_states(surface, |surface_data| {
-                        if let Some(attrs) = surface_data.data_map.get::<XdgToplevelSurfaceData>() {
-                            let attrs = attrs.lock().unwrap();
-                            (attrs.app_id.clone(), attrs.title.clone())
-                        } else {
-                            (None, None)
-                        }
-                    });
+                    let (app_id, title) = get_app_id_and_title(surface);
 
                     let candidate = WindowRuleCandidate {
-                        app_id: app_id.unwrap_or_default(),
-                        title: title.unwrap_or_default(),
+                        app_id,
+                        title,
                         focus: true,
                         float: false,
                         workspace: self

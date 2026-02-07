@@ -13,9 +13,10 @@ use smithay::{
 use crate::{
     monitor::workspace::Workspace,
     state::WaylandState,
+    utils::get_app_id_and_title,
     window::{
         MappedWindow,
-        rule::{WindowLocation, WindowProperties},
+        rule::{WindowLocation, WindowProperties, WindowRuleCandidate},
     },
 };
 
@@ -23,7 +24,7 @@ pub use workspace::{LayoutSet, TileTreeWindow, TileTreeWindowId, WorkspaceName, 
 
 mod workspace;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Monitors {
     monitors: Vec<Monitor>,
 }
@@ -34,7 +35,6 @@ impl Monitors {
             .push(Monitor::new(output, layouts, layout_name));
     }
 
-    // TODO
     pub fn get_monitor(&self) -> &Monitor {
         self.monitors.last().unwrap()
     }
@@ -43,6 +43,7 @@ impl Monitors {
     }
 }
 
+#[derive(Debug)]
 pub struct Monitor {
     output: Output,
 
@@ -84,7 +85,6 @@ impl Monitor {
         if let Some(index) = self.find_workspace(name) {
             return &self.workspaces[index];
         }
-        // TEMP
         unreachable!()
     }
 
@@ -92,7 +92,6 @@ impl Monitor {
         if let Some(index) = self.find_workspace(name) {
             return &mut self.workspaces[index];
         }
-        // TEMP
         unreachable!()
     }
 
@@ -150,6 +149,9 @@ impl WaylandState {
                 monitor.add_workspace(name.clone());
             })
             .unwrap_or(monitor.get_active_workspace_name().clone());
+        if focus {
+            monitor.active_workspace = name.clone();
+        }
         let workspace = &mut self.monitors.get_monitor_mut().get_workspace_mut(&name);
 
         if let Some(float) = float {
@@ -179,10 +181,10 @@ impl WaylandState {
                 state.size = Some(size);
             });
 
-            mapped.toplevel().send_pending_configure();
+            mapped.toplevel().send_configure();
             workspace.add_floating_window(mapped);
         } else {
-            mapped.toplevel().send_pending_configure();
+            mapped.toplevel().send_configure();
             workspace.add_tiling_window(mapped);
         }
 
@@ -222,22 +224,30 @@ impl WaylandState {
             })
     }
 
-    pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
+    pub fn remove_mapped_window(
+        &mut self,
+        surface: &WlSurface,
+    ) -> Option<(MappedWindow, WorkspaceName)> {
         self.monitors
             .get_monitor_mut()
             .workspaces
             .iter_mut()
-            .find_map(|w| w.remove_window(surface))
+            .find_map(|workspace| {
+                let name = workspace.get_name();
+                workspace
+                    .remove_window(surface)
+                    .map(|mapped| (mapped, name))
+            })
     }
 
     pub fn focus_window(&mut self, surface: &WlSurface) {
         let keyboard = self.seat.get_keyboard().unwrap();
 
-        if let Some(prev_surface) = keyboard.current_focus() {
-            if prev_surface == *surface {
+        if let Some(old_surface) = keyboard.current_focus() {
+            if old_surface == *surface {
                 return;
             }
-            if let Some((mapped, ..)) = self.find_mapped_window_mut(&prev_surface) {
+            if let Some((mapped, ..)) = self.find_mapped_window_mut(&old_surface) {
                 mapped.focus = false;
 
                 mapped.window.set_activated(false);
@@ -258,11 +268,10 @@ impl WaylandState {
         let window = mapped.window.clone();
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&name);
-        workspace.focus_queue_insert(window);
+        workspace.update_focus_queue(window);
         if floating {
             workspace.raise_floating_window(surface);
         }
-        monitor.active_workspace = name;
     }
 
     pub fn mapped_window_under(
@@ -288,14 +297,59 @@ impl WaylandState {
             })
     }
 
-    pub fn focus_workspace(&mut self, name: WorkspaceName) {
+    pub fn switch_to_workspace(&mut self, name: WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
         monitor.add_workspace(name.clone());
         monitor.active_workspace = name.clone();
         if let Some(window) = monitor.get_workspace(&name).last_focus_window() {
             let surface = window.toplevel().unwrap().wl_surface().clone();
             self.focus_window(&surface);
+        } else {
+            self.seat
+                .get_keyboard()
+                .unwrap()
+                .set_focus(self, None, SERIAL_COUNTER.next_serial());
         }
+    }
+
+    pub fn move_focused_window_to_workspace(&mut self, name: WorkspaceName, focus: bool) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let Some(surface) = keyboard.current_focus() else {
+            return;
+        };
+        let Some((mapped, old_name)) = self.remove_mapped_window(&surface) else {
+            return;
+        };
+
+        if !focus {
+            let monitor = self.monitors.get_monitor_mut();
+            if let Some(window) = monitor.get_workspace(&old_name).last_focus_window() {
+                let surface = window.toplevel().unwrap().wl_surface().clone();
+                self.focus_window(&surface);
+            } else {
+                self.seat.get_keyboard().unwrap().set_focus(
+                    self,
+                    None,
+                    SERIAL_COUNTER.next_serial(),
+                );
+            }
+        }
+
+        let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+        let mut properties = self.window_rules.get_properties(WindowRuleCandidate {
+            app_id,
+            title,
+            focus,
+            float: mapped.floating,
+            workspace: name.clone(),
+        });
+        properties = properties.merge(WindowProperties {
+            focus: Some(focus),
+            workspace: Some(name),
+            ..Default::default()
+        });
+
+        self.add_window(mapped.window, properties);
     }
 
     pub fn active_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {

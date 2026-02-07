@@ -3,6 +3,7 @@ use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_to
 
 use crate::monitor::WorkspaceName;
 
+#[derive(Debug)]
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
@@ -85,7 +86,7 @@ pub struct WindowProperties {
 }
 
 impl WindowProperties {
-    fn merge(self, rhs: Self) -> Self {
+    pub fn merge(self, rhs: Self) -> Self {
         Self {
             decoration: rhs.decoration.or(self.decoration),
             focus: rhs.focus.or(self.focus),

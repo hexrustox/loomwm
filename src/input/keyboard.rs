@@ -78,6 +78,26 @@ pub fn test_key_bindings() -> KeyBindings {
         ),
         (
             KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
+                key: Keysym::_1,
+            },
+            KeyAction::MoveToWorkspace {
+                name: WorkspaceName::Id(1),
+                focus: false,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
+                key: Keysym::_2,
+            },
+            KeyAction::MoveToWorkspace {
+                name: WorkspaceName::Id(2),
+                focus: false,
+            },
+        ),
+        (
+            KeyBinding {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::space,
             },
@@ -141,9 +161,11 @@ impl WaylandState {
                     use KeyAction::*;
                     match action {
                         SwitchWorkspace { name } => {
-                            data.focus_workspace(name.clone());
+                            data.switch_to_workspace(name.clone());
                         }
-                        MoveToWorkspace { name, focus } => {}
+                        MoveToWorkspace { name, focus } => {
+                            data.move_focused_window_to_workspace(name.clone(), *focus);
+                        }
                         ToggleFloating => {}
                         CloseWindow => {}
                         Execute(args) => {

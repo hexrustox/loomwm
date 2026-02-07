@@ -55,10 +55,12 @@ impl Workspace {
     }
 
     pub fn add_floating_window(&mut self, mapped: MappedWindow) {
+        self.insert_focus_queue(mapped.window.clone());
         self.floating.insert(0, mapped);
     }
 
     pub fn add_tiling_window(&mut self, mapped: MappedWindow) {
+        self.insert_focus_queue(mapped.window.clone());
         if let Some(mapped) = self.tiling.insert(mapped) {
             self.floating.insert(0, mapped);
         } else {
@@ -100,7 +102,11 @@ impl Workspace {
         }
     }
 
-    pub fn focus_queue_insert(&mut self, window: Window) {
+    pub fn insert_focus_queue(&mut self, window: Window) {
+        self.focus_queue.insert(0, window);
+    }
+
+    pub fn update_focus_queue(&mut self, window: Window) {
         if let Some(index) = self.focus_queue.iter().position(|w| *w == window) {
             self.focus_queue.remove(index);
         }
@@ -111,15 +117,28 @@ impl Workspace {
         self.focus_queue.last()
     }
 
+    fn remove_focus_queue(&mut self, mapped: &MappedWindow) {
+        if let Some(index) = self
+            .focus_queue
+            .iter()
+            .position(|window| *window == mapped.window)
+        {
+            self.focus_queue.remove(index);
+        }
+    }
+
     fn remove_floating_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.floating
+        let mapped = self
+            .floating
             .iter()
             .position(|mapped| mapped.toplevel().wl_surface() == surface)
-            .map(|i| self.floating.remove(i))
+            .map(|i| self.floating.remove(i))?;
+        self.remove_focus_queue(&mapped);
+        Some(mapped)
     }
 
     fn remove_tiling_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.tiling.remove(surface).inspect(|_| {
+        let mapped = self.tiling.remove(surface).inspect(|_| {
             let output = &self.output;
             self.tiling.update_toplevel_state(
                 output.current_location(),
@@ -129,7 +148,9 @@ impl Workspace {
                     .size
                     .to_logical(output.current_scale().integer_scale()),
             );
-        })
+        })?;
+        self.remove_focus_queue(&mapped);
+        Some(mapped)
     }
 
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {

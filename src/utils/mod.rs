@@ -6,6 +6,7 @@ use smithay::{
         rustix::time::{ClockId, clock_gettime},
         wayland_server::protocol::wl_surface::WlSurface,
     },
+    wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
 
 pub fn get_monotonic_time() -> Duration {
@@ -37,6 +38,20 @@ pub fn partition(sum: i32, split_into: usize) -> Vec<i32> {
             }
         })
         .collect()
+}
+
+pub fn get_app_id_and_title(surface: &WlSurface) -> (String, String) {
+    with_states(surface, |surface_data| {
+        if let Some(attrs) = surface_data.data_map.get::<XdgToplevelSurfaceData>() {
+            let attrs = attrs.lock().unwrap();
+            (
+                attrs.app_id.clone().unwrap_or_default(),
+                attrs.title.clone().unwrap_or_default(),
+            )
+        } else {
+            (String::default(), String::default())
+        }
+    })
 }
 
 #[cfg(test)]
