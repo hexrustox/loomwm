@@ -76,7 +76,7 @@ impl Winit {
                         backend
                             .submit(render_output.damage.map(|damage| &**damage))
                             .unwrap();
-                        state.compositor.windows_iter().for_each(|mapped| {
+                        state.compositor.active_windows_iter().for_each(|mapped| {
                             mapped
                                 .window
                                 .send_frame(output, get_monotonic_time(), None, |_, _| {

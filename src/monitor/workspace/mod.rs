@@ -4,7 +4,7 @@ use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
     },
-    desktop::space::SpaceElement,
+    desktop::{Window, space::SpaceElement},
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale, Size},
@@ -16,20 +16,42 @@ mod tile;
 
 pub use tile::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WorkspaceName {
+    Id(u8),
+    // Name(String)
+}
+
 #[derive(Debug)]
 pub struct Workspace {
     output: Output,
+
+    name: WorkspaceName,
+
     tiling: TileTree,
     floating: Vec<MappedWindow>,
+
+    focus_queue: Vec<Window>,
 }
 
 impl Workspace {
-    pub fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+    pub fn new(
+        output: Output,
+        name: WorkspaceName,
+        layouts: Rc<LayoutSet>,
+        layout_name: &str,
+    ) -> Self {
         Self {
             output,
+            name,
             tiling: TileTree::new(layouts, layout_name),
             floating: Vec::new(),
+            focus_queue: Vec::new(),
         }
+    }
+
+    pub fn get_name(&self) -> WorkspaceName {
+        self.name.clone()
     }
 
     pub fn add_floating_window(&mut self, mapped: MappedWindow) {
@@ -52,6 +74,10 @@ impl Workspace {
         }
     }
 
+    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        self.floating.iter().chain(self.tiling.windows_iter())
+    }
+
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
             .find(|mapped| mapped.toplevel().wl_surface() == surface)
@@ -72,6 +98,17 @@ impl Workspace {
         {
             self.floating[0..=index].rotate_right(1);
         }
+    }
+
+    pub fn focus_queue_insert(&mut self, window: Window) {
+        if let Some(index) = self.focus_queue.iter().position(|w| *w == window) {
+            self.focus_queue.remove(index);
+        }
+        self.focus_queue.push(window);
+    }
+
+    pub fn last_focus_window(&self) -> Option<&Window> {
+        self.focus_queue.last()
     }
 
     fn remove_floating_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
@@ -140,10 +177,6 @@ impl Workspace {
                 None
             }
         })
-    }
-
-    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        self.floating.iter().chain(self.tiling.windows_iter())
     }
 
     pub fn output_size(&self) -> Size<i32, Logical> {

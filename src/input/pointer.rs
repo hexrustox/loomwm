@@ -95,7 +95,7 @@ impl WaylandState {
             && let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
         {
             let surface = mapped.toplevel().wl_surface().clone();
-            self.focus_window(&surface, Some(serial));
+            self.focus_window(&surface);
         }
 
         if button_state == ButtonState::Pressed

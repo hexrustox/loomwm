@@ -1,19 +1,25 @@
 use regex::Regex;
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
 
+use crate::monitor::WorkspaceName;
+
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
-    pub fn get_properties(&self, mut candidate: WindowRuleMatch) -> WindowProperties {
+    pub fn get_properties(&self, mut candidate: WindowRuleCandidate) -> WindowProperties {
         let mut properties = WindowProperties::default();
         for rule in &self.0 {
             if rule.is_match(&candidate) {
                 properties = properties.merge(rule.properties.clone());
-                candidate.focus = properties.focus;
-                if properties.float.is_some() {
-                    candidate.float = Some(true);
+                if let Some(focus) = properties.focus {
+                    candidate.focus = focus;
                 }
-                candidate.workspace = properties.workspace;
+                if properties.float.is_some() {
+                    candidate.float = true;
+                }
+                if let Some(workspace) = properties.workspace.as_ref() {
+                    candidate.workspace = workspace.clone();
+                }
             }
         }
 
@@ -28,35 +34,31 @@ struct WindowRule {
 }
 
 impl WindowRule {
-    fn is_match(&self, candidate: &WindowRuleMatch) -> bool {
+    fn is_match(&self, candidate: &WindowRuleCandidate) -> bool {
         self.matches.iter().any(|target| {
-            match (&target.app_id, &candidate.app_id) {
-                (Some(re), Some(hay)) => {
-                    let re = Regex::new(re).unwrap();
-                    if !re.is_match(hay) {
-                        return false;
-                    }
-                }
-                (Some(_), None) => return false,
-                (None, _) => {}
-            }
-            match (&target.title, &candidate.title) {
-                (Some(re), Some(hay)) => {
-                    let re = Regex::new(re).unwrap();
-                    if !re.is_match(hay) {
-                        return false;
-                    }
-                }
-                (Some(_), None) => return false,
-                (None, _) => {}
-            }
-            if target.focus.is_some() && target.focus != candidate.focus {
+            if let Some(app_id_pattern) = &target.app_id
+                && let Ok(re) = Regex::new(app_id_pattern)
+                && !re.is_match(&candidate.app_id)
+            {
+                return false;
+            };
+            if let Some(title_pattern) = &target.title
+                && let Ok(re) = Regex::new(title_pattern)
+                && !re.is_match(&candidate.title)
+            {
+                return false;
+            };
+            if target.focus.is_some_and(|focus| candidate.focus != focus) {
                 return false;
             }
-            if target.float.is_some() && target.float != candidate.float {
+            if target.float.is_some_and(|float| candidate.float != float) {
                 return false;
             }
-            if target.workspace.is_some() && target.workspace != candidate.workspace {
+            if target
+                .workspace
+                .as_ref()
+                .is_some_and(|workspace| candidate.workspace != *workspace)
+            {
                 return false;
             }
 
@@ -65,12 +67,21 @@ impl WindowRule {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct WindowRuleMatch {
+    app_id: Option<String>,
+    title: Option<String>,
+    focus: Option<bool>,
+    float: Option<bool>,
+    workspace: Option<WorkspaceName>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct WindowProperties {
     pub decoration: Option<WindowDecoration>,
     pub focus: Option<bool>,
     pub float: Option<WindowFloat>,
-    pub workspace: Option<u8>,
+    pub workspace: Option<WorkspaceName>,
 }
 
 impl WindowProperties {
@@ -84,13 +95,12 @@ impl WindowProperties {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct WindowRuleMatch {
-    pub app_id: Option<String>,
-    pub title: Option<String>,
-    pub focus: Option<bool>,
-    pub float: Option<bool>,
-    pub workspace: Option<u8>,
+pub struct WindowRuleCandidate {
+    pub app_id: String,
+    pub title: String,
+    pub focus: bool,
+    pub float: bool,
+    pub workspace: WorkspaceName,
 }
 
 #[derive(Debug, Default, Clone)]

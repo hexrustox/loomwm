@@ -7,7 +7,7 @@ use smithay::{
     desktop::{Window, WindowSurfaceType},
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, SERIAL_COUNTER, Scale, Serial},
+    utils::{Logical, Point, SERIAL_COUNTER, Scale},
 };
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-pub use workspace::{LayoutSet, TileTreeWindow, TileTreeWindowId, test_layout_set};
+pub use workspace::{LayoutSet, TileTreeWindow, TileTreeWindowId, WorkspaceName, test_layout_set};
 
 mod workspace;
 
@@ -35,10 +35,10 @@ impl Monitors {
     }
 
     // TODO
-    fn get_monitor(&self) -> &Monitor {
+    pub fn get_monitor(&self) -> &Monitor {
         self.monitors.last().unwrap()
     }
-    fn get_monitor_mut(&mut self) -> &mut Monitor {
+    pub fn get_monitor_mut(&mut self) -> &mut Monitor {
         self.monitors.last_mut().unwrap()
     }
 }
@@ -46,8 +46,8 @@ impl Monitors {
 pub struct Monitor {
     output: Output,
 
-    active_workspace: u8,
-    workspaces: Vec<(u8, Workspace)>,
+    active_workspace: WorkspaceName,
+    workspaces: Vec<Workspace>,
 
     layouts: Rc<LayoutSet>,
     layout_name: Rc<str>,
@@ -55,118 +55,70 @@ pub struct Monitor {
 
 impl Monitor {
     fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
+        let active_workspace = WorkspaceName::Id(1);
         Self {
             output: output.clone(),
-            active_workspace: 1,
-            workspaces: vec![(1, Workspace::new(output, layouts.clone(), &layout_name))],
+            active_workspace: active_workspace.clone(),
+            workspaces: vec![Workspace::new(
+                output,
+                active_workspace,
+                layouts.clone(),
+                &layout_name,
+            )],
             layouts,
             layout_name,
         }
     }
 
-    fn get_active_workspace(&self) -> &Workspace {
-        for (name, workspace) in self.workspaces.iter() {
-            if *name == self.active_workspace {
-                return workspace;
-            }
+    pub fn get_active_workspace_name(&self) -> &WorkspaceName {
+        &self.active_workspace
+    }
+
+    fn find_workspace(&self, name: &WorkspaceName) -> Option<usize> {
+        self.workspaces
+            .binary_search_by_key(name, |workspace| workspace.get_name())
+            .ok()
+    }
+
+    pub fn get_workspace(&self, name: &WorkspaceName) -> &Workspace {
+        if let Some(index) = self.find_workspace(name) {
+            return &self.workspaces[index];
         }
-        panic!("No active workspace")
+        // TEMP
+        unreachable!()
     }
 
-    fn get_active_workspace_mut(&mut self) -> &mut Workspace {
-        for (name, workspace) in self.workspaces.iter_mut() {
-            if *name == self.active_workspace {
-                return workspace;
-            }
+    pub fn get_workspace_mut(&mut self, name: &WorkspaceName) -> &mut Workspace {
+        if let Some(index) = self.find_workspace(name) {
+            return &mut self.workspaces[index];
         }
-        panic!("No active workspace")
+        // TEMP
+        unreachable!()
     }
 
-    fn insert_workspace(&mut self, index: usize, name: u8) {
-        self.workspaces.insert(
-            index,
-            (
-                name,
-                Workspace::new(self.output.clone(), self.layouts.clone(), &self.layout_name),
-            ),
-        );
-    }
-
-    fn add_workspace(&mut self, name: u8) -> &mut Workspace {
-        let index = match self.workspaces.binary_search_by_key(&name, |(n, _)| *n) {
-            Ok(i) => i,
-            Err(i) => {
-                self.insert_workspace(i, name);
-                i
-            }
-        };
-        &mut self.workspaces[index].1
-    }
-
-    fn switch_workspace(&mut self, name: u8) {
-        self.add_workspace(name);
-        self.active_workspace = name;
-    }
-
-    fn move_window_to_workspace(&mut self, surface: &WlSurface, name: u8, focus: bool) {
-        let Some(mapped) = self.remove_window(surface) else {
-            return;
-        };
-
-        let idx = {
-            match self.workspaces.binary_search_by_key(&name, |(n, _)| *n) {
-                Ok(idx) => idx,
-                Err(idx) => {
-                    self.insert_workspace(idx, name);
-                    idx
+    fn add_workspace(&mut self, name: WorkspaceName) {
+        match name {
+            WorkspaceName::Id(id) => {
+                if let Err(index) = self.workspaces.binary_search_by_key(&id, |workspace| {
+                    let WorkspaceName::Id(id) = workspace.get_name();
+                    id
+                }) {
+                    self.workspaces.insert(
+                        index,
+                        Workspace::new(
+                            self.output.clone(),
+                            name,
+                            self.layouts.clone(),
+                            &self.layout_name,
+                        ),
+                    );
                 }
             }
-        };
-        self.workspaces[idx].1.add_tiling_window(mapped);
-        if focus {
-            self.switch_workspace(name);
         }
-    }
-
-    fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
-        for workspace in self.workspaces.iter().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.find_window(surface) {
-                return window;
-            }
-        }
-        None
-    }
-
-    fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.find_window_mut(surface) {
-                return window;
-            }
-        }
-        None
-    }
-
-    fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        for workspace in self.workspaces.iter_mut().map(|(_, w)| w) {
-            if let window @ Some(_) = workspace.remove_window(surface) {
-                return window;
-            }
-        }
-        None
     }
 }
 
 impl WaylandState {
-    pub fn switch_workspace(&mut self, name: u8) {
-        self.monitors.get_monitor_mut().switch_workspace(name);
-    }
-
-    pub fn move_window_to_workspace(&mut self, surface: &WlSurface, name: u8, focus: bool) {
-        self.monitors
-            .get_monitor_mut()
-            .move_window_to_workspace(surface, name, focus);
-    }
-
     pub fn add_window(
         &mut self,
         window: Window,
@@ -177,7 +129,8 @@ impl WaylandState {
             workspace,
         }: WindowProperties,
     ) {
-        let mut mapped = MappedWindow::new(window, float.is_some());
+        let focus = focus.unwrap_or(true);
+        let mut mapped = MappedWindow::new(window, focus, float.is_some());
 
         if let Some(decoration) = decoration {
             mapped.toplevel().with_pending_state(|state| {
@@ -185,23 +138,20 @@ impl WaylandState {
             });
         }
 
-        let focus = focus.unwrap_or(true);
         let surface = if focus {
             Some(mapped.toplevel().wl_surface().clone())
         } else {
             None
         };
 
-        let workspace = if let Some(name) = workspace {
-            if focus {
-                self.switch_workspace(name);
-                self.monitors.get_monitor_mut().get_active_workspace_mut()
-            } else {
-                self.monitors.get_monitor_mut().add_workspace(name)
-            }
-        } else {
-            self.monitors.get_monitor_mut().get_active_workspace_mut()
-        };
+        let monitor = self.monitors.get_monitor_mut();
+        let name = workspace
+            .inspect(|name| {
+                monitor.add_workspace(name.clone());
+            })
+            .unwrap_or(monitor.get_active_workspace_name().clone());
+        let workspace = &mut self.monitors.get_monitor_mut().get_workspace_mut(&name);
+
         if let Some(float) = float {
             match float.location {
                 Some(WindowLocation::Location(x, y)) => {
@@ -237,71 +187,92 @@ impl WaylandState {
         }
 
         if let Some(surface) = surface {
-            self.focus_window(&surface, None);
+            self.focus_window(&surface);
         }
     }
 
-    pub fn find_mapped_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
-        self.monitors.get_monitor().find_window(surface)
+    pub fn find_mapped_window(
+        &self,
+        surface: &WlSurface,
+    ) -> Option<(&MappedWindow, WorkspaceName)> {
+        self.monitors
+            .get_monitor()
+            .workspaces
+            .iter()
+            .find_map(|workspace| {
+                workspace
+                    .find_window(surface)
+                    .map(|mapped| (mapped, workspace.get_name()))
+            })
     }
 
-    pub fn find_mapped_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.monitors.get_monitor_mut().find_window_mut(surface)
+    pub fn find_mapped_window_mut(
+        &mut self,
+        surface: &WlSurface,
+    ) -> Option<(&mut MappedWindow, WorkspaceName)> {
+        self.monitors
+            .get_monitor_mut()
+            .workspaces
+            .iter_mut()
+            .find_map(|workspace| {
+                let name = workspace.get_name();
+                workspace
+                    .find_window_mut(surface)
+                    .map(|mapped| (mapped, name))
+            })
     }
 
     pub fn remove_mapped_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.monitors.get_monitor_mut().remove_window(surface)
+        self.monitors
+            .get_monitor_mut()
+            .workspaces
+            .iter_mut()
+            .find_map(|w| w.remove_window(surface))
     }
 
-    pub fn focus_window(&mut self, surface: &WlSurface, serial: Option<Serial>) {
+    pub fn focus_window(&mut self, surface: &WlSurface) {
         let keyboard = self.seat.get_keyboard().unwrap();
-        let serial = serial.unwrap_or(SERIAL_COUNTER.next_serial());
 
-        if let Some(surface) = keyboard.current_focus()
-            && let Some(mapped) = self.find_mapped_window(&surface)
-        {
-            mapped.window.set_activated(false);
-            mapped.toplevel().send_pending_configure();
+        if let Some(prev_surface) = keyboard.current_focus() {
+            if prev_surface == *surface {
+                return;
+            }
+            if let Some((mapped, ..)) = self.find_mapped_window_mut(&prev_surface) {
+                mapped.focus = false;
+
+                mapped.window.set_activated(false);
+                mapped.toplevel().send_pending_configure();
+            }
         }
-        keyboard.set_focus(self, Some(surface.clone()), serial);
 
-        if let Some(mapped) = self
-            .monitors
-            .get_monitor_mut()
-            .get_active_workspace_mut()
-            .find_window(surface)
-        {
-            mapped.window.set_activated(true);
-            mapped.toplevel().send_pending_configure();
+        keyboard.set_focus(self, Some(surface.clone()), SERIAL_COUNTER.next_serial());
+        let Some((mapped, name)) = self.find_mapped_window_mut(surface) else {
+            return;
+        };
+        mapped.focus = true;
+
+        mapped.window.set_activated(true);
+        mapped.toplevel().send_pending_configure();
+
+        let floating = mapped.floating;
+        let window = mapped.window.clone();
+        let monitor = self.monitors.get_monitor_mut();
+        let workspace = monitor.get_workspace_mut(&name);
+        workspace.focus_queue_insert(window);
+        if floating {
+            workspace.raise_floating_window(surface);
         }
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace_mut()
-            .raise_floating_window(surface);
-    }
-
-    pub fn toggle_window_floating(&mut self, surface: &WlSurface) {
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace_mut()
-            .toggle_window_floating(surface);
+        monitor.active_workspace = name;
     }
 
     pub fn mapped_window_under(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
-        self.monitors
-            .get_monitor()
-            .get_active_workspace()
+        let monitor = self.monitors.get_monitor();
+        monitor
+            .get_workspace(monitor.get_active_workspace_name())
             .mapped_window_under(point)
-    }
-
-    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        self.monitors
-            .get_monitor()
-            .get_active_workspace()
-            .windows_iter()
     }
 
     pub fn surface_under(
@@ -317,6 +288,23 @@ impl WaylandState {
             })
     }
 
+    pub fn focus_workspace(&mut self, name: WorkspaceName) {
+        let monitor = self.monitors.get_monitor_mut();
+        monitor.add_workspace(name.clone());
+        monitor.active_workspace = name.clone();
+        if let Some(window) = monitor.get_workspace(&name).last_focus_window() {
+            let surface = window.toplevel().unwrap().wl_surface().clone();
+            self.focus_window(&surface);
+        }
+    }
+
+    pub fn active_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        let monitor = self.monitors.get_monitor();
+        monitor
+            .get_workspace(monitor.get_active_workspace_name())
+            .windows_iter()
+    }
+
     pub fn render_elements<R>(
         &mut self,
         renderer: &mut R,
@@ -326,9 +314,9 @@ impl WaylandState {
         R: Renderer + ImportAll,
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
-        self.monitors
-            .get_monitor_mut()
-            .get_active_workspace_mut()
+        let monitor = self.monitors.get_monitor_mut();
+        monitor
+            .get_workspace_mut(&monitor.get_active_workspace_name().clone())
             .render_elements(renderer, scale)
     }
 }

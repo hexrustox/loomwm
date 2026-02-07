@@ -25,7 +25,7 @@ use crate::{
     utils::is_mapped,
     window::{
         UnmappedWindowState,
-        rule::{WindowProperties, WindowRuleMatch},
+        rule::{WindowProperties, WindowRuleCandidate},
     },
 };
 
@@ -73,12 +73,16 @@ impl CompositorHandler for WaylandState {
                         }
                     });
 
-                    let candidate = WindowRuleMatch {
-                        app_id,
-                        title,
-                        focus: None,
-                        float: None,
-                        workspace: None,
+                    let candidate = WindowRuleCandidate {
+                        app_id: app_id.unwrap_or_default(),
+                        title: title.unwrap_or_default(),
+                        focus: true,
+                        float: false,
+                        workspace: self
+                            .monitors
+                            .get_monitor()
+                            .get_active_workspace_name()
+                            .clone(),
                     };
                     let properties = self.window_rules.get_properties(candidate);
 
@@ -106,7 +110,7 @@ impl CompositorHandler for WaylandState {
             }
 
             // previously-mapped root
-            if let Some(mapped) = self.find_mapped_window_mut(surface) {
+            if let Some((mapped, ..)) = self.find_mapped_window_mut(surface) {
                 mapped.window.on_commit();
                 resize_grab::handle_commit(mapped);
 
@@ -118,7 +122,7 @@ impl CompositorHandler for WaylandState {
         }
 
         // non-root
-        if let Some(mapped) = self.find_mapped_window(&root_surface) {
+        if let Some((mapped, ..)) = self.find_mapped_window(&root_surface) {
             mapped.window.on_commit();
         }
 

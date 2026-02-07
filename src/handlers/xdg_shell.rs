@@ -63,11 +63,14 @@ impl XdgShellHandler for WaylandState {
             let pointer = seat.get_pointer().unwrap();
 
             let window = self.find_mapped_window(wl_surface);
-            if let Some(MappedWindow {
-                window: inner,
-                location,
-                ..
-            }) = window
+            if let Some((
+                MappedWindow {
+                    window: inner,
+                    location,
+                    ..
+                },
+                ..,
+            )) = window
             {
                 let grab = MoveGrab::new(start_data, inner.clone(), location.to_f64());
                 pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -89,7 +92,7 @@ impl XdgShellHandler for WaylandState {
         if let Some(start_data) = check_grab(&seat, surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let mapped = self.find_mapped_window(surface).unwrap();
+            let (mapped, ..) = self.find_mapped_window(surface).unwrap();
             let initial_window_location = mapped.location;
             let initial_window_size = mapped.window.geometry().size;
 

@@ -7,7 +7,7 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::state::WaylandState;
+use crate::{monitor::WorkspaceName, state::WaylandState};
 
 bitflags! {
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -28,8 +28,8 @@ pub struct KeyBinding {
 }
 
 pub enum KeyAction {
-    SwitchWorkspace { name: u8 },
-    MoveToWorkspace { name: u8, focus: bool },
+    SwitchWorkspace { name: WorkspaceName },
+    MoveToWorkspace { name: WorkspaceName, focus: bool },
     ToggleFloating,
     CloseWindow,
     Execute(Vec<String>),
@@ -43,14 +43,18 @@ pub fn test_key_bindings() -> KeyBindings {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::_1,
             },
-            KeyAction::SwitchWorkspace { name: 1 },
+            KeyAction::SwitchWorkspace {
+                name: WorkspaceName::Id(1),
+            },
         ),
         (
             KeyBinding {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::_2,
             },
-            KeyAction::SwitchWorkspace { name: 2 },
+            KeyAction::SwitchWorkspace {
+                name: WorkspaceName::Id(2),
+            },
         ),
         (
             KeyBinding {
@@ -58,7 +62,7 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::_1,
             },
             KeyAction::MoveToWorkspace {
-                name: 1,
+                name: WorkspaceName::Id(1),
                 focus: true,
             },
         ),
@@ -68,7 +72,7 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::_2,
             },
             KeyAction::MoveToWorkspace {
-                name: 2,
+                name: WorkspaceName::Id(2),
                 focus: true,
             },
         ),
@@ -137,25 +141,11 @@ impl WaylandState {
                     use KeyAction::*;
                     match action {
                         SwitchWorkspace { name } => {
-                            data.switch_workspace(*name);
+                            data.focus_workspace(name.clone());
                         }
-                        MoveToWorkspace { name, focus } => {
-                            if let Some(surface) = keyboard.current_focus() {
-                                data.move_window_to_workspace(&surface, *name, *focus);
-                            }
-                        }
-                        ToggleFloating => {
-                            if let Some(surface) = keyboard.current_focus() {
-                                data.toggle_window_floating(&surface);
-                            }
-                        }
-                        CloseWindow => {
-                            if let Some(surface) = keyboard.current_focus()
-                                && let Some(mapped) = data.find_mapped_window(&surface)
-                            {
-                                mapped.toplevel().send_close();
-                            }
-                        }
+                        MoveToWorkspace { name, focus } => {}
+                        ToggleFloating => {}
+                        CloseWindow => {}
                         Execute(args) => {
                             if let Some(program) = args.first() {
                                 // TODO
