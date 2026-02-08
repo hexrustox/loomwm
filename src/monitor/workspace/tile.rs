@@ -1,10 +1,10 @@
-use crate::{utils::partition, window::MappedWindow};
+use crate::{input::FocusDirection, utils::partition, window::MappedWindow};
 use slotmap::{SlotMap, new_key_type};
 use smithay::{
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Size},
 };
-use std::{borrow::Cow, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, fmt::Debug, rc::Rc};
 
 new_key_type! { struct TileId; }
 
@@ -33,6 +33,13 @@ struct Tile<T> {
 impl<T> Tile<T> {
     fn into_window(self) -> T {
         match self.kind {
+            TileKind::Window(window) => window,
+            _ => unreachable!(),
+        }
+    }
+
+    fn as_window(&self) -> &T {
+        match &self.kind {
             TileKind::Window(window) => window,
             _ => unreachable!(),
         }
@@ -87,10 +94,12 @@ enum TileKind<T> {
     },
 }
 
-pub trait TileTreeWindow {
+pub trait TileTreeWindow: Debug {
     fn match_id(&self, id: TileTreeWindowId) -> bool;
-    fn update_location(&mut self, location: Point<i32, Logical>);
-    fn update_size(&mut self, size: Size<i32, Logical>);
+    fn get_location(&self) -> Point<i32, Logical>;
+    fn get_size(&self) -> Size<i32, Logical>;
+    fn set_location(&mut self, location: Point<i32, Logical>);
+    fn set_size(&mut self, size: Size<i32, Logical>);
 }
 
 #[derive(Clone, Copy)]
@@ -450,8 +459,8 @@ impl<T: TileTreeWindow> TileTree<T> {
         let updates = traverse(&self.arena, self.root, location, size);
         for update in updates {
             let window = self.arena[update.id].as_window_mut();
-            window.update_location(update.location);
-            window.update_size(update.size);
+            window.set_location(update.location);
+            window.set_size(update.size);
         }
     }
 
@@ -526,6 +535,123 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         tile_id.map(|id| self.arena[id].as_window_mut())
     }
+
+    pub fn find_windows_in_direction<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
+        &self,
+        id: I,
+        direction: FocusDirection,
+    ) -> Vec<&T> {
+        fn traverse_find<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            layout_id: TileId,
+            id: TileTreeWindowId,
+        ) -> Option<TileId> {
+            for tile_id in arena[layout_id].as_layout_tiles().iter() {
+                match &arena[*tile_id] {
+                    Tile {
+                        kind: TileKind::Window(window),
+                        ..
+                    } => {
+                        if window.match_id(id) {
+                            return Some(*tile_id);
+                        }
+                    }
+                    _ => {
+                        if let res @ Some(_) = traverse_find(arena, *tile_id, id) {
+                            return res;
+                        }
+                    }
+                }
+            }
+
+            None
+        }
+        fn traverse_calc<'a, T: TileTreeWindow, F: Fn(&T) -> bool>(
+            arena: &'a TileArena<T>,
+            layout_id: TileId,
+            possible_ids: &mut Vec<&'a T>,
+            cmp: &F,
+        ) {
+            for tile_id in arena[layout_id].as_layout_tiles().iter() {
+                match &arena[*tile_id] {
+                    Tile {
+                        kind: TileKind::Window(window),
+                        ..
+                    } => {
+                        if cmp(window) {
+                            possible_ids.push(window);
+                        }
+                    }
+                    _ => {
+                        traverse_calc(arena, *tile_id, possible_ids, cmp);
+                    }
+                }
+            }
+        }
+
+        let Some(window_id) = traverse_find(&self.arena, self.root, id.into()) else {
+            return Vec::new();
+        };
+        let target = &self.arena[window_id].as_window();
+
+        #[derive(Debug)]
+        struct Rect {
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+        }
+
+        impl Rect {
+            fn new(location: Point<i32, Logical>, size: Size<i32, Logical>) -> Self {
+                Self {
+                    x: location.x,
+                    y: location.y,
+                    w: size.w,
+                    h: size.h,
+                }
+            }
+            fn left(&self) -> i32 {
+                self.x
+            }
+            fn right(&self) -> i32 {
+                self.x + self.w
+            }
+            fn top(&self) -> i32 {
+                self.y
+            }
+            fn bottom(&self) -> i32 {
+                self.y + self.h
+            }
+
+            fn overlaps_horizontally(&self, other: &Rect) -> bool {
+                self.left() <= other.right() && self.right() >= other.left()
+            }
+
+            fn overlaps_vertically(&self, other: &Rect) -> bool {
+                self.top() <= other.bottom() && self.bottom() >= other.top()
+            }
+
+            fn is_in_direction(&self, direction: FocusDirection, target: &Rect) -> bool {
+                use FocusDirection::*;
+                match direction {
+                    Top => self.bottom() <= target.top() && self.overlaps_horizontally(target),
+                    Bottom => self.top() >= target.bottom() && self.overlaps_horizontally(target),
+                    Left => self.right() <= target.left() && self.overlaps_vertically(target),
+                    Right => self.left() >= target.right() && self.overlaps_vertically(target),
+                }
+            }
+        }
+        let target_rect = Rect::new(target.get_location(), target.get_size());
+
+        let mut possible_ids = Vec::new();
+        traverse_calc(&self.arena, self.root, &mut possible_ids, &|window| {
+            let window_rect = Rect::new(window.get_location(), window.get_size());
+            window_rect.is_in_direction(direction, &target_rect)
+        });
+
+        possible_ids
+    }
 }
 
 // TEMP
@@ -586,11 +712,19 @@ mod tests {
             }
         }
 
-        fn update_location(&mut self, location: Point<i32, Logical>) {
+        fn get_location(&self) -> Point<i32, Logical> {
+            self.location
+        }
+
+        fn get_size(&self) -> Size<i32, Logical> {
+            self.size
+        }
+
+        fn set_location(&mut self, location: Point<i32, Logical>) {
             self.location = location;
         }
 
-        fn update_size(&mut self, size: Size<i32, Logical>) {
+        fn set_size(&mut self, size: Size<i32, Logical>) {
             self.size = size;
         }
     }
@@ -1060,7 +1194,7 @@ mod tests {
         ]);
         "nested layout"
     )]
-    fn test_tile_tree_insert(layout_type: LayoutType, tiles: u32, expected: TileTree<TestWindow>) {
+    fn test_insert(layout_type: LayoutType, tiles: u32, expected: TileTree<TestWindow>) {
         let (layouts, layout_name) = match layout_type {
             LayoutType::Ref(name) => (LayoutSet((*LAYOUT_SET).clone()), name),
             LayoutType::New(iter) => (
@@ -1084,7 +1218,7 @@ mod tests {
     #[test_case("layouts", 7 => false; "layouts")]
     #[test_case("mix windows layouts", 17 => false; "mix windows layouts")]
     #[test_case("nested layout", 4 => false; "nested layout")]
-    fn test_tile_tree_reject_insertion(layout_name: &str, tiles: u32) -> bool {
+    fn test_reject_insertion(layout_name: &str, tiles: u32) -> bool {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::new(layouts, layout_name);
         for i in 0..tiles - 1 {
@@ -1159,12 +1293,7 @@ mod tests {
         tile_tree!(layout() []);
         "nested layout"
     )]
-    fn test_tile_tree_remove(
-        layout_name: &str,
-        tiles: u32,
-        remove: u32,
-        expected: TileTree<TestWindow>,
-    ) {
+    fn test_remove(layout_name: &str, tiles: u32, remove: u32, expected: TileTree<TestWindow>) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
         let mut tree = TileTree::<TestWindow>::new(layouts, layout_name);
         for i in 0..tiles {
@@ -1249,11 +1378,152 @@ mod tests {
         ]);
         "all"
     )]
-    fn test_tile_tree_update_toplevel_state(
-        mut tree: TileTree<TestWindow>,
-        expected: TileTree<TestWindow>,
-    ) {
+    fn test_update_toplevel_state(mut tree: TileTree<TestWindow>, expected: TileTree<TestWindow>) {
         tree.update_toplevel_state((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected);
+    }
+
+    #[test_case(
+        tile_tree!(layout() [window(id: 0)]),
+        0,
+        FocusDirection::Top,
+        vec![];
+        "empty"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        FocusDirection::Top,
+        vec![0];
+        "2 stacked top"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        FocusDirection::Bottom,
+        vec![1];
+        "2 stacked bottom"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        FocusDirection::Left,
+        vec![0];
+        "2 parallel left"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        FocusDirection::Right,
+        vec![1];
+        "2 parallel right"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        3,
+        FocusDirection::Top,
+        vec![0, 1];
+        "3|2 row split top"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        1,
+        FocusDirection::Bottom,
+        vec![3, 4];
+        "3|2 row split bottom"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout(split: Horizontal) [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        4,
+        FocusDirection::Left,
+        vec![1, 2];
+        "3|2 col split left"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout(split: Horizontal) [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        2,
+        FocusDirection::Right,
+        vec![4];
+        "3|2 col split right"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            window(id: 3),
+        ]),
+        1,
+        FocusDirection::Right,
+        vec![2, 3];
+        "multiple"
+    )]
+    fn test_find_windows_in_direction(
+        mut tree: TileTree<TestWindow>,
+        id: u32,
+        direction: FocusDirection,
+        expected: Vec<u32>,
+    ) {
+        tree.update_toplevel_state((0, 0).into(), (100, 100).into());
+        println!("{}", tree.visualize());
+        assert_eq!(
+            tree.find_windows_in_direction(id, direction)
+                .iter()
+                .map(|w| w.id.unwrap())
+                .collect::<Vec<_>>(),
+            expected
+        );
     }
 }

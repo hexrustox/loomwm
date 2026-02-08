@@ -94,11 +94,19 @@ impl TileTreeWindow for MappedWindow {
         }
     }
 
-    fn update_location(&mut self, location: Point<i32, Logical>) {
+    fn get_location(&self) -> Point<i32, Logical> {
+        self.location
+    }
+
+    fn get_size(&self) -> Size<i32, Logical> {
+        self.window.geometry().size
+    }
+
+    fn set_location(&mut self, location: Point<i32, Logical>) {
         self.location = location;
     }
 
-    fn update_size(&mut self, size: Size<i32, Logical>) {
+    fn set_size(&mut self, size: Size<i32, Logical>) {
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
         });

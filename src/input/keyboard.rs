@@ -30,9 +30,18 @@ pub struct KeyBinding {
 pub enum KeyAction {
     SwitchWorkspace { name: WorkspaceName },
     MoveToWorkspace { name: WorkspaceName, focus: bool },
+    FocusWindow { direction: FocusDirection },
     ToggleFloating,
     CloseWindow,
     Execute(Vec<String>),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FocusDirection {
+    Top,
+    Bottom,
+    Left,
+    Right,
 }
 
 // TEMP
@@ -166,6 +175,7 @@ impl WaylandState {
                         MoveToWorkspace { name, focus } => {
                             data.move_focused_window_to_workspace(name.clone(), *focus);
                         }
+                        FocusWindow { direction } => {}
                         ToggleFloating => {
                             data.toggle_focused_window_floating();
                         }
