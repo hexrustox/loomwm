@@ -346,7 +346,7 @@ impl WaylandState {
     }
 
     pub fn surface_under(
-        &mut self,
+        &self,
         point: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
         self.mapped_window_under(point)
@@ -358,7 +358,7 @@ impl WaylandState {
             })
     }
 
-    fn restore_workspace_focus(&mut self, name: &WorkspaceName) {
+    pub fn restore_workspace_focus(&mut self, name: &WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
         if let Some(window) = monitor.get_workspace(name).last_focus_window() {
             let surface = window.toplevel().unwrap().wl_surface().clone();

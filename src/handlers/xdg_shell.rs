@@ -114,7 +114,9 @@ impl XdgShellHandler for WaylandState {
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
-        self.remove_mapped_window(toplevel.wl_surface());
+        if let Some((_, name)) = self.remove_mapped_window(toplevel.wl_surface()) {
+            self.restore_workspace_focus(&name);
+        };
     }
 }
 

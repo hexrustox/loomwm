@@ -251,18 +251,12 @@ pub fn test_window_rules() -> WindowRules {
         },
         WindowRule {
             matches: vec![WindowRuleMatch {
-                workspace: Some(WorkspaceName::Id(2)),
+                float: Some(true),
                 ..Default::default()
             }],
-            properties: WindowProperties::Opening {
-                opening: WindowOpeningProperties {
-                    focus: Some(false),
-                    ..Default::default()
-                },
-                dynamic: WindowDynamicProperties {
-                    decoration: Some(WindowDecoration::ClientSide),
-                },
-            },
+            properties: WindowProperties::Dynamic(WindowDynamicProperties {
+                decoration: Some(WindowDecoration::ClientSide),
+            }),
         },
     ])
 }
