@@ -10,7 +10,7 @@ use smithay::{
     utils::{Logical, Point, Scale, Size},
 };
 
-use crate::{monitor::workspace::tile::TileTree, window::MappedWindow};
+use crate::{input::FocusDirection, monitor::workspace::tile::TileTree, window::MappedWindow};
 
 mod tile;
 
@@ -95,6 +95,18 @@ impl Workspace {
             .iter_mut()
             .find(|mapped| mapped.toplevel().wl_surface() == surface)
             .or(self.tiling.find_window_mut(surface))
+    }
+
+    pub fn last_window_in_direction(
+        &self,
+        surface: &WlSurface,
+        direction: FocusDirection,
+    ) -> Option<&Window> {
+        let mapped_list = self.tiling.find_windows_in_direction(surface, direction);
+        self.focus_queue
+            .iter()
+            .rev()
+            .find(|&window| mapped_list.iter().any(|mapped| mapped.window == *window))
     }
 
     pub fn raise_floating_window(&mut self, surface: &WlSurface) {

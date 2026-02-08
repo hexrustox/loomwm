@@ -126,6 +126,42 @@ pub fn test_key_bindings() -> KeyBindings {
             },
             KeyAction::CloseWindow,
         ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::h,
+            },
+            KeyAction::FocusWindow {
+                direction: FocusDirection::Left,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::j,
+            },
+            KeyAction::FocusWindow {
+                direction: FocusDirection::Bottom,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::k,
+            },
+            KeyAction::FocusWindow {
+                direction: FocusDirection::Top,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT,
+                key: Keysym::l,
+            },
+            KeyAction::FocusWindow {
+                direction: FocusDirection::Right,
+            },
+        ),
     ])
 }
 
@@ -175,7 +211,9 @@ impl WaylandState {
                         MoveToWorkspace { name, focus } => {
                             data.move_focused_window_to_workspace(name.clone(), *focus);
                         }
-                        FocusWindow { direction } => {}
+                        FocusWindow { direction } => {
+                            data.focus_window_in_direction(*direction);
+                        }
                         ToggleFloating => {
                             data.toggle_focused_window_floating();
                         }

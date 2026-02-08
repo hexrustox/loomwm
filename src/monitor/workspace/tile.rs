@@ -644,13 +644,13 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
         let target_rect = Rect::new(target.get_location(), target.get_size());
 
-        let mut possible_ids = Vec::new();
-        traverse_calc(&self.arena, self.root, &mut possible_ids, &|window| {
+        let mut windows = Vec::new();
+        traverse_calc(&self.arena, self.root, &mut windows, &|window| {
             let window_rect = Rect::new(window.get_location(), window.get_size());
             window_rect.is_in_direction(direction, &target_rect)
         });
 
-        possible_ids
+        windows
     }
 }
 
