@@ -45,18 +45,18 @@ pub enum UnmappedWindowState {
 #[derive(Debug)]
 pub struct MappedWindow {
     pub window: Window,
-    pub focus: bool,
-    pub floating: bool,
+    pub is_focused: bool,
+    pub is_floating: bool,
     pub location: Point<i32, Logical>,
     pub render: bool,
 }
 
 impl MappedWindow {
-    pub fn new(window: Window, focus: bool) -> Self {
+    pub fn new(window: Window, is_focus: bool) -> Self {
         Self {
             window,
-            focus,
-            floating: false,
+            is_focused: is_focus,
+            is_floating: false,
             location: (0, 0).into(),
             render: false,
         }

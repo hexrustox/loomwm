@@ -122,6 +122,8 @@ enum TileSplit {
 
 #[derive(Debug, Default, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
+// TEMP
+#[allow(dead_code)]
 enum TileOrientation {
     #[default]
     BottomRight,

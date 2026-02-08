@@ -76,7 +76,7 @@ impl CompositorHandler for WaylandState {
                             .get_active_workspace_name()
                             .clone(),
                     };
-                    let properties = self.window_rules.get_properties(candidate);
+                    let properties = self.window_rules.get_properties(candidate, true);
 
                     let config_state = UnmappedWindowState::Configured(properties);
 

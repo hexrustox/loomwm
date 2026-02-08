@@ -7,19 +7,66 @@ use crate::monitor::{TileRatio, WorkspaceName};
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
-    pub fn get_properties(&self, mut candidate: WindowRuleCandidate) -> WindowProperties {
-        let mut properties = WindowProperties::default();
+    pub fn get_properties(
+        &self,
+        mut candidate: WindowRuleCandidate,
+        opening: bool,
+    ) -> WindowProperties {
+        let mut properties = if opening {
+            WindowProperties::default()
+        } else {
+            WindowProperties::Dynamic(WindowDynamicProperties::default())
+        };
         for rule in &self.0 {
             if rule.is_match(&candidate) {
-                properties = properties.merge(rule.properties.clone());
-                if let Some(focus) = properties.focus {
+                properties = properties.merge(if opening {
+                    match rule.properties.clone() {
+                        WindowProperties::Dynamic(dynamic) => WindowProperties::Opening {
+                            opening: WindowOpeningProperties::default(),
+                            dynamic,
+                        },
+                        x => x,
+                    }
+                } else {
+                    match rule.properties.clone() {
+                        WindowProperties::Opening { dynamic, .. } => {
+                            WindowProperties::Dynamic(dynamic)
+                        }
+                        x => x,
+                    }
+                });
+
+                if let WindowProperties::Opening {
+                    opening:
+                        WindowOpeningProperties {
+                            focus: Some(focus), ..
+                        },
+                    ..
+                } = properties
+                {
                     candidate.focus = focus;
                 }
-                if matches!(properties.layout, Some(WindowLayout::Float { .. })) {
+                if let WindowProperties::Opening {
+                    opening:
+                        WindowOpeningProperties {
+                            state: Some(WindowState::Float { .. }),
+                            ..
+                        },
+                    ..
+                } = properties
+                {
                     candidate.float = true;
                 }
-                if let Some(workspace) = properties.workspace.as_ref() {
-                    candidate.workspace = workspace.clone();
+                if let WindowProperties::Opening {
+                    opening:
+                        WindowOpeningProperties {
+                            workspace: Some(ref name),
+                            ..
+                        },
+                    ..
+                } = properties
+                {
+                    candidate.workspace = name.clone();
                 }
             }
         }
@@ -77,21 +124,69 @@ pub struct WindowRuleMatch {
     workspace: Option<WorkspaceName>,
 }
 
+#[derive(Debug, Clone)]
+pub enum WindowProperties {
+    Opening {
+        opening: WindowOpeningProperties,
+        dynamic: WindowDynamicProperties,
+    },
+    Dynamic(WindowDynamicProperties),
+}
+
+impl Default for WindowProperties {
+    fn default() -> Self {
+        Self::Opening {
+            opening: WindowOpeningProperties::default(),
+            dynamic: WindowDynamicProperties::default(),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
-pub struct WindowProperties {
-    pub decoration: Option<WindowDecoration>,
+pub struct WindowOpeningProperties {
     pub focus: Option<bool>,
-    pub layout: Option<WindowLayout>,
+    pub state: Option<WindowState>,
     pub workspace: Option<WorkspaceName>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct WindowDynamicProperties {
+    pub decoration: Option<WindowDecoration>,
 }
 
 impl WindowProperties {
     fn merge(self, rhs: Self) -> Self {
+        match (self, rhs) {
+            (
+                Self::Opening { opening, dynamic },
+                Self::Opening {
+                    opening: opening_rhs,
+                    dynamic: dynamic_rhs,
+                },
+            ) => Self::Opening {
+                opening: opening.merge(opening_rhs),
+                dynamic: dynamic.merge(dynamic_rhs),
+            },
+            (Self::Dynamic(d1), Self::Dynamic(d2)) => Self::Dynamic(d1.merge(d2)),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl WindowOpeningProperties {
+    fn merge(self, rhs: Self) -> Self {
+        Self {
+            focus: rhs.focus.or(self.focus),
+            state: rhs.state.or(self.state),
+            workspace: rhs.workspace.or(self.workspace),
+        }
+    }
+}
+
+impl WindowDynamicProperties {
+    fn merge(self, rhs: Self) -> Self {
         Self {
             decoration: rhs.decoration.or(self.decoration),
-            focus: rhs.focus.or(self.focus),
-            layout: rhs.layout.or(self.layout),
-            workspace: rhs.workspace.or(self.workspace),
         }
     }
 }
@@ -123,7 +218,7 @@ impl From<WindowDecoration> for Mode {
 type N = i32;
 
 #[derive(Debug, Clone)]
-pub enum WindowLayout {
+pub enum WindowState {
     Float {
         location: Option<WindowLocation>,
         size: Option<(N, N)>,
@@ -131,7 +226,7 @@ pub enum WindowLayout {
     Tile(Option<TileRatio>),
 }
 
-impl Default for WindowLayout {
+impl Default for WindowState {
     fn default() -> Self {
         Self::Tile(None)
     }
@@ -150,23 +245,23 @@ pub fn test_window_rules() -> WindowRules {
             matches: vec![WindowRuleMatch {
                 ..Default::default()
             }],
-            properties: WindowProperties {
+            properties: WindowProperties::Dynamic(WindowDynamicProperties {
                 decoration: Some(WindowDecoration::ServerSide),
-                ..Default::default()
-            },
+            }),
         },
         WindowRule {
             matches: vec![WindowRuleMatch {
-                float: Some(true),
+                workspace: Some(WorkspaceName::Id(2)),
                 ..Default::default()
             }],
-            properties: WindowProperties {
-                decoration: Some(WindowDecoration::ClientSide),
-                layout: Some(WindowLayout::Float {
-                    location: Some(WindowLocation::Center),
-                    size: Some((800, 600)),
-                }),
-                ..Default::default()
+            properties: WindowProperties::Opening {
+                opening: WindowOpeningProperties {
+                    focus: Some(false),
+                    ..Default::default()
+                },
+                dynamic: WindowDynamicProperties {
+                    decoration: Some(WindowDecoration::ClientSide),
+                },
             },
         },
     ])
