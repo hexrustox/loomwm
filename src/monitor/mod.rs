@@ -124,22 +124,14 @@ impl Monitor {
 
 impl WaylandState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
-        let WindowProperties::Opening {
-            opening:
-                WindowOpeningProperties {
-                    focus,
-                    state,
-                    workspace,
-                },
-            dynamic,
-        } = properties
-        else {
-            unreachable!()
-        };
+        let WindowOpeningProperties {
+            focus,
+            state,
+            workspace,
+        } = properties.opening.unwrap();
+
         let focus = focus.unwrap_or(true);
         let mut mapped = MappedWindow::new(window, focus);
-
-        apply_rule_to_mapped_window(&mut mapped, dynamic);
 
         let surface = if focus {
             Some(mapped.toplevel().wl_surface().clone())
@@ -158,6 +150,9 @@ impl WaylandState {
         }
         let workspace = monitor.get_workspace_mut(&name);
 
+        mapped.is_floating = state
+            .as_ref()
+            .is_some_and(|state| matches!(state, WindowState::Float { .. }));
         match state.unwrap_or_default() {
             WindowState::Float { location, size } => {
                 match location {
@@ -184,13 +179,11 @@ impl WaylandState {
                     state.size = Some(size);
                 });
 
-                mapped.is_floating = true;
-                mapped.toplevel().send_configure();
+                apply_rule_to_mapped_window(&mut mapped, properties.dynamic);
                 workspace.add_floating_window(mapped);
             }
             WindowState::Tile(ratio) => {
-                mapped.is_floating = false;
-                mapped.toplevel().send_configure();
+                apply_rule_to_mapped_window(&mut mapped, properties.dynamic);
                 workspace.add_tiling_window(mapped, ratio);
             }
         }
@@ -273,7 +266,7 @@ impl WaylandState {
                 let (app_id, title) = get_app_id_and_title(&old_surface);
                 let focus = mapped.is_focused;
                 let float = mapped.is_floating;
-                let WindowProperties::Dynamic(dynamic) = self.window_rules.get_properties(
+                let properties = self.window_rules.get_properties(
                     WindowRuleCandidate {
                         app_id,
                         title,
@@ -282,10 +275,8 @@ impl WaylandState {
                         workspace: name,
                     },
                     false,
-                ) else {
-                    unreachable!()
-                };
-                apply_rule_to_mapped_window(mapped, dynamic);
+                );
+                apply_rule_to_mapped_window(mapped, properties.dynamic);
             }
         }
 
@@ -311,7 +302,7 @@ impl WaylandState {
         let (app_id, title) = get_app_id_and_title(surface);
         let focus = mapped.is_focused;
         let float = mapped.is_floating;
-        let WindowProperties::Dynamic(dynamic) = self.window_rules.get_properties(
+        let properties = self.window_rules.get_properties(
             WindowRuleCandidate {
                 app_id,
                 title,
@@ -320,10 +311,8 @@ impl WaylandState {
                 workspace: name.clone(),
             },
             false,
-        ) else {
-            unreachable!()
-        };
-        apply_rule_to_mapped_window(mapped, dynamic);
+        );
+        apply_rule_to_mapped_window(mapped, properties.dynamic);
 
         let floating = mapped.is_floating;
         let window = mapped.window.clone();
@@ -395,7 +384,7 @@ impl WaylandState {
         }
 
         let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
-        let WindowProperties::Dynamic(dynamic) = self.window_rules.get_properties(
+        let properties = self.window_rules.get_properties(
             WindowRuleCandidate {
                 app_id,
                 title,
@@ -404,11 +393,9 @@ impl WaylandState {
                 workspace: name.clone(),
             },
             false,
-        ) else {
-            unreachable!()
-        };
+        );
 
-        apply_rule_to_mapped_window(&mut mapped, dynamic);
+        apply_rule_to_mapped_window(&mut mapped, properties.dynamic);
 
         let monitor = self.monitors.get_monitor_mut();
         monitor.add_workspace(name.clone());
@@ -438,7 +425,7 @@ impl WaylandState {
 
         let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
         let new_float = !mapped.is_floating;
-        let WindowProperties::Dynamic(dynamic) = self.window_rules.get_properties(
+        let properties = self.window_rules.get_properties(
             WindowRuleCandidate {
                 app_id,
                 title,
@@ -447,11 +434,9 @@ impl WaylandState {
                 workspace: name.clone(),
             },
             false,
-        ) else {
-            unreachable!()
-        };
+        );
 
-        apply_rule_to_mapped_window(&mut mapped, dynamic);
+        apply_rule_to_mapped_window(&mut mapped, properties.dynamic);
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&name);

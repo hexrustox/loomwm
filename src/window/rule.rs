@@ -15,56 +15,32 @@ impl WindowRules {
         let mut properties = if opening {
             WindowProperties::default()
         } else {
-            WindowProperties::Dynamic(WindowDynamicProperties::default())
+            WindowProperties {
+                opening: None,
+                ..Default::default()
+            }
         };
         for rule in &self.0 {
             if rule.is_match(&candidate) {
-                properties = properties.merge(if opening {
-                    match rule.properties.clone() {
-                        WindowProperties::Dynamic(dynamic) => WindowProperties::Opening {
-                            opening: WindowOpeningProperties::default(),
-                            dynamic,
-                        },
-                        x => x,
-                    }
-                } else {
-                    match rule.properties.clone() {
-                        WindowProperties::Opening { dynamic, .. } => {
-                            WindowProperties::Dynamic(dynamic)
-                        }
-                        x => x,
-                    }
-                });
+                properties = properties.merge(rule.properties.clone());
 
-                if let WindowProperties::Opening {
-                    opening:
-                        WindowOpeningProperties {
-                            focus: Some(focus), ..
-                        },
-                    ..
-                } = properties
+                if let Some(WindowOpeningProperties {
+                    focus: Some(focus), ..
+                }) = properties.opening
                 {
                     candidate.focus = focus;
                 }
-                if let WindowProperties::Opening {
-                    opening:
-                        WindowOpeningProperties {
-                            state: Some(WindowState::Float { .. }),
-                            ..
-                        },
+                if let Some(WindowOpeningProperties {
+                    state: Some(WindowState::Float { .. }),
                     ..
-                } = properties
+                }) = properties.opening
                 {
                     candidate.float = true;
                 }
-                if let WindowProperties::Opening {
-                    opening:
-                        WindowOpeningProperties {
-                            workspace: Some(ref name),
-                            ..
-                        },
+                if let Some(WindowOpeningProperties {
+                    workspace: Some(ref name),
                     ..
-                } = properties
+                }) = properties.opening
                 {
                     candidate.workspace = name.clone();
                 }
@@ -125,18 +101,15 @@ pub struct WindowRuleMatch {
 }
 
 #[derive(Debug, Clone)]
-pub enum WindowProperties {
-    Opening {
-        opening: WindowOpeningProperties,
-        dynamic: WindowDynamicProperties,
-    },
-    Dynamic(WindowDynamicProperties),
+pub struct WindowProperties {
+    pub opening: Option<WindowOpeningProperties>,
+    pub dynamic: WindowDynamicProperties,
 }
 
 impl Default for WindowProperties {
     fn default() -> Self {
-        Self::Opening {
-            opening: WindowOpeningProperties::default(),
+        Self {
+            opening: Some(WindowOpeningProperties::default()),
             dynamic: WindowDynamicProperties::default(),
         }
     }
@@ -156,19 +129,12 @@ pub struct WindowDynamicProperties {
 
 impl WindowProperties {
     fn merge(self, rhs: Self) -> Self {
-        match (self, rhs) {
-            (
-                Self::Opening { opening, dynamic },
-                Self::Opening {
-                    opening: opening_rhs,
-                    dynamic: dynamic_rhs,
-                },
-            ) => Self::Opening {
-                opening: opening.merge(opening_rhs),
-                dynamic: dynamic.merge(dynamic_rhs),
-            },
-            (Self::Dynamic(d1), Self::Dynamic(d2)) => Self::Dynamic(d1.merge(d2)),
-            _ => unreachable!(),
+        Self {
+            opening: self
+                .opening
+                .zip(rhs.opening)
+                .map(|(this, rhs)| this.merge(rhs)),
+            dynamic: self.dynamic.merge(rhs.dynamic),
         }
     }
 }
@@ -245,18 +211,27 @@ pub fn test_window_rules() -> WindowRules {
             matches: vec![WindowRuleMatch {
                 ..Default::default()
             }],
-            properties: WindowProperties::Dynamic(WindowDynamicProperties {
-                decoration: Some(WindowDecoration::ServerSide),
-            }),
+            properties: WindowProperties {
+                opening: Some(WindowOpeningProperties {
+                    focus: Some(false),
+                    ..Default::default()
+                }),
+                dynamic: WindowDynamicProperties {
+                    decoration: Some(WindowDecoration::ServerSide),
+                },
+            },
         },
         WindowRule {
             matches: vec![WindowRuleMatch {
                 float: Some(true),
                 ..Default::default()
             }],
-            properties: WindowProperties::Dynamic(WindowDynamicProperties {
-                decoration: Some(WindowDecoration::ClientSide),
-            }),
+            properties: WindowProperties {
+                opening: None,
+                dynamic: WindowDynamicProperties {
+                    decoration: Some(WindowDecoration::ClientSide),
+                },
+            },
         },
     ])
 }
