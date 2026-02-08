@@ -193,13 +193,7 @@ impl Workspace {
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
         self.windows_iter()
-            .flat_map(|mapped| {
-                if mapped.render {
-                    mapped.render_elements::<R>(renderer, scale)
-                } else {
-                    Vec::new()
-                }
-            })
+            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()
     }
 }

@@ -48,7 +48,6 @@ pub struct MappedWindow {
     pub is_focused: bool,
     pub is_floating: bool,
     pub location: Point<i32, Logical>,
-    pub render: bool,
 }
 
 impl MappedWindow {
@@ -58,7 +57,6 @@ impl MappedWindow {
             is_focused: is_focus,
             is_floating: false,
             location: (0, 0).into(),
-            render: false,
         }
     }
 

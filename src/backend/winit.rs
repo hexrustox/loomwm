@@ -57,7 +57,6 @@ impl Winit {
                     let backend = &mut winit.backend;
 
                     let result = {
-                        let age = backend.buffer_age().unwrap_or(0);
                         let (renderer, mut framebuffer) = backend.bind().unwrap();
 
                         let scale = output.current_scale().fractional_scale().into();
@@ -66,7 +65,7 @@ impl Winit {
                         winit.damage_tracker.render_output(
                             renderer,
                             &mut framebuffer,
-                            age,
+                            0,
                             &elements,
                             [0.0, 0.0, 0.0, 1.0],
                         )
@@ -85,6 +84,7 @@ impl Winit {
                         });
                     }
 
+                    data.compositor.space.refresh();
                     data.compositor.popups.cleanup();
                     let _ = data.compositor.display_handle.flush_clients();
 
@@ -105,6 +105,8 @@ impl Winit {
     }
 
     pub fn init(&mut self, data: &mut WaylandState) {
+        self.output
+            .create_global::<WaylandState>(&data.display_handle);
         data.space.map_output(&self.output, (0, 0));
         data.monitors.push(
             self.output.clone(),
