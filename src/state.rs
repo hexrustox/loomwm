@@ -19,7 +19,7 @@ use smithay::{
 
 use crate::{
     CompositorData,
-    config::{Config, KeyConfig, PointerConfig},
+    config::{Config, GeneralConfig, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::KeyModifiers,
     monitor::{LayoutSet, Monitors},
@@ -50,6 +50,7 @@ pub struct WaylandState {
 
     pub key_modifiers: KeyModifiers,
 
+    pub general: GeneralConfig,
     pub window_rules: WindowRules,
     pub layout_set: Rc<LayoutSet>,
     pub default_layout: Rc<str>,
@@ -138,6 +139,7 @@ impl WaylandState {
 
             key_modifiers: KeyModifiers::empty(),
 
+            general: config.general,
             window_rules: config.window_rules,
             layout_set: Rc::new(config.layout.layouts),
             default_layout: Rc::from(config.layout.default),

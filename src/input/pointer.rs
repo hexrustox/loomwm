@@ -139,7 +139,6 @@ impl WaylandState {
                         toplevel.with_pending_state(|state| {
                             state.states.set(xdg_toplevel::State::Resizing);
                         });
-
                         toplevel.send_pending_configure();
 
                         let edge = match self.pointer_config.resize {
@@ -183,7 +182,7 @@ impl WaylandState {
                                         ResizeEdge::BOTTOM
                                     }
                                 } else {
-                                    // #[allow(clippy::collapsible_else_if)]
+                                    #[allow(clippy::collapsible_else_if)]
                                     if y <= height_1_3 {
                                         ResizeEdge::TOP_RIGHT
                                     } else if y <= height_2_3 {
