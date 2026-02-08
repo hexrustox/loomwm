@@ -184,13 +184,50 @@ impl WaylandState {
             }
             WindowState::Tile(ratio) => {
                 apply_rule_to_mapped_window(&mut mapped, properties.dynamic);
-                workspace.add_tiling_window(mapped, ratio);
+                let mapped = workspace.add_tiling_window(mapped, ratio);
+                self.handle_tilting_layout_full(mapped);
             }
         }
 
         if let Some(surface) = surface {
             self.focus_window(&surface);
         }
+    }
+
+    fn handle_tilting_layout_full(&mut self, mapped: Option<MappedWindow>) {
+        let Some(mapped) = mapped else {
+            return;
+        };
+        let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+
+        let candidate = WindowRuleCandidate {
+            app_id,
+            title,
+            focus: true,
+            float: true,
+            workspace: self
+                .monitors
+                .get_monitor()
+                .get_active_workspace_name()
+                .clone(),
+        };
+        let mut properties = self.window_rules.get_properties(candidate, true);
+        if let Some(opening) = properties.opening.as_mut() {
+            opening.state = Some(WindowState::Float {
+                location: None,
+                size: None,
+            })
+        } else {
+            properties.opening = Some(WindowOpeningProperties {
+                state: Some(WindowState::Float {
+                    location: None,
+                    size: None,
+                }),
+                ..Default::default()
+            })
+        }
+
+        self.add_window(mapped.window, properties);
     }
 
     pub fn find_mapped_window(
@@ -406,7 +443,8 @@ impl WaylandState {
         if mapped.is_floating {
             workspace.add_floating_window(mapped);
         } else {
-            workspace.add_tiling_window(mapped, None);
+            let mapped = workspace.add_tiling_window(mapped, None);
+            self.handle_tilting_layout_full(mapped);
         }
 
         if let Some(surface) = surface {
@@ -424,13 +462,13 @@ impl WaylandState {
         };
 
         let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
-        let new_float = !mapped.is_floating;
+        mapped.is_floating = !mapped.is_floating;
         let properties = self.window_rules.get_properties(
             WindowRuleCandidate {
                 app_id,
                 title,
                 focus: true,
-                float: new_float,
+                float: mapped.is_floating,
                 workspace: name.clone(),
             },
             false,
@@ -440,12 +478,11 @@ impl WaylandState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&name);
-        if new_float {
-            mapped.is_floating = true;
+        if mapped.is_floating {
             workspace.add_floating_window(mapped);
         } else {
-            mapped.is_floating = false;
-            workspace.add_tiling_window(mapped, None);
+            let mapped = workspace.add_tiling_window(mapped, None);
+            self.handle_tilting_layout_full(mapped);
         }
     }
 

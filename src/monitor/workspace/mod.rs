@@ -59,10 +59,14 @@ impl Workspace {
         self.floating.insert(0, mapped);
     }
 
-    pub fn add_tiling_window(&mut self, mapped: MappedWindow, ratio: Option<TileRatio>) {
+    pub fn add_tiling_window(
+        &mut self,
+        mapped: MappedWindow,
+        ratio: Option<TileRatio>,
+    ) -> Option<MappedWindow> {
         self.insert_focus_queue(mapped.window.clone());
-        if let Some(mapped) = self.tiling.insert(mapped, ratio) {
-            self.floating.insert(0, mapped);
+        if let mapped @ Some(_) = self.tiling.insert(mapped, ratio) {
+            return mapped;
         } else {
             let output = &self.output;
             self.tiling.update_toplevel_state(
@@ -74,6 +78,7 @@ impl Workspace {
                     .to_logical(output.current_scale().integer_scale()),
             );
         }
+        None
     }
 
     pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {

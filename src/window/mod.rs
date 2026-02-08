@@ -4,7 +4,7 @@ use smithay::{
         element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
     },
     desktop::Window,
-    utils::{Logical, Point, Scale},
+    utils::{Logical, Point, Scale, Size},
     wayland::shell::xdg::ToplevelSurface,
 };
 
@@ -98,8 +98,7 @@ impl TileTreeWindow for MappedWindow {
         self.location = location;
     }
 
-    fn update_size(&mut self, size: smithay::utils::Size<i32, Logical>) {
-        // TODO
+    fn update_size(&mut self, size: Size<i32, Logical>) {
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
         });

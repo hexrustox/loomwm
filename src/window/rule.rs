@@ -130,17 +130,18 @@ pub struct WindowDynamicProperties {
 impl WindowProperties {
     fn merge(self, rhs: Self) -> Self {
         Self {
-            opening: self
-                .opening
-                .zip(rhs.opening)
-                .map(|(this, rhs)| this.merge(rhs)),
-            dynamic: self.dynamic.merge(rhs.dynamic),
+            opening: if let Some(rhs) = rhs.opening {
+                self.opening.map(|opening| opening.override_with(rhs))
+            } else {
+                self.opening
+            },
+            dynamic: self.dynamic.override_with(rhs.dynamic),
         }
     }
 }
 
 impl WindowOpeningProperties {
-    fn merge(self, rhs: Self) -> Self {
+    fn override_with(self, rhs: Self) -> Self {
         Self {
             focus: rhs.focus.or(self.focus),
             state: rhs.state.or(self.state),
@@ -150,7 +151,7 @@ impl WindowOpeningProperties {
 }
 
 impl WindowDynamicProperties {
-    fn merge(self, rhs: Self) -> Self {
+    fn override_with(self, rhs: Self) -> Self {
         Self {
             decoration: rhs.decoration.or(self.decoration),
         }
@@ -213,7 +214,7 @@ pub fn test_window_rules() -> WindowRules {
             }],
             properties: WindowProperties {
                 opening: Some(WindowOpeningProperties {
-                    focus: Some(false),
+                    // focus: Some(false),
                     ..Default::default()
                 }),
                 dynamic: WindowDynamicProperties {
