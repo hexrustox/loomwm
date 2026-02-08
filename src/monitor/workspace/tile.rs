@@ -1,4 +1,4 @@
-use crate::{input::FocusDirection, utils::partition, window::MappedWindow};
+use crate::{input::WindowDirection, utils::partition, window::MappedWindow};
 use slotmap::{SlotMap, new_key_type};
 use smithay::{
     reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -95,11 +95,15 @@ enum TileKind<T> {
 }
 
 pub trait TileTreeWindow: Debug {
+    type Inner;
+
     fn match_id(&self, id: TileTreeWindowId) -> bool;
     fn get_location(&self) -> Point<i32, Logical>;
     fn get_size(&self) -> Size<i32, Logical>;
     fn set_location(&mut self, location: Point<i32, Logical>);
     fn set_size(&mut self, size: Size<i32, Logical>);
+    fn get_inner(&self) -> Self::Inner;
+    fn set_inner(&mut self, inner: Self::Inner);
 }
 
 #[derive(Clone, Copy)]
@@ -393,16 +397,15 @@ impl<T: TileTreeWindow> TileTree<T> {
             layout_id: TileId,
             mut origin: Point<i32, Logical>,
             area: Size<i32, Logical>,
-        ) -> Vec<UpdateWindow> {
-            let mut updates = Vec::new();
-
+            updates: &mut Vec<UpdateWindow>,
+        ) {
             let TileKind::Layout {
                 split,
                 orientation,
                 tiles,
             } = &arena[layout_id].kind
             else {
-                unreachable!()
+                return;
             };
 
             let total_weight = tiles
@@ -417,33 +420,33 @@ impl<T: TileTreeWindow> TileTree<T> {
                 total_weight as usize,
             );
 
-            let tile_iter: Box<dyn Iterator<Item = &_>> =
-                if matches!(orientation, TileOrientation::BottomRight) {
-                    Box::new(tiles.iter())
-                } else {
-                    Box::new(tiles.iter().rev())
+            let len = tiles.len();
+            let is_reversed = matches!(orientation, TileOrientation::TopLeft);
+
+            for i in 0..len {
+                let idx = if is_reversed { len - 1 - i } else { i };
+                let tile_id = tiles[idx];
+                let tile = &arena[tile_id];
+
+                let len_i32 = lengths
+                    .drain(lengths.len().saturating_sub(tile.ratio.0 as usize)..)
+                    .sum();
+
+                let new_area = match split {
+                    TileSplit::Vertical => Size::new(len_i32, area.h),
+                    TileSplit::Horizontal => Size::new(area.w, len_i32),
                 };
-            for tile_id in tile_iter {
-                let tile = &arena[*tile_id];
-                let new_area = {
-                    let len = lengths
-                        .drain(lengths.len().saturating_sub(tile.ratio.0 as usize)..)
-                        .sum();
-                    match split {
-                        TileSplit::Vertical => Size::new(len, area.h),
-                        TileSplit::Horizontal => Size::new(area.w, len),
-                    }
-                };
+
                 match &tile.kind {
                     TileKind::Window(_) => {
                         updates.push(UpdateWindow {
-                            id: *tile_id,
+                            id: tile_id,
                             location: origin,
                             size: new_area,
                         });
                     }
                     TileKind::Layout { .. } => {
-                        updates.extend(traverse(arena, *tile_id, origin, new_area));
+                        traverse(arena, tile_id, origin, new_area, updates);
                     }
                 }
 
@@ -452,15 +455,17 @@ impl<T: TileTreeWindow> TileTree<T> {
                     TileSplit::Horizontal => origin.y += new_area.h,
                 }
             }
-
-            updates
         }
 
-        let updates = traverse(&self.arena, self.root, location, size);
+        let mut updates = Vec::new();
+        traverse(&self.arena, self.root, location, size, &mut updates);
+
         for update in updates {
-            let window = self.arena[update.id].as_window_mut();
-            window.set_location(update.location);
-            window.set_size(update.size);
+            if let Some(window) = self.arena.get_mut(update.id) {
+                let w = window.as_window_mut();
+                w.set_location(update.location);
+                w.set_size(update.size);
+            }
         }
     }
 
@@ -502,98 +507,47 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn find_window_mut<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
-        &mut self,
-        id: I,
-    ) -> Option<&mut T> {
+    fn find_tile_id(&self, id: TileTreeWindowId) -> Option<TileId> {
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,
-            layout_id: TileId,
-            id: TileTreeWindowId,
+            current_id: TileId,
+            target_id: TileTreeWindowId,
         ) -> Option<TileId> {
-            for tile_id in arena[layout_id].as_layout_tiles().iter() {
-                match &arena[*tile_id] {
-                    Tile {
-                        kind: TileKind::Window(window),
-                        ..
-                    } => {
-                        if window.match_id(id) {
-                            return Some(*tile_id);
-                        }
+            match &arena[current_id].kind {
+                TileKind::Window(window) => {
+                    if window.match_id(target_id) {
+                        return Some(current_id);
                     }
-                    _ => {
-                        if let res @ Some(_) = traverse(arena, *tile_id, id) {
+                }
+                TileKind::Layout { tiles, .. } => {
+                    for &child_id in tiles.iter() {
+                        if let res @ Some(_) = traverse(arena, child_id, target_id) {
                             return res;
                         }
                     }
                 }
             }
-
             None
         }
-        let tile_id = traverse(&self.arena, self.root, id.into());
 
-        tile_id.map(|id| self.arena[id].as_window_mut())
+        traverse(&self.arena, self.root, id)
+    }
+
+    pub fn find_window_mut<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
+        &mut self,
+        id: I,
+    ) -> Option<&mut T> {
+        let id = id.into();
+        let tile_id = self.find_tile_id(id)?;
+
+        self.arena.get_mut(tile_id).map(|t| t.as_window_mut())
     }
 
     pub fn find_windows_in_direction<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
         &self,
         id: I,
-        direction: FocusDirection,
+        direction: WindowDirection,
     ) -> Vec<&T> {
-        fn traverse_find<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            layout_id: TileId,
-            id: TileTreeWindowId,
-        ) -> Option<TileId> {
-            for tile_id in arena[layout_id].as_layout_tiles().iter() {
-                match &arena[*tile_id] {
-                    Tile {
-                        kind: TileKind::Window(window),
-                        ..
-                    } => {
-                        if window.match_id(id) {
-                            return Some(*tile_id);
-                        }
-                    }
-                    _ => {
-                        if let res @ Some(_) = traverse_find(arena, *tile_id, id) {
-                            return res;
-                        }
-                    }
-                }
-            }
-
-            None
-        }
-        fn traverse_calc<'a, T: TileTreeWindow, F: Fn(&T) -> bool>(
-            arena: &'a TileArena<T>,
-            layout_id: TileId,
-            possible_ids: &mut Vec<&'a T>,
-            cmp: &F,
-        ) {
-            for tile_id in arena[layout_id].as_layout_tiles().iter() {
-                match &arena[*tile_id] {
-                    Tile {
-                        kind: TileKind::Window(window),
-                        ..
-                    } => {
-                        if cmp(window) {
-                            possible_ids.push(window);
-                        }
-                    }
-                    _ => {
-                        traverse_calc(arena, *tile_id, possible_ids, cmp);
-                    }
-                }
-            }
-        }
-
-        let Some(window_id) = traverse_find(&self.arena, self.root, id.into()) else {
-            return Vec::new();
-        };
-        let target = &self.arena[window_id].as_window();
-
         #[derive(Debug)]
         struct Rect {
             x: i32,
@@ -632,8 +586,8 @@ impl<T: TileTreeWindow> TileTree<T> {
                 self.top() <= other.bottom() && self.bottom() >= other.top()
             }
 
-            fn is_in_direction(&self, direction: FocusDirection, target: &Rect) -> bool {
-                use FocusDirection::*;
+            fn is_in_direction(&self, direction: WindowDirection, target: &Rect) -> bool {
+                use WindowDirection::*;
                 match direction {
                     Top => self.bottom() <= target.top() && self.overlaps_horizontally(target),
                     Bottom => self.top() >= target.bottom() && self.overlaps_horizontally(target),
@@ -642,15 +596,54 @@ impl<T: TileTreeWindow> TileTree<T> {
                 }
             }
         }
-        let target_rect = Rect::new(target.get_location(), target.get_size());
 
-        let mut windows = Vec::new();
-        traverse_calc(&self.arena, self.root, &mut windows, &|window| {
-            let window_rect = Rect::new(window.get_location(), window.get_size());
-            window_rect.is_in_direction(direction, &target_rect)
-        });
+        let Some(target_id) = self.find_tile_id(id.into()) else {
+            return Vec::new();
+        };
+        let target_tile = &self.arena[target_id];
+        let target_window = target_tile.as_window();
 
-        windows
+        let target_rect = Rect::new(target_window.get_location(), target_window.get_size());
+
+        let mut candidates = Vec::new();
+
+        let mut stack = Vec::new();
+        stack.extend(self.arena[self.root].as_layout_tiles().iter().rev());
+
+        while let Some(tile_id) = stack.pop() {
+            match &self.arena[tile_id].kind {
+                TileKind::Window(window) => {
+                    if tile_id != target_id {
+                        let window_rect = Rect::new(window.get_location(), window.get_size());
+                        if window_rect.is_in_direction(direction, &target_rect) {
+                            candidates.push(window);
+                        }
+                    }
+                }
+                TileKind::Layout { tiles, .. } => {
+                    stack.extend(tiles.iter().rev());
+                }
+            }
+        }
+
+        candidates
+    }
+
+    pub fn swap_window<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, lhs: I, rhs: I) {
+        let lhs_id = match self.find_tile_id(lhs.into()) {
+            Some(id) => id,
+            None => return,
+        };
+        let rhs_id = match self.find_tile_id(rhs.into()) {
+            Some(id) => id,
+            None => return,
+        };
+
+        let lhs_inner = self.arena[lhs_id].as_window().get_inner();
+        let rhs_inner = self.arena[rhs_id].as_window().get_inner();
+
+        self.arena[lhs_id].as_window_mut().set_inner(rhs_inner);
+        self.arena[rhs_id].as_window_mut().set_inner(lhs_inner);
     }
 }
 
@@ -705,6 +698,8 @@ mod tests {
     }
 
     impl TileTreeWindow for TestWindow {
+        type Inner = Option<u32>;
+
         fn match_id(&self, id: TileTreeWindowId) -> bool {
             match id {
                 TileTreeWindowId::Id(x) => self.id == Some(x),
@@ -726,6 +721,14 @@ mod tests {
 
         fn set_size(&mut self, size: Size<i32, Logical>) {
             self.size = size;
+        }
+
+        fn get_inner(&self) -> Self::Inner {
+            self.id
+        }
+
+        fn set_inner(&mut self, inner: Self::Inner) {
+            self.id = inner;
         }
     }
 
@@ -1386,7 +1389,7 @@ mod tests {
     #[test_case(
         tile_tree!(layout() [window(id: 0)]),
         0,
-        FocusDirection::Top,
+        WindowDirection::Top,
         vec![];
         "empty"
     )]
@@ -1396,7 +1399,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        FocusDirection::Top,
+        WindowDirection::Top,
         vec![0];
         "2 stacked top"
     )]
@@ -1406,7 +1409,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        FocusDirection::Bottom,
+        WindowDirection::Bottom,
         vec![1];
         "2 stacked bottom"
     )]
@@ -1416,7 +1419,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        FocusDirection::Left,
+        WindowDirection::Left,
         vec![0];
         "2 parallel left"
     )]
@@ -1426,7 +1429,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        FocusDirection::Right,
+        WindowDirection::Right,
         vec![1];
         "2 parallel right"
     )]
@@ -1443,7 +1446,7 @@ mod tests {
             ]
         ]),
         3,
-        FocusDirection::Top,
+        WindowDirection::Top,
         vec![0, 1];
         "3|2 row split top"
     )]
@@ -1460,7 +1463,7 @@ mod tests {
             ]
         ]),
         1,
-        FocusDirection::Bottom,
+        WindowDirection::Bottom,
         vec![3, 4];
         "3|2 row split bottom"
     )]
@@ -1477,7 +1480,7 @@ mod tests {
             ]
         ]),
         4,
-        FocusDirection::Left,
+        WindowDirection::Left,
         vec![1, 2];
         "3|2 col split left"
     )]
@@ -1494,7 +1497,7 @@ mod tests {
             ]
         ]),
         2,
-        FocusDirection::Right,
+        WindowDirection::Right,
         vec![4];
         "3|2 col split right"
     )]
@@ -1506,14 +1509,14 @@ mod tests {
             window(id: 3),
         ]),
         1,
-        FocusDirection::Right,
+        WindowDirection::Right,
         vec![2, 3];
         "multiple"
     )]
     fn test_find_windows_in_direction(
         mut tree: TileTree<TestWindow>,
         id: u32,
-        direction: FocusDirection,
+        direction: WindowDirection,
         expected: Vec<u32>,
     ) {
         tree.update_toplevel_state((0, 0).into(), (100, 100).into());
@@ -1525,5 +1528,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected
         );
+    }
+
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        1,
+        tile_tree!(layout() [
+            window(id: 1),
+            window(id: 0),
+        ]);
+        "simple"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            layout() [
+                layout() [
+                    window(id: 3)
+                ]
+            ]
+        ]),
+        0,
+        3,
+        tile_tree!(layout() [
+            window(id: 3),
+            window(id: 1),
+            window(id: 2),
+            layout() [
+                layout() [
+                    window(id: 0)
+                ]
+            ]
+        ]);
+        "across tiles"
+    )]
+    fn test_swap_window(
+        mut tree: TileTree<TestWindow>,
+        lhs: u32,
+        rhs: u32,
+        expected: TileTree<TestWindow>,
+    ) {
+        tree.swap_window(lhs, rhs);
+        assert_tree_eq!(tree, expected)
     }
 }

@@ -87,6 +87,8 @@ impl MappedWindow {
 }
 
 impl TileTreeWindow for MappedWindow {
+    type Inner = Window;
+
     fn match_id(&self, id: TileTreeWindowId) -> bool {
         match id {
             TileTreeWindowId::WlSurface(surface) => self.toplevel().wl_surface() == surface,
@@ -111,5 +113,13 @@ impl TileTreeWindow for MappedWindow {
             state.size = Some(size);
         });
         self.toplevel().send_pending_configure();
+    }
+
+    fn get_inner(&self) -> Self::Inner {
+        self.window.clone()
+    }
+
+    fn set_inner(&mut self, inner: Self::Inner) {
+        self.window = inner;
     }
 }

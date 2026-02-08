@@ -30,14 +30,15 @@ pub struct KeyBinding {
 pub enum KeyAction {
     SwitchWorkspace { name: WorkspaceName },
     MoveToWorkspace { name: WorkspaceName, focus: bool },
-    FocusWindow { direction: FocusDirection },
+    FocusWindow { direction: WindowDirection },
+    SwapWindow { direction: WindowDirection },
     ToggleFloating,
     CloseWindow,
     Execute(Vec<String>),
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum FocusDirection {
+pub enum WindowDirection {
     Top,
     Bottom,
     Left,
@@ -132,7 +133,7 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::h,
             },
             KeyAction::FocusWindow {
-                direction: FocusDirection::Left,
+                direction: WindowDirection::Left,
             },
         ),
         (
@@ -141,7 +142,7 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::j,
             },
             KeyAction::FocusWindow {
-                direction: FocusDirection::Bottom,
+                direction: WindowDirection::Bottom,
             },
         ),
         (
@@ -150,7 +151,7 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::k,
             },
             KeyAction::FocusWindow {
-                direction: FocusDirection::Top,
+                direction: WindowDirection::Top,
             },
         ),
         (
@@ -159,7 +160,43 @@ pub fn test_key_bindings() -> KeyBindings {
                 key: Keysym::l,
             },
             KeyAction::FocusWindow {
-                direction: FocusDirection::Right,
+                direction: WindowDirection::Right,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
+                key: Keysym::h,
+            },
+            KeyAction::SwapWindow {
+                direction: WindowDirection::Left,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
+                key: Keysym::j,
+            },
+            KeyAction::SwapWindow {
+                direction: WindowDirection::Bottom,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
+                key: Keysym::k,
+            },
+            KeyAction::SwapWindow {
+                direction: WindowDirection::Top,
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
+                key: Keysym::l,
+            },
+            KeyAction::SwapWindow {
+                direction: WindowDirection::Right,
             },
         ),
     ])
@@ -213,6 +250,9 @@ impl WaylandState {
                         }
                         FocusWindow { direction } => {
                             data.focus_window_in_direction(*direction);
+                        }
+                        SwapWindow { direction } => {
+                            data.swap_window_in_direction(*direction);
                         }
                         ToggleFloating => {
                             data.toggle_focused_window_floating();

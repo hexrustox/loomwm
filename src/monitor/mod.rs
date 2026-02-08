@@ -11,7 +11,7 @@ use smithay::{
 };
 
 use crate::{
-    input::FocusDirection,
+    input::WindowDirection,
     monitor::workspace::Workspace,
     state::WaylandState,
     utils::get_app_id_and_title,
@@ -499,7 +499,7 @@ impl WaylandState {
         mapped.toplevel().send_close();
     }
 
-    pub fn focus_window_in_direction(&mut self, direction: FocusDirection) {
+    pub fn focus_window_in_direction(&mut self, direction: WindowDirection) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -515,6 +515,39 @@ impl WaylandState {
         if let Some(window) = workspace.last_window_in_direction(&surface, direction) {
             let window = window.clone();
             self.focus_window(window.toplevel().unwrap().wl_surface());
+        }
+    }
+
+    pub fn swap_window_in_direction(&mut self, direction: WindowDirection) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let Some(surface) = keyboard.current_focus() else {
+            return;
+        };
+        let Some((mapped, name)) = self.find_mapped_window(&surface) else {
+            return;
+        };
+        if mapped.is_floating {
+            return;
+        }
+        let monitor = self.monitors.get_monitor_mut();
+        let workspace = monitor.get_workspace_mut(&name);
+        if let Some(window) = workspace.last_window_in_direction(&surface, direction) {
+            let window = window.clone();
+            workspace.swap_tiling_window(window.toplevel().unwrap().wl_surface(), &surface);
+
+            let Some((mapped, _)) = self.find_mapped_window(&surface) else {
+                return;
+            };
+            let temp = mapped.window.geometry().size;
+            mapped.toplevel().with_pending_state(|state| {
+                state.size = Some(window.geometry().size);
+            });
+            mapped.toplevel().send_pending_configure();
+            let toplevel = window.toplevel().unwrap();
+            toplevel.with_pending_state(|state| {
+                state.size = Some(temp);
+            });
+            toplevel.send_pending_configure();
         }
     }
 
