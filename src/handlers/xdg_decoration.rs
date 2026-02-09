@@ -4,9 +4,9 @@ use smithay::{
     wayland::shell::xdg::{ToplevelSurface, decoration::XdgDecorationHandler},
 };
 
-use crate::state::WaylandState;
+use crate::state::WindowManagerState;
 
-impl XdgDecorationHandler for WaylandState {
+impl XdgDecorationHandler for WindowManagerState {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
         toplevel.with_pending_state(|state| {
             state.decoration_mode = Some(Mode::ServerSide);
@@ -26,4 +26,4 @@ impl XdgDecorationHandler for WaylandState {
     }
 }
 
-delegate_xdg_decoration!(WaylandState);
+delegate_xdg_decoration!(WindowManagerState);

@@ -17,7 +17,7 @@ use smithay::{
     wayland::{compositor, shell::xdg::SurfaceCachedState},
 };
 
-use crate::{state::WaylandState, window::MappedWindow};
+use crate::{state::WindowManagerState, window::MappedWindow};
 
 bitflags! {
     #[derive(Debug, Default, Clone, Copy)]
@@ -42,7 +42,7 @@ impl From<xdg_toplevel::ResizeEdge> for ResizeEdge {
 }
 
 pub struct ResizeGrab {
-    start_data: PointerGrabStartData<WaylandState>,
+    start_data: PointerGrabStartData<WindowManagerState>,
     window: Window,
 
     edges: ResizeEdge,
@@ -53,7 +53,7 @@ pub struct ResizeGrab {
 
 impl ResizeGrab {
     pub fn new(
-        start_data: PointerGrabStartData<WaylandState>,
+        start_data: PointerGrabStartData<WindowManagerState>,
         window: Window,
         edges: ResizeEdge,
         initial_window_rect: Rectangle<i32, Logical>,
@@ -77,11 +77,11 @@ impl ResizeGrab {
     }
 }
 
-impl PointerGrab<WaylandState> for ResizeGrab {
+impl PointerGrab<WindowManagerState> for ResizeGrab {
     fn motion(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         _focus: Option<(WlSurface, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
@@ -145,8 +145,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn relative_motion(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         focus: Option<(WlSurface, Point<f64, Logical>)>,
         event: &RelativeMotionEvent,
     ) {
@@ -155,8 +155,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn button(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &ButtonEvent,
     ) {
         handle.button(data, event);
@@ -183,8 +183,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn axis(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         details: AxisFrame,
     ) {
         handle.axis(data, details)
@@ -192,16 +192,16 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn frame(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
     ) {
         handle.frame(data);
     }
 
     fn gesture_swipe_begin(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GestureSwipeBeginEvent,
     ) {
         handle.gesture_swipe_begin(data, event)
@@ -209,8 +209,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_swipe_update(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GestureSwipeUpdateEvent,
     ) {
         handle.gesture_swipe_update(data, event)
@@ -218,8 +218,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_swipe_end(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GestureSwipeEndEvent,
     ) {
         handle.gesture_swipe_end(data, event)
@@ -227,8 +227,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_pinch_begin(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GesturePinchBeginEvent,
     ) {
         handle.gesture_pinch_begin(data, event)
@@ -236,8 +236,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_pinch_update(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GesturePinchUpdateEvent,
     ) {
         handle.gesture_pinch_update(data, event)
@@ -245,8 +245,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_pinch_end(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GesturePinchEndEvent,
     ) {
         handle.gesture_pinch_end(data, event)
@@ -254,8 +254,8 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_hold_begin(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GestureHoldBeginEvent,
     ) {
         handle.gesture_hold_begin(data, event)
@@ -263,18 +263,18 @@ impl PointerGrab<WaylandState> for ResizeGrab {
 
     fn gesture_hold_end(
         &mut self,
-        data: &mut WaylandState,
-        handle: &mut PointerInnerHandle<'_, WaylandState>,
+        data: &mut WindowManagerState,
+        handle: &mut PointerInnerHandle<'_, WindowManagerState>,
         event: &GestureHoldEndEvent,
     ) {
         handle.gesture_hold_end(data, event)
     }
 
-    fn start_data(&self) -> &PointerGrabStartData<WaylandState> {
+    fn start_data(&self) -> &PointerGrabStartData<WindowManagerState> {
         &self.start_data
     }
 
-    fn unset(&mut self, _data: &mut WaylandState) {}
+    fn unset(&mut self, _data: &mut WindowManagerState) {}
 }
 
 #[derive(Debug, Default, Clone, Copy)]

@@ -8,7 +8,7 @@ use smithay::{
     utils::Transform,
 };
 
-use crate::{CompositorData, state::WaylandState, utils::get_monotonic_time};
+use crate::{CompositorData, state::WindowManagerState, utils::get_monotonic_time};
 
 pub struct Winit {
     output: Output,
@@ -104,9 +104,9 @@ impl Winit {
         })
     }
 
-    pub fn init(&mut self, data: &mut WaylandState) {
+    pub fn init(&mut self, data: &mut WindowManagerState) {
         self.output
-            .create_global::<WaylandState>(&data.display_handle);
+            .create_global::<WindowManagerState>(&data.display_handle);
         data.space.map_output(&self.output, (0, 0));
         data.monitors.push(
             self.output.clone(),

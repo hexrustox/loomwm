@@ -20,7 +20,7 @@ use smithay::{
 
 use crate::{
     input::resize_grab,
-    state::WaylandState,
+    state::WindowManagerState,
     utils::{get_app_id_and_title, is_mapped},
     window::{
         UnmappedWindowState,
@@ -28,7 +28,7 @@ use crate::{
     },
 };
 
-impl CompositorHandler for WaylandState {
+impl CompositorHandler for WindowManagerState {
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.compositor_state
     }
@@ -127,15 +127,15 @@ pub struct ClientState {
 
 impl ClientData for ClientState {}
 
-impl BufferHandler for WaylandState {
+impl BufferHandler for WindowManagerState {
     fn buffer_destroyed(&mut self, _buffer: &WlBuffer) {}
 }
 
-impl ShmHandler for WaylandState {
+impl ShmHandler for WindowManagerState {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
     }
 }
 
-delegate_compositor!(WaylandState);
-delegate_shm!(WaylandState);
+delegate_compositor!(WindowManagerState);
+delegate_shm!(WindowManagerState);

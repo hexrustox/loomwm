@@ -12,8 +12,7 @@ use crate::{
 pub struct Config {
     pub general: GeneralConfig,
     pub window_rules: WindowRules,
-    #[serde(rename = "layouts")]
-    pub layout: LayoutConfig,
+    pub layouts: LayoutConfig,
     pub key: KeyConfig,
     pub pointer: PointerConfig,
 }
@@ -39,7 +38,7 @@ impl Default for GeneralConfig {
 #[serde(default)]
 pub struct LayoutConfig {
     #[serde(flatten)]
-    pub layouts: LayoutSet,
+    pub layout_set: LayoutSet,
     pub default: String,
 }
 

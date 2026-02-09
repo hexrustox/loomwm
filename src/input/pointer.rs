@@ -16,7 +16,7 @@ use crate::{
         move_grab::MoveGrab,
         resize_grab::{ResizeEdge, ResizeGrab},
     },
-    state::WaylandState,
+    state::WindowManagerState,
 };
 
 pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
@@ -91,7 +91,7 @@ pub enum ResizeLocation {
     Edge,
 }
 
-impl WaylandState {
+impl WindowManagerState {
     pub fn process_pointer_motion_absolute<B: InputBackend, T: PointerMotionAbsoluteEvent<B>>(
         &mut self,
         event: T,

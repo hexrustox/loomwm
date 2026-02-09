@@ -13,7 +13,7 @@ use smithay::{
 use crate::{
     input::{WindowDirection, WindowUnit},
     monitor::workspace::Workspace,
-    state::WaylandState,
+    state::WindowManagerState,
     utils::get_app_id_and_title,
     window::{
         MappedWindow,
@@ -121,7 +121,7 @@ impl Monitor {
     }
 }
 
-impl WaylandState {
+impl WindowManagerState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
         let WindowOpeningProperties {
             focus,

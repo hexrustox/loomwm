@@ -14,7 +14,7 @@ use xkbcommon::xkb::{self, keysyms::KEY_NoSymbol};
 
 use crate::{
     monitor::{TileRatio, WorkspaceName},
-    state::WaylandState,
+    state::WindowManagerState,
 };
 
 bitflags! {
@@ -171,7 +171,7 @@ impl<'de> Deserialize<'de> for WindowUnit {
     }
 }
 
-impl WaylandState {
+impl WindowManagerState {
     pub fn process_keyboard_event<B: InputBackend, T: KeyboardKeyEvent<B>>(&mut self, event: T) {
         let serial = SERIAL_COUNTER.next_serial();
         let time = Event::time_msec(&event);

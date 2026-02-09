@@ -8,7 +8,7 @@ use smithay::reexports::{
 
 use crate::{
     backend::{Backend, Winit},
-    state::WaylandState,
+    state::WindowManagerState,
 };
 
 mod backend;
@@ -21,7 +21,7 @@ mod utils;
 mod window;
 
 pub struct CompositorData {
-    pub compositor: WaylandState,
+    pub compositor: WindowManagerState,
     pub backend: Backend,
 }
 
@@ -32,9 +32,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = toml::from_str(&config_file)?;
 
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
-    let display: Display<WaylandState> = Display::new()?;
+    let display: Display<WindowManagerState> = Display::new()?;
     let mut backend = Backend::Winit(Winit::new(event_loop.handle())?);
-    let mut compositor = WaylandState::new(
+    let mut compositor = WindowManagerState::new(
         event_loop.handle(),
         event_loop.get_signal(),
         display,

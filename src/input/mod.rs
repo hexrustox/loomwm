@@ -1,6 +1,6 @@
 use smithay::backend::input::{InputBackend, InputEvent};
 
-use crate::state::WaylandState;
+use crate::state::WindowManagerState;
 
 pub use keyboard::{KeyBindings, KeyModifiers, WindowDirection, WindowUnit};
 pub use pointer::{PointerBindings, ResizeLocation};
@@ -10,7 +10,7 @@ pub mod move_grab;
 mod pointer;
 pub mod resize_grab;
 
-impl WaylandState {
+impl WindowManagerState {
     pub fn process_input_event<T: InputBackend>(&mut self, event: InputEvent<T>) {
         use InputEvent::*;
         match event {

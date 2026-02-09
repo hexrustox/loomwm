@@ -2,7 +2,7 @@ mod winit;
 
 pub use winit::Winit;
 
-use crate::state::WaylandState;
+use crate::state::WindowManagerState;
 
 pub enum Backend {
     Winit(Winit),
@@ -15,7 +15,7 @@ impl Backend {
         }
     }
 
-    pub fn init(&mut self, compositor: &mut WaylandState) {
+    pub fn init(&mut self, compositor: &mut WindowManagerState) {
         match self {
             Self::Winit(winit) => winit.init(compositor),
         }

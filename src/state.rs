@@ -26,7 +26,7 @@ use crate::{
     window::{UnmappedWindow, rule::WindowRules},
 };
 
-pub struct WaylandState {
+pub struct WindowManagerState {
     pub socket_name: OsString,
     pub display_handle: DisplayHandle,
 
@@ -58,7 +58,7 @@ pub struct WaylandState {
     pub pointer_config: PointerConfig,
 }
 
-impl WaylandState {
+impl WindowManagerState {
     pub fn new(
         event_loop: LoopHandle<'static, CompositorData>,
         event_signal: LoopSignal,
@@ -141,8 +141,8 @@ impl WaylandState {
 
             general_config: config.general,
             window_rules: config.window_rules,
-            layout_set: Rc::new(config.layout.layouts),
-            default_layout: Rc::from(config.layout.default),
+            layout_set: Rc::new(config.layouts.layout_set),
+            default_layout: Rc::from(config.layouts.default),
             key_config: config.key,
             pointer_config: config.pointer,
         }
@@ -155,8 +155,8 @@ impl WaylandState {
         }
 
         self.general_config = config.general;
-        self.layout_set = Rc::new(config.layout.layouts);
-        self.default_layout = Rc::from(config.layout.default);
+        self.layout_set = Rc::new(config.layouts.layout_set);
+        self.default_layout = Rc::from(config.layouts.default);
         self.key_config = config.key;
         self.pointer_config = config.pointer;
     }
