@@ -123,8 +123,8 @@ impl Workspace {
             .find(|&window| mapped_list.iter().any(|mapped| mapped.window == *window))
     }
 
-    pub fn swap_tiling_window(&mut self, surface1: &WlSurface, surface2: &WlSurface) {
-        self.tiling.swap_window(surface1, surface2);
+    pub fn swap_tiling_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
+        self.tiling.swap_window(lhs, rhs);
     }
 
     pub fn resize_tiling_window(
@@ -215,8 +215,8 @@ impl Workspace {
                 WindowRuleCandidate {
                     app_id,
                     title,
-                    focus: mapped.is_focused,
-                    float: mapped.is_floating,
+                    focus: mapped.focus,
+                    float: mapped.floating,
                     workspace: workspace.clone(),
                 },
                 false,
@@ -225,7 +225,7 @@ impl Workspace {
         }
     }
 
-    pub fn mapped_window_under(
+    pub fn find_mapped_window_under(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
@@ -240,6 +240,26 @@ impl Workspace {
                 None
             }
         })
+    }
+
+    pub fn find_mapped_window_mut_under(
+        &mut self,
+        point: Point<f64, Logical>,
+    ) -> Option<(&mut MappedWindow, Point<i32, Logical>)> {
+        self.floating
+            .iter_mut()
+            .chain(self.tiling.windows_iter_mut())
+            .find_map(|mapped| {
+                let render_location = mapped.render_location();
+                if mapped
+                    .window
+                    .is_in_input_region(&(point - render_location.to_f64()))
+                {
+                    Some((mapped, render_location))
+                } else {
+                    None
+                }
+            })
     }
 
     pub fn output_size(&self) -> Size<i32, Logical> {

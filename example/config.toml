@@ -11,7 +11,7 @@ decoration = "client_side"
 
 [layouts]
 master = { nodes = [{ ratio = 1.5 }, { layout = "slaves" }] }
-slaves = { nodes = [{ repeat = 3 }] }
+slaves = { split = "horizontal", nodes = [{ repeat = 3 }] }
 default = "master"
 
 [key.bindings]

@@ -202,9 +202,10 @@ pub struct WindowRuleCandidate {
     pub workspace: WorkspaceName,
 }
 
-#[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowDecoration {
+    #[default]
     ClientSide,
     ServerSide,
 }

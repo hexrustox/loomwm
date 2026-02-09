@@ -9,6 +9,7 @@ mod keyboard;
 pub mod move_grab;
 mod pointer;
 pub mod resize_grab;
+pub mod swap_grab;
 
 impl WindowManagerState {
     pub fn process_input_event<T: InputBackend>(&mut self, event: InputEvent<T>) {

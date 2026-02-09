@@ -10,6 +10,7 @@ use smithay::{
     utils::{Rectangle, SERIAL_COUNTER},
 };
 
+use crate::input::swap_grab::SwapGrab;
 use crate::{
     input::{
         KeyModifiers,
@@ -127,7 +128,7 @@ impl WindowManagerState {
         let button_state = event.state();
 
         if button_state == ButtonState::Pressed
-            && let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
+            && let Some((mapped, _)) = self.find_mapped_window_under(pointer.current_location())
         {
             let surface = mapped.toplevel().wl_surface().clone();
             self.focus_window(&surface);
@@ -142,25 +143,34 @@ impl WindowManagerState {
             use PointerActions::*;
             match action {
                 Move => {
-                    if let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
+                    if let Some((mapped, _)) =
+                        self.find_mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
-                        let location = pointer.current_location();
-                        let start_data = PointerGrabStartData {
-                            focus: None,
-                            button,
-                            location,
-                        };
-                        let grab = MoveGrab::new(
-                            start_data,
-                            mapped.window.clone(),
-                            mapped.location.to_f64(),
-                        );
-                        pointer.set_grab(self, grab, serial, Focus::Clear);
+                        {
+                            let location = pointer.current_location();
+                            let start_data = PointerGrabStartData {
+                                focus: None,
+                                button,
+                                location,
+                            };
+                            if mapped.floating {
+                                let grab = MoveGrab::new(
+                                    start_data,
+                                    mapped.window.clone(),
+                                    mapped.location.to_f64(),
+                                );
+                                pointer.set_grab(self, grab, serial, Focus::Clear);
+                            } else {
+                                let grab = SwapGrab::new(start_data, mapped.window.clone());
+                                pointer.set_grab(self, grab, serial, Focus::Clear);
+                            }
+                        }
                     }
                 }
                 Resize => {
-                    if let Some((mapped, _)) = self.mapped_window_under(pointer.current_location())
+                    if let Some((mapped, _)) =
+                        self.find_mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
                         let location = pointer.current_location();

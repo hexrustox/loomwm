@@ -67,7 +67,7 @@ impl XdgShellHandler for WindowManagerState {
             let pointer = seat.get_pointer().unwrap();
 
             if let Some((mapped, _)) = self.find_mapped_window(surface)
-                && mapped.is_floating
+                && mapped.floating
             {
                 let grab =
                     MoveGrab::new(start_data, mapped.window.clone(), mapped.location.to_f64());
@@ -95,7 +95,7 @@ impl XdgShellHandler for WindowManagerState {
             let pointer = seat.get_pointer().unwrap();
 
             if let Some((mapped, _)) = self.find_mapped_window(surface)
-                && mapped.is_floating
+                && mapped.floating
             {
                 toplevel.with_pending_state(|state| {
                     state.states.set(xdg_toplevel::State::Resizing);

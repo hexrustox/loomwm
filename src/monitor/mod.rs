@@ -149,7 +149,7 @@ impl WindowManagerState {
         }
         let workspace = monitor.get_workspace_mut(&name);
 
-        mapped.is_floating = state
+        mapped.floating = state
             .as_ref()
             .is_some_and(|state| matches!(state, WindowState::Float { .. }));
         match state.unwrap_or_default() {
@@ -295,13 +295,13 @@ impl WindowManagerState {
                         .map(|mapped| (mapped, name))
                 })
             {
-                mapped.is_focused = false;
+                mapped.focus = false;
 
                 mapped.window.set_activated(false);
 
                 let (app_id, title) = get_app_id_and_title(&old_surface);
-                let focus = mapped.is_focused;
-                let float = mapped.is_floating;
+                let focus = mapped.focus;
+                let float = mapped.floating;
                 let properties = self.window_rules.get_properties(
                     WindowRuleCandidate {
                         app_id,
@@ -331,13 +331,13 @@ impl WindowManagerState {
         else {
             return;
         };
-        mapped.is_focused = true;
+        mapped.focus = true;
 
         mapped.window.set_activated(true);
 
         let (app_id, title) = get_app_id_and_title(surface);
-        let focus = mapped.is_focused;
-        let float = mapped.is_floating;
+        let focus = mapped.focus;
+        let float = mapped.floating;
         let properties = self.window_rules.get_properties(
             WindowRuleCandidate {
                 app_id,
@@ -350,7 +350,7 @@ impl WindowManagerState {
         );
         apply_rule_to_mapped_window(mapped, properties.dynamic);
 
-        let floating = mapped.is_floating;
+        let floating = mapped.floating;
         let window = mapped.window.clone();
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&name);
@@ -360,21 +360,32 @@ impl WindowManagerState {
         }
     }
 
-    pub fn mapped_window_under(
+    pub fn find_mapped_window_under(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
         let monitor = self.monitors.get_monitor();
         monitor
             .get_workspace(monitor.get_active_workspace_name())
-            .mapped_window_under(point)
+            .find_mapped_window_under(point)
+    }
+
+    pub fn find_mapped_window_mut_under(
+        &mut self,
+        point: Point<f64, Logical>,
+    ) -> Option<(&mut MappedWindow, Point<i32, Logical>)> {
+        let monitor = self.monitors.get_monitor_mut();
+        let name = monitor.get_active_workspace_name().clone();
+        monitor
+            .get_workspace_mut(&name)
+            .find_mapped_window_mut_under(point)
     }
 
     pub fn surface_under(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.mapped_window_under(point)
+        self.find_mapped_window_under(point)
             .and_then(|(window, location)| {
                 window
                     .window
@@ -425,7 +436,7 @@ impl WindowManagerState {
                 app_id,
                 title,
                 focus,
-                float: mapped.is_floating,
+                float: mapped.floating,
                 workspace: name.clone(),
             },
             false,
@@ -439,7 +450,7 @@ impl WindowManagerState {
             monitor.active_workspace = name.clone();
         }
         let workspace = monitor.get_workspace_mut(&name);
-        if mapped.is_floating {
+        if mapped.floating {
             workspace.add_floating_window(mapped);
         } else {
             let mapped = workspace.add_tiling_window(mapped, None);
@@ -461,13 +472,13 @@ impl WindowManagerState {
         };
 
         let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
-        mapped.is_floating = !mapped.is_floating;
+        mapped.floating = !mapped.floating;
         let properties = self.window_rules.get_properties(
             WindowRuleCandidate {
                 app_id,
                 title,
                 focus: true,
-                float: mapped.is_floating,
+                float: mapped.floating,
                 workspace: name.clone(),
             },
             false,
@@ -477,7 +488,7 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&name);
-        if mapped.is_floating {
+        if mapped.floating {
             workspace.add_floating_window(mapped);
         } else {
             let mapped = workspace.add_tiling_window(mapped, None);
@@ -505,7 +516,7 @@ impl WindowManagerState {
         let Some((mapped, name)) = self.find_mapped_window(&surface) else {
             return;
         };
-        if mapped.is_floating {
+        if mapped.floating {
             return;
         }
         let monitor = self.monitors.get_monitor();
@@ -516,6 +527,32 @@ impl WindowManagerState {
         }
     }
 
+    pub fn swap_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
+        let Some((mapped_l, name)) = self.find_mapped_window(lhs) else {
+            return;
+        };
+        let temp = mapped_l.window.geometry().size;
+
+        let monitor = self.monitors.get_monitor_mut();
+        let workspace = monitor.get_workspace_mut(&name);
+        workspace.swap_tiling_window(lhs, rhs);
+
+        let Some((mapped_l, _)) = self.find_mapped_window(lhs) else {
+            return;
+        };
+        let Some((mapped_r, _)) = self.find_mapped_window(rhs) else {
+            return;
+        };
+        mapped_l.toplevel().with_pending_state(|state| {
+            state.size = Some(mapped_r.window.geometry().size);
+        });
+        mapped_l.toplevel().send_pending_configure();
+        mapped_r.toplevel().with_pending_state(|state| {
+            state.size = Some(temp);
+        });
+        mapped_r.toplevel().send_pending_configure();
+    }
+
     pub fn swap_window_in_direction(&mut self, direction: WindowDirection) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let Some(surface) = keyboard.current_focus() else {
@@ -524,7 +561,7 @@ impl WindowManagerState {
         let Some((mapped, name)) = self.find_mapped_window(&surface) else {
             return;
         };
-        if mapped.is_floating {
+        if mapped.floating {
             return;
         }
         let monitor = self.monitors.get_monitor_mut();
@@ -557,7 +594,7 @@ impl WindowManagerState {
         let Some((mapped, name)) = self.find_mapped_window(&surface) else {
             return;
         };
-        if mapped.is_floating {
+        if mapped.floating {
             return;
         }
         let monitor = self.monitors.get_monitor_mut();
@@ -595,12 +632,13 @@ impl WindowManagerState {
     }
 }
 
-fn apply_rule_to_mapped_window(mapped: &mut MappedWindow, properties: WindowDynamicProperties) {
+pub fn apply_rule_to_mapped_window(mapped: &mut MappedWindow, properties: WindowDynamicProperties) {
+    let decoration = properties.decoration.unwrap_or_default();
     mapped.toplevel().with_pending_state(|state| {
-        state.decoration_mode = properties.decoration.map(|d| d.into());
+        state.decoration_mode = Some(decoration.clone().into());
     });
-    if let Some(opacity) = properties.opacity {
-        mapped.opacity = opacity;
-    }
     mapped.toplevel().send_pending_configure();
+
+    mapped.decoration = decoration;
+    mapped.opacity = properties.opacity.unwrap_or(1.0);
 }

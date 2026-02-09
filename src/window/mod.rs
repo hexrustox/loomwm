@@ -10,7 +10,7 @@ use smithay::{
 
 use crate::{
     monitor::{TileTreeWindow, TileTreeWindowId},
-    window::rule::WindowProperties,
+    window::rule::{WindowDecoration, WindowProperties},
 };
 
 pub mod rule;
@@ -46,20 +46,22 @@ pub enum UnmappedWindowState {
 #[derive(Debug)]
 pub struct MappedWindow {
     pub window: Window,
-    pub is_focused: bool,
-    pub is_floating: bool,
+    pub focus: bool,
+    pub floating: bool,
     pub location: Point<i32, Logical>,
+    pub decoration: WindowDecoration,
     pub opacity: f32,
 }
 
 impl MappedWindow {
-    pub fn new(window: Window, is_focus: bool) -> Self {
+    pub fn new(window: Window, focus: bool) -> Self {
         Self {
             window,
-            is_focused: is_focus,
-            is_floating: false,
+            focus,
+            floating: false,
             location: (0, 0).into(),
-            opacity: 1.0,
+            decoration: WindowDecoration::default(),
+            opacity: 0.,
         }
     }
 

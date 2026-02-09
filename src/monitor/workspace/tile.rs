@@ -710,6 +710,9 @@ impl<T: TileTreeWindow> TileTree<T> {
             Some(id) => id,
             None => return,
         };
+        if lhs_id == rhs_id {
+            return;
+        }
 
         let lhs_inner = self.arena[lhs_id].as_window().get_inner();
         let rhs_inner = self.arena[rhs_id].as_window().get_inner();
