@@ -19,7 +19,7 @@ use smithay::{
 };
 
 use crate::{
-    input::{move_grab::MoveGrab, resize_grab::ResizeGrab},
+    input::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
     state::WindowManagerState,
     window::UnmappedWindow,
 };
@@ -102,7 +102,7 @@ impl XdgShellHandler for WindowManagerState {
                 });
                 toplevel.send_pending_configure();
 
-                let grab = ResizeGrab::new(
+                let grab = FloatingResizeGrab::new(
                     start_data,
                     mapped.window.clone(),
                     edges.into(),

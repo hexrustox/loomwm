@@ -11,11 +11,12 @@ use smithay::{
 };
 
 use crate::input::swap_grab::SwapGrab;
+use crate::input::tiling_resize_grab::TilingResizeGrab;
 use crate::{
     input::{
         KeyModifiers,
+        floating_resize_grab::{FloatingResizeGrab, ResizeEdge},
         move_grab::MoveGrab,
-        resize_grab::{ResizeEdge, ResizeGrab},
     },
     state::WindowManagerState,
 };
@@ -185,7 +186,6 @@ impl WindowManagerState {
                             state.states.set(xdg_toplevel::State::Resizing);
                         });
                         toplevel.send_pending_configure();
-
                         let edge = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
                                 let center = mapped.center_location().to_f64();
@@ -239,13 +239,18 @@ impl WindowManagerState {
                             }
                         };
 
-                        let grab = ResizeGrab::new(
-                            start_data,
-                            mapped.window.clone(),
-                            edge,
-                            Rectangle::new(mapped.location, mapped.window.geometry().size),
-                        );
-                        pointer.set_grab(self, grab, serial, Focus::Clear);
+                        if mapped.floating {
+                            let grab = FloatingResizeGrab::new(
+                                start_data,
+                                mapped.window.clone(),
+                                edge,
+                                Rectangle::new(mapped.location, mapped.window.geometry().size),
+                            );
+                            pointer.set_grab(self, grab, serial, Focus::Clear);
+                        } else {
+                            let grab = TilingResizeGrab::new(start_data, edge, location);
+                            pointer.set_grab(self, grab, serial, Focus::Clear);
+                        }
                     }
                 }
             }

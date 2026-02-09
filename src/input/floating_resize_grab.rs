@@ -41,7 +41,7 @@ impl From<xdg_toplevel::ResizeEdge> for ResizeEdge {
     }
 }
 
-pub struct ResizeGrab {
+pub struct FloatingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     window: Window,
 
@@ -51,7 +51,7 @@ pub struct ResizeGrab {
     last_window_size: Size<i32, Logical>,
 }
 
-impl ResizeGrab {
+impl FloatingResizeGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
         window: Window,
@@ -77,7 +77,7 @@ impl ResizeGrab {
     }
 }
 
-impl PointerGrab<WindowManagerState> for ResizeGrab {
+impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
     fn motion(
         &mut self,
         data: &mut WindowManagerState,

@@ -19,7 +19,7 @@ use smithay::{
 };
 
 use crate::{
-    input::resize_grab,
+    input::floating_resize_grab,
     state::WindowManagerState,
     utils::{get_app_id_and_title, is_mapped},
     window::{
@@ -104,7 +104,7 @@ impl CompositorHandler for WindowManagerState {
             // previously-mapped root
             if let Some((mapped, _)) = self.find_mapped_window_mut(surface) {
                 mapped.window.on_commit();
-                resize_grab::handle_commit(mapped);
+                floating_resize_grab::handle_commit(mapped);
 
                 // handle toplevel unmapped
                 return;

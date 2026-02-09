@@ -5,11 +5,12 @@ use crate::state::WindowManagerState;
 pub use keyboard::{KeyBindings, KeyModifiers, WindowDirection, WindowUnit};
 pub use pointer::{PointerBindings, ResizeLocation};
 
+pub mod floating_resize_grab;
 mod keyboard;
 pub mod move_grab;
 mod pointer;
-pub mod resize_grab;
-pub mod swap_grab;
+mod swap_grab;
+mod tiling_resize_grab;
 
 impl WindowManagerState {
     pub fn process_input_event<T: InputBackend>(&mut self, event: InputEvent<T>) {
