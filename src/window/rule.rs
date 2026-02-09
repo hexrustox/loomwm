@@ -219,6 +219,16 @@ impl From<WindowDecoration> for Mode {
     }
 }
 
+impl From<Mode> for WindowDecoration {
+    fn from(value: Mode) -> Self {
+        match value {
+            Mode::ClientSide => WindowDecoration::ClientSide,
+            Mode::ServerSide => WindowDecoration::ServerSide,
+            _ => WindowDecoration::ClientSide,
+        }
+    }
+}
+
 type N = i32;
 
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq)]

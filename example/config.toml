@@ -52,3 +52,6 @@ default = "master"
 
 [pointer]
 resize = "corner"
+
+[pointer.selection]
+opacity = 0.8

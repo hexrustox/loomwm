@@ -45,6 +45,7 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
     ) {
         handle.motion(data, None, event);
 
+        let props = data.pointer_config.selection.clone();
         if let Some((mapped, _)) = data.find_mapped_window_mut_under(event.location) {
             if self
                 .last_window
@@ -62,11 +63,15 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
                 self.last_window = Some((
                     mapped.window.clone(),
                     WindowDynamicProperties {
-                        decoration: Some(mapped.decoration.clone()),
+                        decoration: mapped
+                            .toplevel()
+                            .current_state()
+                            .decoration_mode
+                            .map(|m| m.into()),
                         opacity: Some(mapped.opacity),
                     },
                 ));
-                mapped.opacity = 0.8;
+                apply_rule_to_mapped_window(mapped, props);
             }
 
             if let Some((window, properties)) = last_window

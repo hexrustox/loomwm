@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::{
     input::{KeyBindings, PointerBindings, ResizeLocation},
     monitor::LayoutSet,
-    window::rule::WindowRules,
+    window::rule::{WindowDynamicProperties, WindowRules},
 };
 
 #[derive(Deserialize, Default)]
@@ -53,4 +53,13 @@ pub struct KeyConfig {
 pub struct PointerConfig {
     pub bindings: PointerBindings,
     pub resize: ResizeLocation,
+    #[serde(default = "default_selection")]
+    pub selection: WindowDynamicProperties,
+}
+
+fn default_selection() -> WindowDynamicProperties {
+    WindowDynamicProperties {
+        opacity: Some(0.8),
+        ..Default::default()
+    }
 }

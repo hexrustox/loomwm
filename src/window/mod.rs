@@ -10,7 +10,7 @@ use smithay::{
 
 use crate::{
     monitor::{TileTreeWindow, TileTreeWindowId},
-    window::rule::{WindowDecoration, WindowProperties},
+    window::rule::WindowProperties,
 };
 
 pub mod rule;
@@ -49,7 +49,6 @@ pub struct MappedWindow {
     pub focus: bool,
     pub floating: bool,
     pub location: Point<i32, Logical>,
-    pub decoration: WindowDecoration,
     pub opacity: f32,
 }
 
@@ -60,8 +59,7 @@ impl MappedWindow {
             focus,
             floating: false,
             location: (0, 0).into(),
-            decoration: WindowDecoration::default(),
-            opacity: 0.,
+            opacity: 1.,
         }
     }
 

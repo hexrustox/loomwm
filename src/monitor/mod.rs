@@ -633,12 +633,15 @@ impl WindowManagerState {
 }
 
 pub fn apply_rule_to_mapped_window(mapped: &mut MappedWindow, properties: WindowDynamicProperties) {
-    let decoration = properties.decoration.unwrap_or_default();
-    mapped.toplevel().with_pending_state(|state| {
-        state.decoration_mode = Some(decoration.clone().into());
-    });
+    if let Some(decoration) = properties.decoration {
+        mapped.toplevel().with_pending_state(|state| {
+            state.decoration_mode = Some(decoration.into());
+        });
+    }
+    // needed
     mapped.toplevel().send_pending_configure();
 
-    mapped.decoration = decoration;
-    mapped.opacity = properties.opacity.unwrap_or(1.0);
+    if let Some(opacity) = properties.opacity {
+        mapped.opacity = opacity;
+    }
 }
