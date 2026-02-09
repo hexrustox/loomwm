@@ -50,7 +50,7 @@ pub struct WaylandState {
 
     pub key_modifiers: KeyModifiers,
 
-    pub general: GeneralConfig,
+    pub general_config: GeneralConfig,
     pub window_rules: WindowRules,
     pub layout_set: Rc<LayoutSet>,
     pub default_layout: Rc<str>,
@@ -139,12 +139,21 @@ impl WaylandState {
 
             key_modifiers: KeyModifiers::empty(),
 
-            general: config.general,
+            general_config: config.general,
             window_rules: config.window_rules,
             layout_set: Rc::new(config.layout.layouts),
             default_layout: Rc::from(config.layout.default),
             key_config: config.key,
             pointer_config: config.pointer,
         }
+    }
+
+    pub fn update_config(&mut self, config: Config) {
+        self.general_config = config.general;
+        self.window_rules = config.window_rules;
+        self.layout_set = Rc::new(config.layout.layouts);
+        self.default_layout = Rc::from(config.layout.default);
+        self.key_config = config.key;
+        self.pointer_config = config.pointer;
     }
 }

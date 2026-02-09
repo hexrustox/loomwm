@@ -55,7 +55,7 @@ impl XdgShellHandler for WaylandState {
     }
 
     fn move_request(&mut self, toplevel: ToplevelSurface, seat: WlSeat, serial: Serial) {
-        if !self.general.allow_move_request {
+        if !self.general_config.allow_move_request {
             return;
         }
 
@@ -83,7 +83,7 @@ impl XdgShellHandler for WaylandState {
         serial: Serial,
         edges: smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,
     ) {
-        if !self.general.allow_resize_request {
+        if !self.general_config.allow_resize_request {
             return;
         }
 

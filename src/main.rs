@@ -1,6 +1,10 @@
-use std::{env, fs::read_to_string};
+use std::{env, fs::read_to_string, path::Path};
 
-use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
+use notify::{Event, EventKind, Watcher, event::ModifyKind};
+use smithay::reexports::{
+    calloop::{EventLoop, channel},
+    wayland_server::Display,
+};
 
 use crate::{
     backend::{Backend, Winit},
@@ -21,8 +25,10 @@ pub struct CompositorData {
     pub backend: Backend,
 }
 
+const CONFIG: &str = "/data/example/config.toml";
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config_file = read_to_string("/data/example/config.toml")?;
+    let config_file = read_to_string(CONFIG)?;
     let config = toml::from_str(&config_file)?;
 
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
@@ -43,6 +49,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         compositor,
         backend,
     };
+
+    let (sender, reciever) = channel::channel();
+
+    let mut watcher = notify::recommended_watcher(move |event| {
+        if let Ok(Event {
+            kind: EventKind::Modify(ModifyKind::Data(..)),
+            ..
+        }) = event
+        {
+            sender.send(()).unwrap()
+        }
+    })?;
+
+    watcher.watch(
+        Path::new(CONFIG).parent().unwrap(),
+        notify::RecursiveMode::NonRecursive,
+    )?;
+
+    event_loop
+        .handle()
+        .insert_source(reciever, |event, _, data| {
+            if let channel::Event::Msg(_) = event
+                && let Ok(file) = read_to_string(CONFIG)
+                && let Ok(config) = toml::from_str(&file)
+            {
+                data.compositor.update_config(config);
+            }
+        })?;
 
     event_loop.run(None, &mut data, |_| {})?;
 
