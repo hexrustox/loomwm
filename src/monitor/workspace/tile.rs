@@ -581,6 +581,41 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.arena.get_mut(tile_id).map(|t| t.as_window_mut())
     }
 
+    pub fn for_each_window_mut(&mut self, mut f: impl FnMut(&mut T)) {
+        fn collect_window_ids<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            tile_id: TileId,
+            ids: &mut Vec<TileId>,
+        ) {
+            match &arena[tile_id] {
+                Tile {
+                    kind: TileKind::Window(_),
+                    ..
+                } => ids.push(tile_id),
+                tile => {
+                    for &child_id in tile.as_layout_tiles() {
+                        collect_window_ids(arena, child_id, ids);
+                    }
+                }
+            }
+        }
+
+        let mut window_ids = Vec::new();
+        for &id in self.arena[self.root].as_layout_tiles() {
+            collect_window_ids(&self.arena, id, &mut window_ids);
+        }
+
+        for tile_id in window_ids {
+            if let Tile {
+                kind: TileKind::Window(window),
+                ..
+            } = &mut self.arena[tile_id]
+            {
+                f(window);
+            }
+        }
+    }
+
     pub fn find_windows_in_direction<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
         &self,
         id: I,

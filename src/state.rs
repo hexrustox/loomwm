@@ -155,5 +155,7 @@ impl WaylandState {
         self.default_layout = Rc::from(config.layout.default);
         self.key_config = config.key;
         self.pointer_config = config.pointer;
+
+        self.apply_rule_to_mapped_windows();
     }
 }

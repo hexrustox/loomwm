@@ -13,8 +13,12 @@ use smithay::{
 
 use crate::{
     input::{WindowDirection, WindowUnit},
-    monitor::workspace::tile::TileTree,
-    window::MappedWindow,
+    monitor::{apply_rule_to_mapped_window, workspace::tile::TileTree},
+    utils::get_app_id_and_title,
+    window::{
+        MappedWindow,
+        rule::{WindowRuleCandidate, WindowRules},
+    },
 };
 
 mod tile;
@@ -197,6 +201,38 @@ impl Workspace {
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         self.remove_floating_window(surface)
             .or(self.remove_tiling_window(surface))
+    }
+
+    pub fn apply_rule_to_mapped_windows(&mut self, window_rules: &WindowRules) {
+        let workspace = self.get_name().clone();
+        for mapped in self.floating.iter_mut() {
+            let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+            let properties = window_rules.get_properties(
+                WindowRuleCandidate {
+                    app_id,
+                    title,
+                    focus: mapped.is_focused,
+                    float: mapped.is_floating,
+                    workspace: workspace.clone(),
+                },
+                false,
+            );
+            apply_rule_to_mapped_window(mapped, properties.dynamic);
+        }
+        self.tiling.for_each_window_mut(|mapped| {
+            let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+            let properties = window_rules.get_properties(
+                WindowRuleCandidate {
+                    app_id,
+                    title,
+                    focus: mapped.is_focused,
+                    float: mapped.is_floating,
+                    workspace: workspace.clone(),
+                },
+                false,
+            );
+            apply_rule_to_mapped_window(mapped, properties.dynamic);
+        });
     }
 
     pub fn mapped_window_under(

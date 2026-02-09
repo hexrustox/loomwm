@@ -565,6 +565,13 @@ impl WaylandState {
         workspace.resize_tiling_window(&surface, edge, unit);
     }
 
+    pub fn apply_rule_to_mapped_windows(&mut self) {
+        let monitor = self.monitors.get_monitor_mut();
+        monitor.workspaces.iter_mut().for_each(|workspace| {
+            workspace.apply_rule_to_mapped_windows(&self.window_rules);
+        });
+    }
+
     pub fn active_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
         let monitor = self.monitors.get_monitor();
         monitor
