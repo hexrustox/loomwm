@@ -9,7 +9,7 @@ use crate::state::WindowManagerState;
 impl XdgDecorationHandler for WindowManagerState {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
         toplevel.with_pending_state(|state| {
-            state.decoration_mode = Some(Mode::ServerSide);
+            state.decoration_mode = None;
         })
     }
 
@@ -21,7 +21,7 @@ impl XdgDecorationHandler for WindowManagerState {
 
     fn unset_mode(&mut self, toplevel: ToplevelSurface) {
         toplevel.with_pending_state(|state| {
-            state.decoration_mode = Some(Mode::ServerSide);
+            state.decoration_mode = None;
         })
     }
 }

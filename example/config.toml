@@ -54,4 +54,5 @@ default = "master"
 resize = "corner"
 
 [pointer.selection]
+decoration = "server_side"
 opacity = 0.8

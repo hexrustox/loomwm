@@ -6,7 +6,10 @@ use smithay::{
     },
     desktop::{Window, WindowSurfaceType},
     output::Output,
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    reexports::{
+        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_server::protocol::wl_surface::WlSurface,
+    },
     utils::{Logical, Point, SERIAL_COUNTER, Scale},
 };
 
@@ -183,6 +186,7 @@ impl WindowManagerState {
             }
             WindowState::Tile(ratio) => {
                 apply_rule_to_mapped_window(&mut mapped, properties.dynamic);
+
                 let mapped = workspace.add_tiling_window(mapped, ratio);
                 self.handle_tilting_layout_full(mapped);
             }
@@ -633,12 +637,26 @@ impl WindowManagerState {
 }
 
 pub fn apply_rule_to_mapped_window(mapped: &mut MappedWindow, properties: WindowDynamicProperties) {
-    if let Some(decoration) = properties.decoration {
+    if mapped.floating {
         mapped.toplevel().with_pending_state(|state| {
-            state.decoration_mode = Some(decoration.into());
+            use xdg_toplevel::State::*;
+            state.states.unset(TiledTop);
+            state.states.unset(TiledBottom);
+            state.states.unset(TiledLeft);
+            state.states.unset(TiledRight);
+        });
+    } else {
+        mapped.toplevel().with_pending_state(|state| {
+            use xdg_toplevel::State::*;
+            state.states.set(TiledTop);
+            state.states.set(TiledBottom);
+            state.states.set(TiledLeft);
+            state.states.set(TiledRight);
         });
     }
-    // needed
+    mapped.toplevel().with_pending_state(|state| {
+        state.decoration_mode = properties.decoration.map(|d| d.into());
+    });
     mapped.toplevel().send_pending_configure();
 
     if let Some(opacity) = properties.opacity {

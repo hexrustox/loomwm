@@ -99,15 +99,19 @@ impl Workspace {
         self.floating.iter().chain(self.tiling.windows_iter())
     }
 
+    pub fn windows_iter_mut(&mut self) -> impl Iterator<Item = &mut MappedWindow> {
+        self.floating
+            .iter_mut()
+            .chain(self.tiling.windows_iter_mut())
+    }
+
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
             .find(|mapped| mapped.toplevel().wl_surface() == surface)
     }
 
     pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.floating
-            .iter_mut()
-            .chain(self.tiling.windows_iter_mut())
+        self.windows_iter_mut()
             .find(|mapped| mapped.toplevel().wl_surface() == surface)
     }
 
@@ -116,6 +120,7 @@ impl Workspace {
         surface: &WlSurface,
         direction: WindowDirection,
     ) -> Option<&Window> {
+        // TODO
         let mapped_list = self.tiling.find_windows_in_direction(surface, direction);
         self.focus_queue
             .iter()
@@ -246,20 +251,17 @@ impl Workspace {
         &mut self,
         point: Point<f64, Logical>,
     ) -> Option<(&mut MappedWindow, Point<i32, Logical>)> {
-        self.floating
-            .iter_mut()
-            .chain(self.tiling.windows_iter_mut())
-            .find_map(|mapped| {
-                let render_location = mapped.render_location();
-                if mapped
-                    .window
-                    .is_in_input_region(&(point - render_location.to_f64()))
-                {
-                    Some((mapped, render_location))
-                } else {
-                    None
-                }
-            })
+        self.windows_iter_mut().find_map(|mapped| {
+            let render_location = mapped.render_location();
+            if mapped
+                .window
+                .is_in_input_region(&(point - render_location.to_f64()))
+            {
+                Some((mapped, render_location))
+            } else {
+                None
+            }
+        })
     }
 
     pub fn output_size(&self) -> Size<i32, Logical> {
