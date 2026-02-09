@@ -69,7 +69,7 @@ impl Workspace {
             return mapped;
         } else {
             let output = &self.output;
-            self.tiling.update_toplevel_state(
+            self.tiling.update_window_size(
                 output.current_location(),
                 output
                     .current_mode()
@@ -161,7 +161,7 @@ impl Workspace {
     fn remove_tiling_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         let mapped = self.tiling.remove(surface).inspect(|_| {
             let output = &self.output;
-            self.tiling.update_toplevel_state(
+            self.tiling.update_window_size(
                 output.current_location(),
                 output
                     .current_mode()
