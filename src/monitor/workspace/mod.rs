@@ -107,8 +107,8 @@ impl Workspace {
     pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
         self.floating
             .iter_mut()
+            .chain(self.tiling.windows_iter_mut())
             .find(|mapped| mapped.toplevel().wl_surface() == surface)
-            .or(self.tiling.find_window_mut(surface))
     }
 
     pub fn last_window_in_direction(
@@ -205,7 +205,11 @@ impl Workspace {
 
     pub fn apply_rule_to_mapped_windows(&mut self, window_rules: &WindowRules) {
         let workspace = self.get_name().clone();
-        for mapped in self.floating.iter_mut() {
+        for mapped in self
+            .floating
+            .iter_mut()
+            .chain(self.tiling.windows_iter_mut())
+        {
             let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
             let properties = window_rules.get_properties(
                 WindowRuleCandidate {
@@ -219,20 +223,6 @@ impl Workspace {
             );
             apply_rule_to_mapped_window(mapped, properties.dynamic);
         }
-        self.tiling.for_each_window_mut(|mapped| {
-            let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
-            let properties = window_rules.get_properties(
-                WindowRuleCandidate {
-                    app_id,
-                    title,
-                    focus: mapped.is_focused,
-                    float: mapped.is_floating,
-                    workspace: workspace.clone(),
-                },
-                false,
-            );
-            apply_rule_to_mapped_window(mapped, properties.dynamic);
-        });
     }
 
     pub fn mapped_window_under(

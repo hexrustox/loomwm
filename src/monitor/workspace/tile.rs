@@ -315,6 +315,32 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.insert(window, ratio)
     }
 
+    fn find_tile_id(&self, id: TileTreeWindowId) -> Option<TileId> {
+        fn traverse<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            current_id: TileId,
+            target_id: TileTreeWindowId,
+        ) -> Option<TileId> {
+            match &arena[current_id].kind {
+                TileKind::Window(window) => {
+                    if window.match_id(target_id) {
+                        return Some(current_id);
+                    }
+                }
+                TileKind::Layout { tiles, .. } => {
+                    for &child_id in tiles.iter() {
+                        if let res @ Some(_) = traverse(arena, child_id, target_id) {
+                            return res;
+                        }
+                    }
+                }
+            }
+            None
+        }
+
+        traverse(&self.arena, self.root, id)
+    }
+
     // TODO
     pub fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
         struct RemoveTile {
@@ -550,43 +576,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    fn find_tile_id(&self, id: TileTreeWindowId) -> Option<TileId> {
-        fn traverse<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            current_id: TileId,
-            target_id: TileTreeWindowId,
-        ) -> Option<TileId> {
-            match &arena[current_id].kind {
-                TileKind::Window(window) => {
-                    if window.match_id(target_id) {
-                        return Some(current_id);
-                    }
-                }
-                TileKind::Layout { tiles, .. } => {
-                    for &child_id in tiles.iter() {
-                        if let res @ Some(_) = traverse(arena, child_id, target_id) {
-                            return res;
-                        }
-                    }
-                }
-            }
-            None
-        }
-
-        traverse(&self.arena, self.root, id)
-    }
-
-    pub fn find_window_mut<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
-        &mut self,
-        id: I,
-    ) -> Option<&mut T> {
-        let id = id.into();
-        let tile_id = self.find_tile_id(id)?;
-
-        self.arena.get_mut(tile_id).map(|t| t.as_window_mut())
-    }
-
-    pub fn for_each_window_mut(&mut self, mut f: impl FnMut(&mut T)) {
+    pub fn windows_iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
         fn collect_window_ids<T: TileTreeWindow>(
             arena: &TileArena<T>,
             tile_id: TileId,
@@ -610,15 +600,19 @@ impl<T: TileTreeWindow> TileTree<T> {
             collect_window_ids(&self.arena, id, &mut window_ids);
         }
 
-        for tile_id in window_ids {
-            if let Tile {
-                kind: TileKind::Window(window),
-                ..
-            } = &mut self.arena[tile_id]
-            {
-                f(window);
+        let arena = &mut self.arena as *mut TileArena<T>;
+
+        window_ids.into_iter().filter_map(move |tile_id| {
+            // SAFETY: each tile_id appears at most once, so all returned references are disjoint
+            let arena = unsafe { &mut *arena };
+            match &mut arena[tile_id] {
+                Tile {
+                    kind: TileKind::Window(window),
+                    ..
+                } => Some(window),
+                _ => None,
             }
-        }
+        })
     }
 
     pub fn find_windows_in_direction<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
