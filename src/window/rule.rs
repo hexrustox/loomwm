@@ -218,40 +218,6 @@ pub enum WindowLocation {
     Location(N, N),
 }
 
-// TEMP
-pub fn test_window_rules() -> WindowRules {
-    WindowRules(vec![
-        WindowRule {
-            matches: vec![WindowRuleMatch {
-                ..Default::default()
-            }],
-            properties: WindowProperties {
-                opening: Some(WindowOpeningProperties {
-                    // focus: Some(false),
-                    ..Default::default()
-                }),
-                dynamic: WindowDynamicProperties {
-                    decoration: Some(WindowDecoration::ServerSide),
-                    ..Default::default()
-                },
-            },
-        },
-        WindowRule {
-            matches: vec![WindowRuleMatch {
-                float: Some(true),
-                ..Default::default()
-            }],
-            properties: WindowProperties {
-                opening: None,
-                dynamic: WindowDynamicProperties {
-                    decoration: Some(WindowDecoration::ClientSide),
-                    opacity: Some(0.8),
-                },
-            },
-        },
-    ])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,6 @@ use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 
 use crate::{
     backend::{Backend, Winit},
-    config::test_config,
     state::WaylandState,
 };
 
@@ -23,6 +22,8 @@ pub struct CompositorData {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = toml::from_str("")?;
+
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WaylandState> = Display::new()?;
     let mut backend = Backend::Winit(Winit::new(event_loop.handle())?);
@@ -30,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         event_loop.handle(),
         event_loop.get_signal(),
         display,
-        test_config(),
+        config,
     );
     backend.init(&mut compositor);
 

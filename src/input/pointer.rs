@@ -83,31 +83,12 @@ pub enum PointerActions {
     Resize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ResizeLocation {
+    #[default]
     Corner,
     Edge,
-}
-
-// TEMP
-pub fn test_pointer_bindings() -> PointerBindings {
-    HashMap::from_iter([
-        (
-            PointerCombo {
-                modifiers: KeyModifiers::ALT,
-                code: KeyCode(0x110),
-            },
-            PointerActions::Move,
-        ),
-        (
-            PointerCombo {
-                modifiers: KeyModifiers::ALT,
-                code: KeyCode(0x111),
-            },
-            PointerActions::Resize,
-        ),
-    ])
 }
 
 impl WaylandState {

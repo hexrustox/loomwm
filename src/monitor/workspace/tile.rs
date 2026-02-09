@@ -132,6 +132,7 @@ impl<'a> From<&'a WlSurface> for TileTreeWindowId<'a> {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "lowercase")]
 enum TileSplit {
     #[default]
     Vertical,
@@ -140,13 +141,15 @@ enum TileSplit {
 
 #[derive(Debug, Default, Clone, Copy, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(rename_all = "snake_case")]
 enum TileOrientation {
     #[default]
     BottomRight,
     TopLeft,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(transparent)]
 pub struct LayoutSet(HashMap<String, LayoutSchema>);
 
 impl LayoutSet {
@@ -171,12 +174,15 @@ impl LayoutSet {
 
 #[derive(Debug, Default, Clone, Deserialize)]
 struct LayoutSchema {
+    #[serde(default)]
     split: TileSplit,
+    #[serde(default)]
     orientation: TileOrientation,
     nodes: Vec<LayoutNode>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
@@ -184,6 +190,7 @@ struct LayoutNode {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(transparent)]
 struct TileRepeat(usize);
 
 impl Default for TileRepeat {
@@ -814,36 +821,6 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
         }
     }
-}
-
-// TEMP
-pub fn test_layout_set() -> LayoutSet {
-    LayoutSet(HashMap::from_iter([
-        (
-            "master".to_string(),
-            LayoutSchema {
-                nodes: vec![
-                    LayoutNode::default(),
-                    LayoutNode {
-                        layout: Some("slaves".to_string()),
-                        ..Default::default()
-                    },
-                ],
-                ..Default::default()
-            },
-        ),
-        (
-            "slaves".to_string(),
-            LayoutSchema {
-                split: TileSplit::Horizontal,
-                nodes: vec![LayoutNode {
-                    repeat: TileRepeat(2),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            },
-        ),
-    ]))
 }
 
 #[cfg(test)]
