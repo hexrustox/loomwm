@@ -1,7 +1,10 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{
+    fmt,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de::{self, Visitor}};
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
 
 use crate::monitor::{TileRatio, WorkspaceName};
@@ -117,7 +120,7 @@ pub struct WindowRuleMatch {
     workspace: Option<WorkspaceName>,
 }
 
-#[derive(Debug, Clone, Deserialize, Hash)]
+#[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
 pub struct WindowProperties {
     #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
@@ -135,7 +138,7 @@ impl Default for WindowProperties {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Hash)]
+#[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
 pub struct WindowOpeningProperties {
     pub focus: Option<bool>,
     #[serde(flatten)]
@@ -143,7 +146,7 @@ pub struct WindowOpeningProperties {
     pub workspace: Option<WorkspaceName>,
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub opacity: Option<f32>,
@@ -199,7 +202,7 @@ pub struct WindowRuleCandidate {
     pub workspace: WorkspaceName,
 }
 
-#[derive(Debug, Clone, Deserialize, Hash)]
+#[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowDecoration {
     ClientSide,
@@ -217,7 +220,8 @@ impl From<WindowDecoration> for Mode {
 
 type N = i32;
 
-#[derive(Debug, Clone, Deserialize, Hash)]
+#[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum WindowState {
     Float {
         location: Option<WindowLocation>,
@@ -232,37 +236,94 @@ impl Default for WindowState {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Hash)]
-#[serde(untagged)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum WindowLocation {
     Center,
     Location(N, N),
 }
 
+impl<'de> Deserialize<'de> for WindowLocation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct WindowLocationVisitor;
+
+        impl<'de> Visitor<'de> for WindowLocationVisitor {
+            type Value = WindowLocation;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(r#""center" or [x, y]"#)
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<WindowLocation, E>
+            where
+                E: de::Error,
+            {
+                match value.to_lowercase().as_str() {
+                    "center" => Ok(WindowLocation::Center),
+                    _ => Err(de::Error::invalid_value(de::Unexpected::Str(value), &self)),
+                }
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<WindowLocation, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                const EXP: &&str = &"a sequence of length 2";
+                let x = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, EXP))?;
+                let y = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, EXP))?;
+
+                if seq.next_element::<de::IgnoredAny>()?.is_some() {
+                    return Err(de::Error::invalid_length(3, EXP));
+                }
+
+                Ok(WindowLocation::Location(x, y))
+            }
+        }
+
+        deserializer.deserialize_any(WindowLocationVisitor)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
-    #[derive(Deserialize)]
+    #[derive(Debug, Default, Deserialize, PartialEq)]
     struct T {
-        #[allow(dead_code)]
-        x: WindowRules,
+        p: Option<WindowProperties>,
+        s: Option<WindowState>,
+        l: Option<WindowLocation>,
     }
 
-    #[test]
-    fn test_deserialize() {
-        toml::from_str::<T>(
-            r#"[[x]]
-matches = [{ app-id = "test", title = "test" }]
-focus = false
-float = {}
+    #[test_case(r#"p = { focus = true }"#, WindowProperties { opening: Some(WindowOpeningProperties { focus: Some(true), ..Default::default() }), ..Default::default() })]
+    #[test_case(r#"p = { opacity = 0.1 }"#, WindowProperties { dynamic: WindowDynamicProperties { opacity: Some(0.1), ..Default::default() }, ..Default::default() })]
+    fn test_deserialize_window_properties(input: &str, expected: WindowProperties) {
+        assert_eq!(toml::from_str::<T>(input).unwrap().p, Some(expected))
+    }
 
-[[x]]
-matches = [{ float = true }]
-tile = 1.5
-"#,
-        )
-        .unwrap();
+    #[test_case(r#"s = { float = {} }"#, WindowState::Float { location: None, size: None })]
+    #[test_case(r#"s = { float = { size = [1, 2] } }"#, WindowState::Float { location: None, size: Some((1, 2)) })]
+    #[test_case(r#"s = { tile = 1 }"#, WindowState::Tile(Some(TileRatio(1.0))))]
+    fn test_deserialize_window_state(input: &str, expected: WindowState) {
+        assert_eq!(toml::from_str::<T>(input).unwrap().s, Some(expected))
+    }
+
+    #[test_case(r#"l = "center""#, WindowLocation::Center)]
+    #[test_case(r#"l = [10, 20]"#, WindowLocation::Location(10, 20))]
+    fn test_deserialize_window_location(input: &str, expected: WindowLocation) {
+        assert_eq!(toml::from_str::<T>(input).unwrap().l, Some(expected))
+    }
+
+    #[test_case(r#"l = "foo""#)]
+    #[test_case(r#"l = [1, 2, 3]"#)]
+    fn test_deserialize_fail(input: &str) {
+        assert!(toml::from_str::<T>(input).is_err())
     }
 }

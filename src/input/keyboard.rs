@@ -255,18 +255,25 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize, PartialEq)]
     struct T {
-        x: KeyCombo,
+        k: Option<KeyCombo>,
+        a: Option<KeyAction>,
     }
 
     #[test_case(r#""t""#, KeyModifiers::empty(), KEY_t; "single key")]
     #[test_case(r#""Ctrl+Shift+Return""#, KeyModifiers::CTRL | KeyModifiers::SHIFT, KEY_Return; "with modifiers")]
     fn test_deserialize_key(input: &str, modifiers: KeyModifiers, keysym: u32) {
-        let kb = toml::from_str::<T>(&("x = ".to_string() + input)).unwrap();
-
-        assert!(kb.x.modifiers.contains(modifiers));
-        assert_eq!(kb.x.key.raw(), keysym);
+        assert_eq!(
+            toml::from_str::<T>(&("k = ".to_string() + input)).unwrap(),
+            T {
+                k: Some(KeyCombo {
+                    modifiers,
+                    key: keysym.into()
+                }),
+                a: None
+            }
+        );
     }
 
     #[test_case(r#""""#; "empty")]
@@ -274,14 +281,20 @@ mod tests {
     #[test_case(r#""a+b""#; "multiple key")]
     #[test_case(r#""Super""#; "modifier only")]
     fn test_deserialize_key_fail(input: &str) {
-        assert!(toml::from_str::<T>(&("x = ".to_string() + input)).is_err());
+        assert!(toml::from_str::<T>(&("k = ".to_string() + input)).is_err());
     }
 
-    #[test_case(r#"{ action = "switch_workspace", name = 1 }"#)]
-    #[test_case(r#"{ action = "focus_window", direction = "top" }"#)]
-    #[test_case(r#"{ action = "resize_window", edge = "right", unit = "10px" }"#)]
-    #[test_case(r#"{ action = "execute", command = [] }"#)]
-    fn test_deserialize_action(input: &str) {
-        toml::from_str::<KeyBindings>(&("x = ".to_string() + input)).unwrap();
+    #[test_case(r#"{ action = "switch_workspace", name = 1 }"#, KeyAction::SwitchWorkspace { name: WorkspaceName::Id(1) })]
+    #[test_case(r#"{ action = "focus_window", direction = "up" }"#, KeyAction::FocusWindow { direction: WindowDirection::Up })]
+    #[test_case(r#"{ action = "resize_window", edge = "right", unit = "10px" }"#, KeyAction::ResizeWindow { edge: WindowDirection::Right, unit: WindowUnit::Px(10) })]
+    #[test_case(r#"{ action = "execute", command = [] }"#, KeyAction::Execute { command: vec![] })]
+    fn test_deserialize_action(input: &str, expected: KeyAction) {
+        assert_eq!(
+            toml::from_str::<T>(&("a = ".to_string() + input)).unwrap(),
+            T {
+                k: None,
+                a: Some(expected)
+            }
+        );
     }
 }

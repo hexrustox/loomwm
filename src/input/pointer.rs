@@ -266,8 +266,17 @@ mod tests {
 
     #[test_case(r#""btn_left""#, KeyCode::BTN_LEFT; "single key")]
     fn test_deserialize(input: &str, code: KeyCode) {
-        let kb = toml::from_str::<T>(&("x = ".to_string() + input)).unwrap();
+        assert_eq!(
+            toml::from_str::<T>(&("x = ".to_string() + input))
+                .unwrap()
+                .x
+                .code,
+            code
+        );
+    }
 
-        assert_eq!(kb.x.code, code);
+    #[test_case(r#""foo""#)]
+    fn test_deserialize_fail(input: &str) {
+        assert!(toml::from_str::<T>(&("x = ".to_string() + input)).is_err())
     }
 }

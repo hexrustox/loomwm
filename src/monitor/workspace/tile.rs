@@ -78,8 +78,7 @@ impl<T> Tile<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(transparent)]
 pub struct TileRatio(pub f64);
 
