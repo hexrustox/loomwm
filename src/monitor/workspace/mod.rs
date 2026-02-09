@@ -10,7 +10,11 @@ use smithay::{
     utils::{Logical, Point, Scale, Size},
 };
 
-use crate::{input::WindowDirection, monitor::workspace::tile::TileTree, window::MappedWindow};
+use crate::{
+    input::{WindowDirection, WindowUnit},
+    monitor::workspace::tile::TileTree,
+    window::MappedWindow,
+};
 
 mod tile;
 
@@ -59,6 +63,18 @@ impl Workspace {
         self.floating.insert(0, mapped);
     }
 
+    fn update_tiling_window_size(&mut self) {
+        let output = &self.output;
+        self.tiling.update_window_size(
+            output.current_location(),
+            output
+                .current_mode()
+                .unwrap()
+                .size
+                .to_logical(output.current_scale().integer_scale()),
+        );
+    }
+
     pub fn add_tiling_window(
         &mut self,
         mapped: MappedWindow,
@@ -68,15 +84,7 @@ impl Workspace {
         if let mapped @ Some(_) = self.tiling.insert(mapped, ratio) {
             return mapped;
         } else {
-            let output = &self.output;
-            self.tiling.update_window_size(
-                output.current_location(),
-                output
-                    .current_mode()
-                    .unwrap()
-                    .size
-                    .to_logical(output.current_scale().integer_scale()),
-            );
+            self.update_tiling_window_size();
         }
         None
     }
@@ -111,6 +119,16 @@ impl Workspace {
 
     pub fn swap_tiling_window(&mut self, surface1: &WlSurface, surface2: &WlSurface) {
         self.tiling.swap_window(surface1, surface2);
+    }
+
+    pub fn resize_tiling_window(
+        &mut self,
+        surface: &WlSurface,
+        edge: WindowDirection,
+        unit: WindowUnit,
+    ) {
+        self.tiling.resize_tile(surface, edge, unit);
+        self.update_tiling_window_size();
     }
 
     pub fn raise_floating_window(&mut self, surface: &WlSurface) {

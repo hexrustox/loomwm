@@ -2,7 +2,7 @@ use smithay::backend::input::{InputBackend, InputEvent};
 
 use crate::state::WaylandState;
 
-pub use keyboard::{KeyBindings, KeyModifiers, WindowDirection, test_key_bindings};
+pub use keyboard::{KeyBindings, KeyModifiers, WindowDirection, WindowUnit, test_key_bindings};
 pub use pointer::{PointerBindings, ResizeLocation, test_pointer_bindings};
 
 mod keyboard;

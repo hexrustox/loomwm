@@ -7,7 +7,10 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::{monitor::WorkspaceName, state::WaylandState};
+use crate::{
+    monitor::{TileRatio, WorkspaceName},
+    state::WaylandState,
+};
 
 bitflags! {
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -28,10 +31,23 @@ pub struct KeyBinding {
 }
 
 pub enum KeyAction {
-    SwitchWorkspace { name: WorkspaceName },
-    MoveToWorkspace { name: WorkspaceName, focus: bool },
-    FocusWindow { direction: WindowDirection },
-    SwapWindow { direction: WindowDirection },
+    SwitchWorkspace {
+        name: WorkspaceName,
+    },
+    MoveToWorkspace {
+        name: WorkspaceName,
+        focus: bool,
+    },
+    FocusWindow {
+        direction: WindowDirection,
+    },
+    SwapWindow {
+        direction: WindowDirection,
+    },
+    ResizeWindow {
+        edge: WindowDirection,
+        unit: WindowUnit,
+    },
     ToggleFloating,
     CloseWindow,
     Execute(Vec<String>),
@@ -43,6 +59,12 @@ pub enum WindowDirection {
     Bottom,
     Left,
     Right,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum WindowUnit {
+    Ratio(TileRatio),
+    Px(i32),
 }
 
 // TEMP
@@ -199,6 +221,46 @@ pub fn test_key_bindings() -> KeyBindings {
                 direction: WindowDirection::Right,
             },
         ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
+                key: Keysym::h,
+            },
+            KeyAction::ResizeWindow {
+                edge: WindowDirection::Left,
+                unit: WindowUnit::Px(50),
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
+                key: Keysym::j,
+            },
+            KeyAction::ResizeWindow {
+                edge: WindowDirection::Bottom,
+                unit: WindowUnit::Px(50),
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
+                key: Keysym::k,
+            },
+            KeyAction::ResizeWindow {
+                edge: WindowDirection::Top,
+                unit: WindowUnit::Px(50),
+            },
+        ),
+        (
+            KeyBinding {
+                modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
+                key: Keysym::l,
+            },
+            KeyAction::ResizeWindow {
+                edge: WindowDirection::Right,
+                unit: WindowUnit::Px(50),
+            },
+        ),
     ])
 }
 
@@ -253,6 +315,9 @@ impl WaylandState {
                         }
                         SwapWindow { direction } => {
                             data.swap_window_in_direction(*direction);
+                        }
+                        ResizeWindow { edge, unit } => {
+                            data.resize_window_in_edge(*edge, *unit);
                         }
                         ToggleFloating => {
                             data.toggle_focused_window_floating();

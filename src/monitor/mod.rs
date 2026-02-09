@@ -11,7 +11,7 @@ use smithay::{
 };
 
 use crate::{
-    input::WindowDirection,
+    input::{WindowDirection, WindowUnit},
     monitor::workspace::Workspace,
     state::WaylandState,
     utils::get_app_id_and_title,
@@ -549,6 +549,22 @@ impl WaylandState {
             });
             toplevel.send_pending_configure();
         }
+    }
+
+    pub fn resize_window_in_edge(&mut self, edge: WindowDirection, unit: WindowUnit) {
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let Some(surface) = keyboard.current_focus() else {
+            return;
+        };
+        let Some((mapped, name)) = self.find_mapped_window(&surface) else {
+            return;
+        };
+        if mapped.is_floating {
+            return;
+        }
+        let monitor = self.monitors.get_monitor_mut();
+        let workspace = monitor.get_workspace_mut(&name);
+        workspace.resize_tiling_window(&surface, edge, unit);
     }
 
     pub fn active_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
