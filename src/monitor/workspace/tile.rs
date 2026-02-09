@@ -2,6 +2,7 @@ use crate::{
     input::{WindowDirection, WindowUnit},
     window::MappedWindow,
 };
+use serde::Deserialize;
 use slotmap::{SlotMap, new_key_type};
 use smithay::{
     reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -77,8 +78,9 @@ impl<T> Tile<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(transparent)]
 pub struct TileRatio(pub f64);
 
 impl Default for TileRatio {
@@ -129,24 +131,22 @@ impl<'a> From<&'a WlSurface> for TileTreeWindowId<'a> {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
 enum TileSplit {
     #[default]
     Vertical,
     Horizontal,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
-// TEMP
-#[allow(dead_code)]
 enum TileOrientation {
     #[default]
     BottomRight,
     TopLeft,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct LayoutSet(HashMap<String, LayoutSchema>);
 
 impl LayoutSet {
@@ -169,21 +169,21 @@ impl LayoutSet {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize)]
 struct LayoutSchema {
     split: TileSplit,
     orientation: TileOrientation,
     nodes: Vec<LayoutNode>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize)]
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
     ratio: TileRatio,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 struct TileRepeat(usize);
 
 impl Default for TileRepeat {

@@ -1,9 +1,10 @@
 use regex::Regex;
+use serde::Deserialize;
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
 
 use crate::monitor::{TileRatio, WorkspaceName};
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
@@ -51,7 +52,7 @@ impl WindowRules {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 struct WindowRule {
     matches: Vec<WindowRuleMatch>,
     properties: WindowProperties,
@@ -91,7 +92,7 @@ impl WindowRule {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub struct WindowRuleMatch {
     app_id: Option<String>,
     title: Option<String>,
@@ -100,7 +101,7 @@ pub struct WindowRuleMatch {
     workspace: Option<WorkspaceName>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct WindowProperties {
     pub opening: Option<WindowOpeningProperties>,
     pub dynamic: WindowDynamicProperties,
@@ -115,14 +116,14 @@ impl Default for WindowProperties {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize)]
 pub struct WindowOpeningProperties {
     pub focus: Option<bool>,
     pub state: Option<WindowState>,
     pub workspace: Option<WorkspaceName>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub opacity: Option<f32>,
@@ -169,7 +170,7 @@ pub struct WindowRuleCandidate {
     pub workspace: WorkspaceName,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum WindowDecoration {
     ClientSide,
     ServerSide,
@@ -186,7 +187,7 @@ impl From<WindowDecoration> for Mode {
 
 type N = i32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum WindowState {
     Float {
         location: Option<WindowLocation>,
@@ -201,7 +202,7 @@ impl Default for WindowState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum WindowLocation {
     Center,
     Location(N, N),

@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use serde::Deserialize;
 use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
@@ -20,7 +21,8 @@ mod tile;
 
 pub use tile::{LayoutSet, TileRatio, TileTreeWindow, TileTreeWindowId, test_layout_set};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(untagged)]
 pub enum WorkspaceName {
     Id(u8),
     // Name(String)

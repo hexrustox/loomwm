@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::str::FromStr;
+use std::{collections::HashMap, fmt};
 
 use evdev::KeyCode;
+use serde::{Deserialize, Deserializer, de};
 use smithay::{
     backend::input::{ButtonState, InputBackend, PointerButtonEvent, PointerMotionAbsoluteEvent},
     input::pointer::{ButtonEvent, Focus, GrabStartData as PointerGrabStartData, MotionEvent},
@@ -17,20 +19,72 @@ use crate::{
     state::WaylandState,
 };
 
-pub type PointerBindings = HashMap<PointerBinding, PointerActions>;
+pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-pub struct PointerBinding {
+pub struct PointerCombo {
     modifiers: KeyModifiers,
     code: KeyCode,
 }
 
-#[derive(Debug)]
+impl<'de> Deserialize<'de> for PointerCombo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PointerBindingVisitor;
+
+        impl<'de> de::Visitor<'de> for PointerBindingVisitor {
+            type Value = PointerCombo;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a pointer binding string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
+
+                if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
+                    return Err(E::custom("empty pointer binding"));
+                }
+
+                let mut modifiers = KeyModifiers::empty();
+
+                let (key_part, mod_parts) = parts.split_last().unwrap();
+
+                for &m in mod_parts {
+                    match m.to_lowercase().as_str() {
+                        "ctrl" => modifiers |= KeyModifiers::CTRL,
+                        "shift" => modifiers |= KeyModifiers::SHIFT,
+                        "alt" => modifiers |= KeyModifiers::ALT,
+                        "super" => modifiers |= KeyModifiers::SUPER,
+                        _ => return Err(E::custom(format!("unknown modifier: {}", m))),
+                    }
+                }
+
+                let code = KeyCode::from_str(&key_part.to_uppercase())
+                    .map_err(|_| E::custom(format!("unknown key code: {}", key_part)))?;
+
+                Ok(PointerCombo { modifiers, code })
+            }
+        }
+
+        deserializer.deserialize_str(PointerBindingVisitor)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PointerActions {
     Move,
     Resize,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ResizeLocation {
     Corner,
     Edge,
@@ -40,14 +94,14 @@ pub enum ResizeLocation {
 pub fn test_pointer_bindings() -> PointerBindings {
     HashMap::from_iter([
         (
-            PointerBinding {
+            PointerCombo {
                 modifiers: KeyModifiers::ALT,
                 code: KeyCode(0x110),
             },
             PointerActions::Move,
         ),
         (
-            PointerBinding {
+            PointerCombo {
                 modifiers: KeyModifiers::ALT,
                 code: KeyCode(0x111),
             },
@@ -99,7 +153,7 @@ impl WaylandState {
         }
 
         if button_state == ButtonState::Pressed
-            && let Some(action) = self.pointer_config.bindings.get(&PointerBinding {
+            && let Some(action) = self.pointer_config.bindings.get(&PointerCombo {
                 modifiers: self.key_modifiers,
                 code: KeyCode(button as u16),
             })
@@ -216,5 +270,23 @@ impl WaylandState {
             },
         );
         pointer.frame(self);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[derive(Deserialize)]
+    struct T {
+        x: PointerCombo,
+    }
+
+    #[test_case(r#""btn_left""#, KeyCode::BTN_LEFT; "single key")]
+    fn test_deserialize(input: &str, code: KeyCode) {
+        let kb = toml::from_str::<T>(&("x = ".to_string() + input)).unwrap();
+
+        assert_eq!(kb.x.code, code);
     }
 }

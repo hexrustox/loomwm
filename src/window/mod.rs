@@ -42,6 +42,7 @@ pub enum UnmappedWindowState {
     NotConfigured,
 }
 
+// TODO
 #[derive(Debug)]
 pub struct MappedWindow {
     pub window: Window,

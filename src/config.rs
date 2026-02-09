@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use crate::{
     input::{
         KeyBindings, PointerBindings, ResizeLocation, test_key_bindings, test_pointer_bindings,
@@ -6,6 +8,7 @@ use crate::{
     window::rule::{WindowRules, test_window_rules},
 };
 
+#[derive(Deserialize)]
 pub struct Config {
     pub general: GeneralConfig,
     pub window_rules: WindowRules,
@@ -14,6 +17,7 @@ pub struct Config {
     pub pointer: PointerConfig,
 }
 
+#[derive(Deserialize)]
 pub struct GeneralConfig {
     pub allow_move_request: bool,
     pub allow_resize_request: bool,
@@ -28,15 +32,18 @@ impl Default for GeneralConfig {
     }
 }
 
+#[derive(Deserialize)]
 pub struct LayoutConfig {
     pub layouts: LayoutSet,
     pub default: String,
 }
 
+#[derive(Deserialize)]
 pub struct KeyConfig {
     pub bindings: KeyBindings,
 }
 
+#[derive(Deserialize)]
 pub struct PointerConfig {
     pub bindings: PointerBindings,
     pub resize: ResizeLocation,

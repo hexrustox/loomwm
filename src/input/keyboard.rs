@@ -1,11 +1,16 @@
-use std::{collections::HashMap, process::Command};
+use std::{collections::HashMap, fmt, process::Command};
 
 use bitflags::bitflags;
+use serde::{
+    Deserialize, Deserializer,
+    de::{self, IntoDeserializer},
+};
 use smithay::{
     backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
     input::keyboard::{FilterResult, Keysym},
     utils::SERIAL_COUNTER,
 };
+use xkbcommon::xkb::{self, keysyms::KEY_NoSymbol};
 
 use crate::{
     monitor::{TileRatio, WorkspaceName},
@@ -22,14 +27,69 @@ bitflags! {
     }
 }
 
-pub type KeyBindings = HashMap<KeyBinding, KeyAction>;
+pub type KeyBindings = HashMap<KeyCombo, KeyAction>;
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-pub struct KeyBinding {
+pub struct KeyCombo {
     modifiers: KeyModifiers,
     key: Keysym,
 }
 
+impl<'de> Deserialize<'de> for KeyCombo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct KeyComboVisitor;
+
+        impl<'de> de::Visitor<'de> for KeyComboVisitor {
+            type Value = KeyCombo;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a keybinding string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
+
+                if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
+                    return Err(E::custom("empty keybinding"));
+                }
+
+                let mut modifiers = KeyModifiers::empty();
+
+                let (key_part, mod_parts) = parts.split_last().unwrap();
+
+                for &m in mod_parts {
+                    match m.to_lowercase().as_str() {
+                        "ctrl" => modifiers |= KeyModifiers::CTRL,
+                        "shift" => modifiers |= KeyModifiers::SHIFT,
+                        "alt" => modifiers |= KeyModifiers::ALT,
+                        "super" => modifiers |= KeyModifiers::SUPER,
+                        _ => return Err(E::custom(format!("unknown modifier: {}", m))),
+                    }
+                }
+
+                let key = xkb::keysym_from_name(key_part, xkb::KEYSYM_CASE_INSENSITIVE);
+
+                if key.raw() == KEY_NoSymbol {
+                    return Err(E::custom(format!("unknown key: {}", key_part)));
+                }
+
+                Ok(KeyCombo { modifiers, key })
+            }
+        }
+
+        deserializer.deserialize_str(KeyComboVisitor)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+#[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyAction {
     SwitchWorkspace {
         name: WorkspaceName,
@@ -50,10 +110,14 @@ pub enum KeyAction {
     },
     ToggleFloating,
     CloseWindow,
-    Execute(Vec<String>),
+    Execute {
+        command: Vec<String>,
+    },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+#[serde(rename_all = "lowercase")]
 pub enum WindowDirection {
     Top,
     Bottom,
@@ -62,16 +126,51 @@ pub enum WindowDirection {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum WindowUnit {
     Ratio(TileRatio),
     Px(i32),
+}
+
+impl<'de> Deserialize<'de> for WindowUnit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct WindowUnitVisitor;
+
+        impl<'de> de::Visitor<'de> for WindowUnitVisitor {
+            type Value = WindowUnit;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a size unit")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if let Some(px) = v.strip_suffix("px") {
+                    Ok(WindowUnit::Px(
+                        px.parse().map_err(|_| E::custom("invalid pixel"))?,
+                    ))
+                } else {
+                    Ok(WindowUnit::Ratio(TileRatio::deserialize(
+                        v.into_deserializer(),
+                    )?))
+                }
+            }
+        }
+
+        deserializer.deserialize_str(WindowUnitVisitor)
+    }
 }
 
 // TEMP
 pub fn test_key_bindings() -> KeyBindings {
     HashMap::from_iter([
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::_1,
             },
@@ -80,7 +179,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::_2,
             },
@@ -89,7 +188,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
                 key: Keysym::_1,
             },
@@ -99,7 +198,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
                 key: Keysym::_2,
             },
@@ -109,7 +208,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
                 key: Keysym::_1,
             },
@@ -119,7 +218,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
                 key: Keysym::_2,
             },
@@ -129,28 +228,30 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::space,
             },
             KeyAction::ToggleFloating,
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::t,
             },
-            KeyAction::Execute(vec!["alacritty".to_string()]),
+            KeyAction::Execute {
+                command: vec!["alacritty".to_string()],
+            },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::q,
             },
             KeyAction::CloseWindow,
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::h,
             },
@@ -159,7 +260,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::j,
             },
@@ -168,7 +269,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::k,
             },
@@ -177,7 +278,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT,
                 key: Keysym::l,
             },
@@ -186,7 +287,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
                 key: Keysym::h,
             },
@@ -195,7 +296,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
                 key: Keysym::j,
             },
@@ -204,7 +305,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
                 key: Keysym::k,
             },
@@ -213,7 +314,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::SHIFT,
                 key: Keysym::l,
             },
@@ -222,7 +323,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
                 key: Keysym::h,
             },
@@ -232,7 +333,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
                 key: Keysym::j,
             },
@@ -242,7 +343,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
                 key: Keysym::k,
             },
@@ -252,7 +353,7 @@ pub fn test_key_bindings() -> KeyBindings {
             },
         ),
         (
-            KeyBinding {
+            KeyCombo {
                 modifiers: KeyModifiers::ALT | KeyModifiers::CTRL,
                 key: Keysym::l,
             },
@@ -295,7 +396,7 @@ impl WaylandState {
                 };
 
                 let key = keysym_handle.raw_syms().swap_remove(0);
-                let bind = KeyBinding {
+                let bind = KeyCombo {
                     modifiers: data.key_modifiers,
                     key,
                 };
@@ -325,7 +426,7 @@ impl WaylandState {
                         CloseWindow => {
                             data.close_focused_window();
                         }
-                        Execute(args) => {
+                        Execute { command: args } => {
                             if let Some(program) = args.first() {
                                 // TODO
                                 let _ = Command::new(program).args(args.iter().skip(1)).spawn();
@@ -338,5 +439,43 @@ impl WaylandState {
                 FilterResult::Forward
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use xkbcommon::xkb::keysyms::*;
+
+    use super::*;
+    use test_case::test_case;
+
+    #[derive(Deserialize)]
+    struct T {
+        x: KeyCombo,
+    }
+
+    #[test_case(r#""t""#, KeyModifiers::empty(), KEY_t; "single key")]
+    #[test_case(r#""Ctrl+Shift+Return""#, KeyModifiers::CTRL | KeyModifiers::SHIFT, KEY_Return; "with modifiers")]
+    fn test_deserialize_key(input: &str, modifiers: KeyModifiers, keysym: u32) {
+        let kb = toml::from_str::<T>(&("x = ".to_string() + input)).unwrap();
+
+        assert!(kb.x.modifiers.contains(modifiers));
+        assert_eq!(kb.x.key.raw(), keysym);
+    }
+
+    #[test_case(r#""""#; "empty")]
+    #[test_case(r#""hello""#; "unknown key")]
+    #[test_case(r#""a+b""#; "multiple key")]
+    #[test_case(r#""Super""#; "modifier only")]
+    fn test_deserialize_key_fail(input: &str) {
+        assert!(toml::from_str::<T>(&("x = ".to_string() + input)).is_err());
+    }
+
+    #[test_case(r#"{ action = "switch_workspace", name = 1 }"#)]
+    #[test_case(r#"{ action = "focus_window", direction = "top" }"#)]
+    #[test_case(r#"{ action = "resize_window", edge = "right", unit = "10px" }"#)]
+    #[test_case(r#"{ action = "execute", command = [] }"#)]
+    fn test_deserialize_action(input: &str) {
+        toml::from_str::<KeyBindings>(&("x = ".to_string() + input)).unwrap();
     }
 }
