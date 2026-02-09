@@ -96,6 +96,7 @@ pub enum KeyAction {
     },
     MoveToWorkspace {
         name: WorkspaceName,
+        #[serde(default = "default_focus")]
         focus: bool,
     },
     FocusWindow {
@@ -115,12 +116,16 @@ pub enum KeyAction {
     },
 }
 
+fn default_focus() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 #[serde(rename_all = "lowercase")]
 pub enum WindowDirection {
-    Top,
-    Bottom,
+    Up,
+    Down,
     Left,
     Right,
 }

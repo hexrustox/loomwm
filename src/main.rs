@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, fs::read_to_string};
 
 use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 
@@ -22,7 +22,8 @@ pub struct CompositorData {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = toml::from_str("")?;
+    let config_file = read_to_string("/data/example/config.toml")?;
+    let config = toml::from_str(&config_file)?;
 
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WaylandState> = Display::new()?;

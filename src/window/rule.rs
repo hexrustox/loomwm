@@ -55,9 +55,14 @@ impl WindowRules {
 
 #[derive(Debug, Deserialize)]
 struct WindowRule {
+    #[serde(default = "default_window_rule_matches")]
     matches: Vec<WindowRuleMatch>,
     #[serde(flatten)]
     properties: WindowProperties,
+}
+
+fn default_window_rule_matches() -> Vec<WindowRuleMatch> {
+    vec![WindowRuleMatch::default()]
 }
 
 impl WindowRule {

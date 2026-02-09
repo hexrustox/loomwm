@@ -8,9 +8,11 @@ use crate::{
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub general: GeneralConfig,
     pub window_rules: WindowRules,
+    #[serde(rename = "layouts")]
     pub layout: LayoutConfig,
     pub key: KeyConfig,
     pub pointer: PointerConfig,
@@ -36,6 +38,7 @@ impl Default for GeneralConfig {
 #[derive(Default, Deserialize)]
 #[serde(default)]
 pub struct LayoutConfig {
+    #[serde(flatten)]
     pub layouts: LayoutSet,
     pub default: String,
 }

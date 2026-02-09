@@ -627,8 +627,8 @@ impl<T: TileTreeWindow> TileTree<T> {
             fn is_in_direction(&self, direction: WindowDirection, target: &Rect) -> bool {
                 use WindowDirection::*;
                 match direction {
-                    Top => self.bottom() <= target.top() && self.overlaps_horizontally(target),
-                    Bottom => self.top() >= target.bottom() && self.overlaps_horizontally(target),
+                    Up => self.bottom() <= target.top() && self.overlaps_horizontally(target),
+                    Down => self.top() >= target.bottom() && self.overlaps_horizontally(target),
                     Left => self.right() <= target.left() && self.overlaps_vertically(target),
                     Right => self.left() >= target.right() && self.overlaps_vertically(target),
                 }
@@ -756,8 +756,8 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let compute_index_offset = |edge: WindowDirection, orientation: TileOrientation| -> i32 {
             let mut offset = match edge {
-                WindowDirection::Left | WindowDirection::Top => -1,
-                WindowDirection::Right | WindowDirection::Bottom => 1,
+                WindowDirection::Left | WindowDirection::Up => -1,
+                WindowDirection::Right | WindowDirection::Down => 1,
             };
             offset *= match orientation {
                 TileOrientation::BottomRight => 1,
@@ -771,11 +771,11 @@ impl<T: TileTreeWindow> TileTree<T> {
                 let index_offset = compute_index_offset(edge, *orientation);
                 self.adjust_adjacent_ratios(parent, window_id, index_offset, unit, size.w as f64);
             }
-            (TileSplit::Horizontal, WindowDirection::Top | WindowDirection::Bottom) => {
+            (TileSplit::Horizontal, WindowDirection::Up | WindowDirection::Down) => {
                 let index_offset = compute_index_offset(edge, *orientation);
                 self.adjust_adjacent_ratios(parent, window_id, index_offset, unit, size.h as f64);
             }
-            (TileSplit::Vertical, WindowDirection::Top | WindowDirection::Bottom) => {
+            (TileSplit::Vertical, WindowDirection::Up | WindowDirection::Down) => {
                 if let Some((ancestor_id, refer_id)) =
                     self.find_ancestor_with_opposite_split(window_id, TileSplit::Vertical)
                 {
@@ -1543,7 +1543,7 @@ mod tests {
     #[test_case(
         tile_tree!(layout() [window(id: 0)]),
         0,
-        WindowDirection::Top,
+        WindowDirection::Up,
         vec![];
         "empty"
     )]
@@ -1553,7 +1553,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        WindowDirection::Top,
+        WindowDirection::Up,
         vec![0];
         "2 stacked top"
     )]
@@ -1563,7 +1563,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        WindowDirection::Bottom,
+        WindowDirection::Down,
         vec![1];
         "2 stacked bottom"
     )]
@@ -1600,7 +1600,7 @@ mod tests {
             ]
         ]),
         3,
-        WindowDirection::Top,
+        WindowDirection::Up,
         vec![0, 1];
         "3|2 row split top"
     )]
@@ -1617,7 +1617,7 @@ mod tests {
             ]
         ]),
         1,
-        WindowDirection::Bottom,
+        WindowDirection::Down,
         vec![3, 4];
         "3|2 row split bottom"
     )]
@@ -1766,7 +1766,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        WindowDirection::Bottom,
+        WindowDirection::Down,
         10,
         tile_tree!(layout(split: Horizontal, orient: TopLeft) [
             window(id: 0, pos: (0, 60), size: (200, 40), ratio: 0.8),
@@ -1783,7 +1783,7 @@ mod tests {
             ]
         ]),
         1,
-        WindowDirection::Top,
+        WindowDirection::Up,
         10,
         tile_tree!(layout(split: Horizontal) [
             window(id: 0, pos: (0, 0), size: (200, 40), ratio: 0.8),
@@ -1803,7 +1803,7 @@ mod tests {
             ]
         ]),
         2,
-        WindowDirection::Bottom,
+        WindowDirection::Down,
         10,
         tile_tree!(layout(split: Horizontal) [
             window(id: 0, pos: (0, 0), size: (200, 50)),
