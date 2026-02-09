@@ -25,7 +25,7 @@ mod tile;
 
 pub use tile::{LayoutSet, TileRatio, TileTreeWindow, TileTreeWindowId};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Hash)]
 #[serde(untagged)]
 pub enum WorkspaceName {
     Id(u8),

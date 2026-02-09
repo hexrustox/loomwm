@@ -1,10 +1,12 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use regex::Regex;
 use serde::Deserialize;
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
 
 use crate::monitor::{TileRatio, WorkspaceName};
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Hash)]
 #[serde(transparent)]
 pub struct WindowRules(Vec<WindowRule>);
 
@@ -51,9 +53,15 @@ impl WindowRules {
 
         properties
     }
+
+    pub fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Hash)]
 struct WindowRule {
     #[serde(default = "default_window_rule_matches")]
     matches: Vec<WindowRuleMatch>,
@@ -99,7 +107,7 @@ impl WindowRule {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub struct WindowRuleMatch {
     app_id: Option<String>,
@@ -109,7 +117,7 @@ pub struct WindowRuleMatch {
     workspace: Option<WorkspaceName>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Hash)]
 pub struct WindowProperties {
     #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
@@ -127,7 +135,7 @@ impl Default for WindowProperties {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Hash)]
 pub struct WindowOpeningProperties {
     pub focus: Option<bool>,
     #[serde(flatten)]
@@ -139,6 +147,15 @@ pub struct WindowOpeningProperties {
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub opacity: Option<f32>,
+}
+
+impl std::hash::Hash for WindowDynamicProperties {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.decoration.hash(state);
+        if let Some(f) = self.opacity {
+            f.to_bits().hash(state)
+        }
+    }
 }
 
 impl WindowProperties {
@@ -182,7 +199,7 @@ pub struct WindowRuleCandidate {
     pub workspace: WorkspaceName,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowDecoration {
     ClientSide,
@@ -200,7 +217,7 @@ impl From<WindowDecoration> for Mode {
 
 type N = i32;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Hash)]
 pub enum WindowState {
     Float {
         location: Option<WindowLocation>,
@@ -215,7 +232,7 @@ impl Default for WindowState {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Hash)]
 #[serde(untagged)]
 #[serde(rename_all = "lowercase")]
 pub enum WindowLocation {

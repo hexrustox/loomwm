@@ -89,6 +89,12 @@ impl Default for TileRatio {
     }
 }
 
+impl std::hash::Hash for TileRatio {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
 #[derive(Debug)]
 enum TileKind<T> {
     Window(T),
