@@ -48,6 +48,7 @@ pub struct MappedWindow {
     pub is_focused: bool,
     pub is_floating: bool,
     pub location: Point<i32, Logical>,
+    pub opacity: f32,
 }
 
 impl MappedWindow {
@@ -57,6 +58,7 @@ impl MappedWindow {
             is_focused: is_focus,
             is_floating: false,
             location: (0, 0).into(),
+            opacity: 1.0,
         }
     }
 
@@ -77,7 +79,8 @@ impl MappedWindow {
         <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
     {
         let location = self.render_location().to_physical_precise_round(scale);
-        self.window.render_elements(renderer, location, scale, 1.0)
+        self.window
+            .render_elements(renderer, location, scale, self.opacity)
     }
 
     pub fn center_location(&self) -> Point<i32, Logical> {

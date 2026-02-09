@@ -594,5 +594,8 @@ fn apply_rule_to_mapped_window(mapped: &mut MappedWindow, properties: WindowDyna
     mapped.toplevel().with_pending_state(|state| {
         state.decoration_mode = properties.decoration.map(|d| d.into());
     });
+    if let Some(opacity) = properties.opacity {
+        mapped.opacity = opacity;
+    }
     mapped.toplevel().send_pending_configure();
 }

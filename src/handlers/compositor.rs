@@ -102,7 +102,7 @@ impl CompositorHandler for WaylandState {
             }
 
             // previously-mapped root
-            if let Some((mapped, ..)) = self.find_mapped_window_mut(surface) {
+            if let Some((mapped, _)) = self.find_mapped_window_mut(surface) {
                 mapped.window.on_commit();
                 resize_grab::handle_commit(mapped);
 
@@ -112,7 +112,7 @@ impl CompositorHandler for WaylandState {
         }
 
         // non-root
-        if let Some((mapped, ..)) = self.find_mapped_window(&root_surface) {
+        if let Some((mapped, _)) = self.find_mapped_window(&root_surface) {
             mapped.window.on_commit();
         }
 

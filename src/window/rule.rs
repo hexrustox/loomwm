@@ -125,6 +125,7 @@ pub struct WindowOpeningProperties {
 #[derive(Debug, Default, Clone)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
+    pub opacity: Option<f32>,
 }
 
 impl WindowProperties {
@@ -154,6 +155,7 @@ impl WindowDynamicProperties {
     fn override_with(self, rhs: Self) -> Self {
         Self {
             decoration: rhs.decoration.or(self.decoration),
+            opacity: rhs.opacity.or(self.opacity),
         }
     }
 }
@@ -219,6 +221,7 @@ pub fn test_window_rules() -> WindowRules {
                 }),
                 dynamic: WindowDynamicProperties {
                     decoration: Some(WindowDecoration::ServerSide),
+                    ..Default::default()
                 },
             },
         },
@@ -231,6 +234,7 @@ pub fn test_window_rules() -> WindowRules {
                 opening: None,
                 dynamic: WindowDynamicProperties {
                     decoration: Some(WindowDecoration::ClientSide),
+                    opacity: Some(0.8),
                 },
             },
         },
