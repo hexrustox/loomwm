@@ -4,7 +4,8 @@ use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_to
 
 use crate::monitor::{TileRatio, WorkspaceName};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(transparent)]
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
@@ -55,6 +56,7 @@ impl WindowRules {
 #[derive(Debug, Deserialize)]
 struct WindowRule {
     matches: Vec<WindowRuleMatch>,
+    #[serde(flatten)]
     properties: WindowProperties,
 }
 
@@ -93,6 +95,7 @@ impl WindowRule {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct WindowRuleMatch {
     app_id: Option<String>,
     title: Option<String>,
@@ -103,7 +106,10 @@ pub struct WindowRuleMatch {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct WindowProperties {
+    #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
+    #[serde(flatten)]
+    #[serde(default)]
     pub dynamic: WindowDynamicProperties,
 }
 
@@ -119,6 +125,7 @@ impl Default for WindowProperties {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct WindowOpeningProperties {
     pub focus: Option<bool>,
+    #[serde(flatten)]
     pub state: Option<WindowState>,
     pub workspace: Option<WorkspaceName>,
 }
@@ -171,6 +178,7 @@ pub struct WindowRuleCandidate {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WindowDecoration {
     ClientSide,
     ServerSide,
@@ -203,6 +211,8 @@ impl Default for WindowState {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+#[serde(rename_all = "lowercase")]
 pub enum WindowLocation {
     Center,
     Location(N, N),
@@ -240,4 +250,31 @@ pub fn test_window_rules() -> WindowRules {
             },
         },
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct T {
+        #[allow(dead_code)]
+        x: WindowRules,
+    }
+
+    #[test]
+    fn test_deserialize() {
+        toml::from_str::<T>(
+            r#"[[x]]
+matches = [{ app-id = "test", title = "test" }]
+focus = false
+float = {}
+
+[[x]]
+matches = [{ float = true }]
+tile = 1.5
+"#,
+        )
+        .unwrap();
+    }
 }
