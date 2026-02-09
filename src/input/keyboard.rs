@@ -201,6 +201,10 @@ impl WindowManagerState {
                     key_modifiers
                 };
 
+                if data.seat.get_pointer().unwrap().is_grabbed() {
+                    return FilterResult::Intercept(());
+                }
+
                 let key = keysym_handle.raw_syms().swap_remove(0);
                 let bind = KeyCombo {
                     modifiers: data.key_modifiers,
