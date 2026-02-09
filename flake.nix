@@ -25,6 +25,7 @@
             [
               nil
               nixfmt
+              taplo
             ]
             ++ (with pkgs; [
               rust-analyzer
@@ -78,6 +79,7 @@
             "--volume=/etc/fonts:/etc/fonts:ro"
             "--volume=\"$HOME/.cache\":\"$HOME/.cache\""
             "--volume=\"$XDG_DATA_HOME/cargo\":\"$HOME/.cargo\""
+            "--volume=\"./example\":\"/data/example\""
 
             "--env=WAYLAND_DISPLAY"
             "--env=XDG_RUNTIME_DIR=/tmp/runtime"

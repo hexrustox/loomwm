@@ -1,0 +1,54 @@
+[general]
+allow-move-request = true
+allow-resize-request = true
+
+[[window-rules]]
+decoration = "server_side"
+
+[[window-rules]]
+matches = [{ float = true }]
+decoration = "client_side"
+
+[layouts]
+master = { nodes = [{ ratio = 1.5 }, { layout = "slaves" }] }
+slaves = { nodes = [{ repeat = 3 }] }
+default = "master"
+
+[key.bindings]
+"alt+1" = { action = "switch_workspace", name = 1 }
+"alt+2" = { action = "switch_workspace", name = 2 }
+"alt+3" = { action = "switch_workspace", name = 3 }
+"alt+4" = { action = "switch_workspace", name = 4 }
+"alt+5" = { action = "switch_workspace", name = 5 }
+"alt+shift+1" = { action = "move_to_workspace", name = 1 }
+"alt+shift+2" = { action = "move_to_workspace", name = 2 }
+"alt+shift+3" = { action = "move_to_workspace", name = 3 }
+"alt+shift+4" = { action = "move_to_workspace", name = 4 }
+"alt+shift+5" = { action = "move_to_workspace", name = 5 }
+"alt+ctrl+1" = { action = "move_to_workspace", name = 1, focus = false }
+"alt+ctrl+2" = { action = "move_to_workspace", name = 2, focus = false }
+"alt+ctrl+3" = { action = "move_to_workspace", name = 3, focus = false }
+"alt+ctrl+4" = { action = "move_to_workspace", name = 4, focus = false }
+"alt+ctrl+5" = { action = "move_to_workspace", name = 5, focus = false }
+"alt+h" = { action = "focus_window", direction = "left" }
+"alt+j" = { action = "focus_window", direction = "down" }
+"alt+k" = { action = "focus_window", direction = "up" }
+"alt+l" = { action = "focus_window", direction = "right" }
+"alt+shift+h" = { action = "swap_window", direction = "left" }
+"alt+shift+j" = { action = "swap_window", direction = "down" }
+"alt+shift+k" = { action = "swap_window", direction = "up" }
+"alt+shift+l" = { action = "swap_window", direction = "right" }
+"alt+ctrl+h" = { action = "resize_window", edge = "left", unit = "50px" }
+"alt+ctrl+j" = { action = "resize_window", edge = "down", unit = "50px" }
+"alt+ctrl+k" = { action = "resize_window", edge = "up", unit = "50px" }
+"alt+ctrl+l" = { action = "resize_window", edge = "right", unit = "50px" }
+"alt+space" = { action = "toggle_floating" }
+"alt+q" = { action = "close_window" }
+"alt+t" = { action = "execute", command = ["alacritty"] }
+
+[pointer.bindings]
+"alt+btn_left" = "move"
+"alt+btn_right" = "resize"
+
+[pointer]
+resize = "corner"
