@@ -24,6 +24,7 @@ where
     current_tile: TileId,
     layouts: Rc<LayoutSet>,
     layout_name: String,
+    // TODO better structure
     layout_trace: Vec<TileLayoutTrace>,
 }
 
@@ -315,6 +316,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.insert(window, ratio)
     }
 
+    // TODO improve efficiency
     fn find_tile_id(&self, id: TileTreeWindowId) -> Option<TileId> {
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,
@@ -341,7 +343,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         traverse(&self.arena, self.root, id)
     }
 
-    // TODO
+    // TODO improve efficiency
     pub fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
         struct RemoveTile {
             parent: TileId,
@@ -1079,7 +1081,7 @@ mod tests {
         (@layout_opt $split:ident $orient:ident $size:ident) => {};
 
         (@layout_opt $split:ident $orient:ident $ratio:ident ratio: $r:expr $(, $($rest:tt)*)?) => {
-            $ratio = $r;
+            $ratio = $r as f64;
             $(tile_tree!(@layout_opt $split $orient $size $($rest)*);)?
         };
 
@@ -1282,6 +1284,12 @@ mod tests {
     }
 
     #[test_case(
+        LayoutType::Ref("empty"),
+        1,
+        tile_tree!(layout() []);
+        "empty"
+    )]
+    #[test_case(
         LayoutType::Ref("windows"),
         1,
         tile_tree!(layout() [
@@ -1301,7 +1309,7 @@ mod tests {
     )]
     #[test_case(
         LayoutType::New(vec![
-            ("default", schema!(nodes: [
+            ("root", schema!(nodes: [
                 node!(win, ratio: 1),
                 node!(win, ratio: 2, repeat: 2),
                 node!(win, ratio: 3),
@@ -1314,7 +1322,21 @@ mod tests {
             window(ratio: 2),
             window(ratio: 3),
         ]);
-        "ratio"
+        "window ratio"
+    )]
+    #[test_case(
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
+                node!(ref: "windows", ratio: 2),
+            ]))
+        ]),
+        1,
+        tile_tree!(layout() [
+            layout(ratio: 2) [
+                window()
+            ]
+        ]);
+        "layout ratio"
     )]
     #[test_case(
         LayoutType::Ref("layout"),
@@ -1384,21 +1406,69 @@ mod tests {
         ]);
         "nested layout"
     )]
+    #[test_case(
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
+                node!(ref: "sub", ratio: 3),
+                node!(win, ratio: 1),
+            ])),
+            ("sub", schema!(nodes: [
+                node!(win, repeat: 2),
+            ]))
+        ]),
+        3,
+        tile_tree!(layout() [
+            layout(ratio: 3) [
+                window(),
+                window(),
+            ],
+            window(ratio: 1),
+        ]);
+        "nested ratios and repetition"
+    )]
     fn test_insert(layout_type: LayoutType, tiles: u32, expected: TileTree<TestWindow>) {
         let (layouts, layout_name) = match layout_type {
             LayoutType::Ref(name) => (LayoutSet((*LAYOUT_SET).clone()), name),
             LayoutType::New(iter) => (
-                LayoutSet(HashMap::from_iter(
-                    iter.into_iter()
-                        .map(|(name, schema)| (name.to_string(), schema)),
-                )),
-                "default",
+                {
+                    let mut set = (*LAYOUT_SET).clone();
+                    set.extend(
+                        iter.into_iter()
+                            .map(|(name, schema)| (name.to_string(), schema)),
+                    );
+                    LayoutSet(set)
+                },
+                "root",
             ),
         };
         let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
         for _ in 0..tiles {
             tree.insert(TestWindow::new(), None);
         }
+        assert_tree_eq!(tree, expected);
+    }
+
+    #[test]
+    fn test_insert_override_ratio() {
+        let mut tree = TileTree::<TestWindow>::new(
+            Rc::new(LayoutSet(HashMap::from_iter([(
+                "root".to_string(),
+                schema!(nodes: [
+                    node!(win, ratio: 3),
+                    node!(win, ratio: 2),
+                    node!(win, ratio: 1),
+                ]),
+            )]))),
+            "root",
+        );
+        for i in 1..=3 {
+            tree.insert(TestWindow::new(), Some(TileRatio(i as f64)));
+        }
+        let expected = tile_tree!(layout() [
+            window(ratio: 1),
+            window(ratio: 2),
+            window(ratio: 3)
+        ]);
         assert_tree_eq!(tree, expected);
     }
 
