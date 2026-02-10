@@ -91,7 +91,7 @@ pub enum PointerActions {
 pub enum ResizeLocation {
     #[default]
     Corner,
-    Edge,
+    EdgeOrCorner,
 }
 
 impl WindowManagerState {
@@ -200,7 +200,7 @@ impl WindowManagerState {
                                     ResizeEdge::BOTTOM_RIGHT
                                 }
                             }
-                            ResizeLocation::Edge => {
+                            ResizeLocation::EdgeOrCorner => {
                                 let size = mapped.get_size();
                                 let width_1_3 = size.w as f64 * 1. / 3.;
                                 let width_2_3 = size.w as f64 * 2. / 3.;

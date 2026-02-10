@@ -184,7 +184,7 @@ impl WindowManagerState {
                 apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 workspace.add_floating_window(mapped.clone());
             }
-            WindowState::Tile(ratio) => {
+            WindowState::Tile { ratio } => {
                 apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 let mapped = workspace.add_tiling_window(mapped.clone(), ratio);
                 self.handle_tiling_layout_full(mapped);

@@ -115,8 +115,11 @@ impl WindowRule {
 pub struct WindowRuleMatch {
     app_id: Option<String>,
     title: Option<String>,
+    #[serde(rename = "is_focused")]
     focus: Option<bool>,
+    #[serde(rename = "is_floating")]
     float: Option<bool>,
+    #[serde(rename = "in_workspace")]
     workspace_name: Option<WorkspaceName>,
 }
 
@@ -138,13 +141,13 @@ impl Default for WindowProperties {
     }
 }
 
-// TODO rename
 #[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
 pub struct WindowOpeningProperties {
+    #[serde(rename = "open-with-focus")]
     pub focus: Option<bool>,
     #[serde(flatten)]
     pub state: Option<WindowState>,
-    #[serde(rename = "workspace")]
+    #[serde(rename = "open-in-workspace")]
     pub workspace_name: Option<WorkspaceName>,
 }
 
@@ -195,7 +198,6 @@ impl WindowDynamicProperties {
     }
 }
 
-// TODO default
 #[derive(Debug)]
 pub struct WindowRuleCandidate {
     pub app_id: String,
@@ -222,31 +224,24 @@ impl From<WindowDecoration> for Mode {
     }
 }
 
-impl From<Mode> for WindowDecoration {
-    fn from(value: Mode) -> Self {
-        match value {
-            Mode::ClientSide => WindowDecoration::ClientSide,
-            Mode::ServerSide => WindowDecoration::ServerSide,
-            _ => WindowDecoration::ClientSide,
-        }
-    }
-}
-
 type N = i32;
 
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
 pub enum WindowState {
+    #[serde(rename = "open-as-floating")]
     Float {
         location: Option<WindowLocation>,
         size: Option<(N, N)>,
     },
-    Tile(Option<TileRatio>),
+    #[serde(rename = "open-as-tiling")]
+    Tile { ratio: Option<TileRatio> },
 }
 
 impl Default for WindowState {
     fn default() -> Self {
-        Self::Tile(None)
+        Self::Tile {
+            ratio: Some(TileRatio::default()),
+        }
     }
 }
 
@@ -316,15 +311,15 @@ mod tests {
         l: Option<WindowLocation>,
     }
 
-    #[test_case(r#"p = { focus = true }"#, WindowProperties { opening: Some(WindowOpeningProperties { focus: Some(true), ..Default::default() }), ..Default::default() })]
+    #[test_case(r#"p = { open-with-focus = true }"#, WindowProperties { opening: Some(WindowOpeningProperties { focus: Some(true), ..Default::default() }), ..Default::default() })]
     #[test_case(r#"p = { opacity = 0.1 }"#, WindowProperties { dynamic: WindowDynamicProperties { opacity: Some(0.1), ..Default::default() }, ..Default::default() })]
     fn test_deserialize_window_properties(input: &str, expected: WindowProperties) {
         assert_eq!(toml::from_str::<T>(input).unwrap().p, Some(expected))
     }
 
-    #[test_case(r#"s = { float = {} }"#, WindowState::Float { location: None, size: None })]
-    #[test_case(r#"s = { float = { size = [1, 2] } }"#, WindowState::Float { location: None, size: Some((1, 2)) })]
-    #[test_case(r#"s = { tile = 1 }"#, WindowState::Tile(Some(TileRatio(1.0))))]
+    #[test_case(r#"s = { open-as-floating = {} }"#, WindowState::Float { location: None, size: None })]
+    #[test_case(r#"s = { open-as-floating = { size = [1, 2] } }"#, WindowState::Float { location: None, size: Some((1, 2)) })]
+    #[test_case(r#"s = { open-as-tiling = { ratio = 1.5 } }"#, WindowState::Tile { ratio: Some(TileRatio(1.5)) })]
     fn test_deserialize_window_state(input: &str, expected: WindowState) {
         assert_eq!(toml::from_str::<T>(input).unwrap().s, Some(expected))
     }

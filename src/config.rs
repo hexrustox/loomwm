@@ -52,6 +52,7 @@ pub struct KeyConfig {
 #[serde(default)]
 pub struct PointerConfig {
     pub bindings: PointerBindings,
+    #[serde(rename = "resize-at")]
     pub resize: ResizeLocation,
     #[serde(default = "default_selection")]
     pub selection: f32,
