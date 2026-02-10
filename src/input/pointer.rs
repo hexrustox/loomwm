@@ -106,7 +106,7 @@ impl WindowManagerState {
 
         let serial = SERIAL_COUNTER.next_serial();
 
-        let pointer = self.seat.get_pointer().unwrap();
+        let pointer = self.get_pointer();
 
         let under = self.find_surface_under(location);
 
@@ -123,7 +123,7 @@ impl WindowManagerState {
     }
 
     pub fn process_pointer_button<B: InputBackend, T: PointerButtonEvent<B>>(&mut self, event: T) {
-        let pointer = self.seat.get_pointer().unwrap();
+        let pointer = self.get_pointer();
 
         let serial = SERIAL_COUNTER.next_serial();
         let button = event.button_code();

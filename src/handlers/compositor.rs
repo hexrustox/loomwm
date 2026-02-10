@@ -71,7 +71,7 @@ impl CompositorHandler for WindowManagerState {
                         title,
                         focus: true,
                         float: false,
-                        workspace: self
+                        workspace_name: self
                             .monitors
                             .get_monitor()
                             .get_active_workspace_name()

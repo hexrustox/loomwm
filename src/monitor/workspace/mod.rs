@@ -182,7 +182,7 @@ impl Workspace {
     }
 
     pub fn apply_rule_to_windows(&mut self, window_rules: &WindowRules) {
-        let workspace = self.get_name().clone();
+        let workspace_name = self.get_name().clone();
         for mapped in self
             .floating
             .iter_mut()
@@ -195,7 +195,7 @@ impl Workspace {
                     title,
                     focus: mapped.get_focus(),
                     float: mapped.get_floating(),
-                    workspace: workspace.clone(),
+                    workspace_name: workspace_name.clone(),
                 },
                 false,
             );

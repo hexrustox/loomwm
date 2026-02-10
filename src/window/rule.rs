@@ -45,11 +45,11 @@ impl WindowRules {
                     candidate.float = true;
                 }
                 if let Some(WindowOpeningProperties {
-                    workspace: Some(ref name),
+                    workspace_name: Some(ref workspace_name),
                     ..
                 }) = properties.opening
                 {
-                    candidate.workspace = name.clone();
+                    candidate.workspace_name = workspace_name.clone();
                 }
             }
         }
@@ -98,9 +98,9 @@ impl WindowRule {
                 return false;
             }
             if target
-                .workspace
+                .workspace_name
                 .as_ref()
-                .is_some_and(|workspace| candidate.workspace != *workspace)
+                .is_some_and(|workspace_name| candidate.workspace_name != *workspace_name)
             {
                 return false;
             }
@@ -117,7 +117,7 @@ pub struct WindowRuleMatch {
     title: Option<String>,
     focus: Option<bool>,
     float: Option<bool>,
-    workspace: Option<WorkspaceName>,
+    workspace_name: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
@@ -138,12 +138,14 @@ impl Default for WindowProperties {
     }
 }
 
+// TODO rename
 #[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
 pub struct WindowOpeningProperties {
     pub focus: Option<bool>,
     #[serde(flatten)]
     pub state: Option<WindowState>,
-    pub workspace: Option<WorkspaceName>,
+    #[serde(rename = "workspace")]
+    pub workspace_name: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
@@ -179,7 +181,7 @@ impl WindowOpeningProperties {
         Self {
             focus: rhs.focus.or(self.focus),
             state: rhs.state.or(self.state),
-            workspace: rhs.workspace.or(self.workspace),
+            workspace_name: rhs.workspace_name.or(self.workspace_name),
         }
     }
 }
@@ -200,7 +202,7 @@ pub struct WindowRuleCandidate {
     pub title: String,
     pub focus: bool,
     pub float: bool,
-    pub workspace: WorkspaceName,
+    pub workspace_name: WorkspaceName,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]

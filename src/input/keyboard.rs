@@ -176,7 +176,7 @@ impl WindowManagerState {
         let serial = SERIAL_COUNTER.next_serial();
         let time = Event::time_msec(&event);
 
-        let keyboard = self.seat.get_keyboard().unwrap();
+        let keyboard = self.get_keyboard();
         keyboard.input::<(), _>(
             self,
             event.key_code(),
@@ -201,7 +201,7 @@ impl WindowManagerState {
                     key_modifiers
                 };
 
-                if data.seat.get_pointer().unwrap().is_grabbed() {
+                if data.get_pointer().is_grabbed() {
                     return FilterResult::Intercept(());
                 }
 

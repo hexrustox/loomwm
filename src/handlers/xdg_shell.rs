@@ -118,10 +118,10 @@ impl XdgShellHandler for WindowManagerState {
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
-        if let Some(FoundMappedWindow { workspace, .. }) =
+        if let Some(FoundMappedWindow { workspace_name, .. }) =
             self.remove_mapped_window(toplevel.wl_surface())
         {
-            self.restore_workspace_focus(&workspace);
+            self.restore_workspace_focus(&workspace_name);
         };
     }
 }
