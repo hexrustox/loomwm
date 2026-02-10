@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Config {
     pub general: GeneralConfig,
     pub window_rules: WindowRules,
@@ -19,7 +19,7 @@ pub struct Config {
 
 #[derive(Deserialize)]
 #[serde(default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GeneralConfig {
     pub allow_move_request: bool,
     pub allow_resize_request: bool,
@@ -49,7 +49,7 @@ pub struct KeyConfig {
 }
 
 #[derive(Default, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct PointerConfig {
     pub bindings: PointerBindings,
     #[serde(rename = "resize-at")]

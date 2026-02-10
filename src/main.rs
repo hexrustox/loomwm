@@ -1,5 +1,6 @@
 use std::{env, fs::read_to_string, path::Path};
 
+use anyhow::anyhow;
 use notify::{Event, EventKind, Watcher, event::ModifyKind};
 use smithay::reexports::{
     calloop::{EventLoop, channel},
@@ -27,13 +28,13 @@ pub struct CompositorData {
 
 const CONFIG: &str = "/data/example/config.toml";
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), anyhow::Error> {
     let config_file = read_to_string(CONFIG)?;
     let config = toml::from_str(&config_file)?;
 
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WindowManagerState> = Display::new()?;
-    let mut backend = Backend::Winit(Winit::new(event_loop.handle())?);
+    let mut backend = Backend::Winit(Winit::new(event_loop.handle()).map_err(|e| anyhow!("{e}"))?);
     let mut compositor = WindowManagerState::new(
         event_loop.handle(),
         event_loop.get_signal(),
@@ -76,7 +77,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 data.compositor.update_config(config);
             }
-        })?;
+        })
+        .map_err(|e| anyhow!("{e}"))?;
 
     event_loop.run(None, &mut data, |_| {})?;
 

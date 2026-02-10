@@ -6,7 +6,7 @@ allow-resize-request = true
 decoration = "server_side"
 
 [[window-rules]]
-matches = [{ float = true }]
+matches = [{ is-floating = true }]
 decoration = "client_side"
 
 # [[window-rules]]

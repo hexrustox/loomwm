@@ -111,19 +111,20 @@ impl WindowRule {
 }
 
 #[derive(Debug, Default, Deserialize, Hash)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct WindowRuleMatch {
     app_id: Option<String>,
     title: Option<String>,
-    #[serde(rename = "is_focused")]
+    #[serde(rename = "is-focused")]
     focus: Option<bool>,
-    #[serde(rename = "is_floating")]
+    #[serde(rename = "is-floating")]
     float: Option<bool>,
-    #[serde(rename = "in_workspace")]
+    #[serde(rename = "in-workspace")]
     workspace_name: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WindowProperties {
     #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
