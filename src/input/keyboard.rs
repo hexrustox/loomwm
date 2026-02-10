@@ -216,19 +216,19 @@ impl WindowManagerState {
                     use KeyAction::*;
                     match action {
                         SwitchWorkspace { name } => {
-                            data.switch_to_workspace(name.clone());
+                            data.change_or_create_active_workspace(name.clone());
                         }
                         MoveToWorkspace { name, focus } => {
                             data.move_focused_window_to_workspace(name.clone(), *focus);
                         }
                         FocusWindow { direction } => {
-                            data.focus_window_in_direction(*direction);
+                            data.focus_tiling_window_in_direction(*direction);
                         }
                         SwapWindow { direction } => {
-                            data.swap_window_in_direction(*direction);
+                            data.swap_tiling_window_in_direction(*direction);
                         }
                         ResizeWindow { edge, unit } => {
-                            data.resize_window_in_edge(*edge, *unit);
+                            data.resize_tiling_window_in_edge(*edge, *unit);
                         }
                         ToggleFloating => {
                             data.toggle_focused_window_floating();

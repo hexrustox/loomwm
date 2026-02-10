@@ -52,17 +52,17 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
         let delta = event.location - self.last_location;
         if self.edges.intersects(ResizeEdge::TOP) {
             let unit = WindowUnit::Px(-delta.y as i32);
-            data.resize_window_in_edge(WindowDirection::Up, unit);
+            data.resize_tiling_window_in_edge(WindowDirection::Up, unit);
         } else if self.edges.intersects(ResizeEdge::BOTTOM) {
             let unit = WindowUnit::Px(delta.y as i32);
-            data.resize_window_in_edge(WindowDirection::Up, unit);
+            data.resize_tiling_window_in_edge(WindowDirection::Up, unit);
         }
         if self.edges.intersects(ResizeEdge::LEFT) {
             let unit = WindowUnit::Px(-delta.x as i32);
-            data.resize_window_in_edge(WindowDirection::Left, unit);
+            data.resize_tiling_window_in_edge(WindowDirection::Left, unit);
         } else if self.edges.intersects(ResizeEdge::RIGHT) {
             let unit = WindowUnit::Px(delta.x as i32);
-            data.resize_window_in_edge(WindowDirection::Right, unit);
+            data.resize_tiling_window_in_edge(WindowDirection::Right, unit);
         }
 
         self.last_location = event.location;

@@ -102,7 +102,7 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
             if let Some((window, _)) = &self.last_window
                 && *window != self.window
             {
-                data.swap_window(
+                data.swap_tiling_window(
                     self.window.toplevel().unwrap().wl_surface(),
                     window.toplevel().unwrap().wl_surface(),
                 );

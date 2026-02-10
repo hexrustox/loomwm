@@ -166,7 +166,7 @@ impl WindowManagerState {
                         mapped.set_location((x, y).into());
                     }
                     Some(WindowLocation::Center) => {
-                        let output_size = &workspace.output_size();
+                        let output_size = &workspace.get_output_size();
                         let window_size = size
                             .map(|(w, h)| (w, h).into())
                             .unwrap_or(mapped.get_size());
@@ -193,7 +193,7 @@ impl WindowManagerState {
             WindowState::Tile(ratio) => {
                 apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 let mapped = workspace.add_tiling_window(mapped, ratio);
-                self.handle_tilting_layout_full(mapped);
+                self.handle_tiling_layout_full(mapped);
             }
         }
 
@@ -202,7 +202,7 @@ impl WindowManagerState {
         }
     }
 
-    fn handle_tilting_layout_full(&mut self, mapped: Option<MappedWindow>) {
+    fn handle_tiling_layout_full(&mut self, mapped: Option<MappedWindow>) {
         let Some(mapped) = mapped else {
             return;
         };
@@ -271,7 +271,6 @@ impl WindowManagerState {
             })
     }
 
-    // FIXME
     pub fn focus_window(&mut self, surface: &WlSurface) {
         let keyboard = self.seat.get_keyboard().unwrap();
 
@@ -326,7 +325,7 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace);
-        workspace.update_focus_queue(mapped.clone());
+        workspace.append_to_focus_queue(mapped.clone());
         if mapped.get_floating() {
             workspace.raise_floating_window(surface);
         }
@@ -342,13 +341,13 @@ impl WindowManagerState {
             .get_workspace(name)
             .find_mapped_window_under(point)
             .map(|(mapped, location)| FoundMappedWindow {
-                mapped,
+                mapped: mapped.clone(),
                 workspace: name.clone(),
                 location: Some(location),
             })
     }
 
-    pub fn surface_under(
+    pub fn find_surface_under(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
@@ -369,7 +368,11 @@ impl WindowManagerState {
 
     pub fn restore_workspace_focus(&mut self, name: &WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
-        if let Some(mapped) = monitor.get_workspace(name).last_focus_window() {
+        if let Some(mapped) = monitor
+            .get_workspace(name)
+            .get_last_focused_window()
+            .cloned()
+        {
             self.focus_window(&mapped.wl_surface());
         } else {
             self.seat
@@ -379,7 +382,7 @@ impl WindowManagerState {
         }
     }
 
-    pub fn switch_to_workspace(&mut self, name: WorkspaceName) {
+    pub fn change_or_create_active_workspace(&mut self, name: WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
         monitor.add_workspace(name.clone());
         monitor.active_workspace = name.clone();
@@ -428,7 +431,7 @@ impl WindowManagerState {
             workspace.add_floating_window(mapped.clone());
         } else {
             let mapped = workspace.add_tiling_window(mapped.clone(), None);
-            self.handle_tilting_layout_full(mapped);
+            self.handle_tiling_layout_full(mapped);
         }
 
         if focus {
@@ -472,7 +475,7 @@ impl WindowManagerState {
             workspace.add_floating_window(mapped);
         } else {
             let mapped = workspace.add_tiling_window(mapped, None);
-            self.handle_tilting_layout_full(mapped);
+            self.handle_tiling_layout_full(mapped);
         }
     }
 
@@ -488,7 +491,7 @@ impl WindowManagerState {
         mapped.toplevel().send_close();
     }
 
-    pub fn focus_window_in_direction(&mut self, direction: WindowDirection) {
+    pub fn focus_tiling_window_in_direction(&mut self, direction: WindowDirection) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -504,16 +507,16 @@ impl WindowManagerState {
         }
         let monitor = self.monitors.get_monitor();
         let workspace = monitor.get_workspace(&workspace);
-        if let Some(mapped) = workspace.last_window_in_direction(&surface, direction) {
+        if let Some(mapped) = workspace.last_focused_tiling_window_in_direction(&surface, direction)
+        {
             self.focus_window(&mapped.wl_surface());
         }
     }
 
-    // TODO allow floating & cross workspace swapping
-    pub fn swap_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
+    pub fn swap_tiling_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
         let Some(FoundMappedWindow {
             mapped: mut mapped_lhs,
-            workspace,
+            workspace: workspace_lhs,
             ..
         }) = self.find_mapped_window(lhs)
         else {
@@ -521,14 +524,21 @@ impl WindowManagerState {
         };
         let Some(FoundMappedWindow {
             mapped: mut mapped_rhs,
+            workspace: workspace_rhs,
             ..
-        }) = self.find_mapped_window(lhs)
+        }) = self.find_mapped_window(rhs)
         else {
             return;
         };
+        if workspace_lhs != workspace_rhs {
+            return;
+        }
+        if mapped_lhs.get_floating() || mapped_rhs.get_floating() {
+            return;
+        }
 
         let monitor = self.monitors.get_monitor_mut();
-        let workspace = monitor.get_workspace_mut(&workspace);
+        let workspace = monitor.get_workspace_mut(&workspace_lhs);
         workspace.swap_tiling_window(lhs, rhs);
 
         let temp = mapped_lhs.get_size();
@@ -536,7 +546,7 @@ impl WindowManagerState {
         mapped_rhs.set_size(temp);
     }
 
-    pub fn swap_window_in_direction(&mut self, direction: WindowDirection) {
+    pub fn swap_tiling_window_in_direction(&mut self, direction: WindowDirection) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -555,7 +565,10 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace);
-        if let Some(mut mapped_rhs) = workspace.last_window_in_direction(&surface, direction) {
+        if let Some(mut mapped_rhs) = workspace
+            .last_focused_tiling_window_in_direction(&surface, direction)
+            .cloned()
+        {
             workspace.swap_tiling_window(&mapped_lhs.wl_surface(), &mapped_rhs.wl_surface());
 
             let temp = mapped_lhs.get_size();
@@ -564,7 +577,7 @@ impl WindowManagerState {
         }
     }
 
-    pub fn resize_window_in_edge(&mut self, edge: WindowDirection, unit: WindowUnit) {
+    pub fn resize_tiling_window_in_edge(&mut self, edge: WindowDirection, unit: WindowUnit) {
         let keyboard = self.seat.get_keyboard().unwrap();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -586,11 +599,11 @@ impl WindowManagerState {
     pub fn apply_rule_to_mapped_windows(&mut self) {
         let monitor = self.monitors.get_monitor_mut();
         monitor.workspaces.iter_mut().for_each(|workspace| {
-            workspace.apply_rule_to_mapped_windows(&self.window_rules);
+            workspace.apply_rule_to_windows(&self.window_rules);
         });
     }
 
-    pub fn active_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+    pub fn windows_in_active_workspace_iter(&self) -> impl Iterator<Item = &MappedWindow> {
         let monitor = self.monitors.get_monitor();
         monitor
             .get_workspace(monitor.get_active_workspace_name())

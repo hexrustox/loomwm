@@ -75,14 +75,16 @@ impl Winit {
                         backend
                             .submit(render_output.damage.map(|damage| &**damage))
                             .unwrap();
-                        data.compositor.active_windows_iter().for_each(|mapped| {
-                            mapped.window().send_frame(
-                                output,
-                                get_monotonic_time(),
-                                None,
-                                |_, _| Some(output.clone()),
-                            );
-                        });
+                        data.compositor
+                            .windows_in_active_workspace_iter()
+                            .for_each(|mapped| {
+                                mapped.window().send_frame(
+                                    output,
+                                    get_monotonic_time(),
+                                    None,
+                                    |_, _| Some(output.clone()),
+                                );
+                            });
                     }
 
                     data.compositor.space.refresh();

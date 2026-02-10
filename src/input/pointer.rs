@@ -108,7 +108,7 @@ impl WindowManagerState {
 
         let pointer = self.seat.get_pointer().unwrap();
 
-        let under = self.surface_under(location);
+        let under = self.find_surface_under(location);
 
         pointer.motion(
             self,

@@ -65,20 +65,8 @@ impl Workspace {
     }
 
     pub fn add_floating_window(&mut self, mapped: MappedWindow) {
-        self.insert_focus_queue(mapped.clone());
+        self.insert_into_focus_queue(mapped.clone());
         self.floating.insert(0, mapped);
-    }
-
-    fn update_tiling_window_size(&mut self) {
-        let output = &self.output;
-        self.tiling.update_window_size(
-            output.current_location(),
-            output
-                .current_mode()
-                .unwrap()
-                .size
-                .to_logical(output.current_scale().integer_scale()),
-        );
     }
 
     pub fn add_tiling_window(
@@ -86,7 +74,7 @@ impl Workspace {
         mapped: MappedWindow,
         ratio: Option<TileRatio>,
     ) -> Option<MappedWindow> {
-        self.insert_focus_queue(mapped.clone());
+        self.insert_into_focus_queue(mapped.clone());
         if let mapped @ Some(_) = self.tiling.insert(mapped, ratio) {
             return mapped;
         } else {
@@ -95,14 +83,14 @@ impl Workspace {
         None
     }
 
-    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        self.floating.iter().chain(self.tiling.windows_iter())
+    fn update_tiling_window_size(&mut self) {
+        let output = &self.output;
+        self.tiling
+            .update_window_size(output.current_location(), self.get_output_size());
     }
 
-    pub fn windows_iter_mut(&mut self) -> impl Iterator<Item = &mut MappedWindow> {
-        self.floating
-            .iter_mut()
-            .chain(self.tiling.windows_iter_mut())
+    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        self.floating.iter().chain(self.tiling.windows_iter())
     }
 
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
@@ -110,23 +98,17 @@ impl Workspace {
             .find(|mapped| mapped.toplevel().wl_surface() == surface)
     }
 
-    pub fn find_window_mut(&mut self, surface: &WlSurface) -> Option<&mut MappedWindow> {
-        self.windows_iter_mut()
-            .find(|mapped| mapped.toplevel().wl_surface() == surface)
-    }
-
-    pub fn last_window_in_direction(
+    pub fn last_focused_tiling_window_in_direction(
         &self,
         surface: &WlSurface,
         direction: WindowDirection,
-    ) -> Option<MappedWindow> {
+    ) -> Option<&MappedWindow> {
         // TODO do closest distance instead of last focus as well
         let mapped_list = self.tiling.find_windows_in_direction(surface, direction);
         self.focus_queue
             .iter()
             .rev()
             .find(|&m| mapped_list.contains(&m))
-            .cloned()
     }
 
     pub fn swap_tiling_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
@@ -153,22 +135,22 @@ impl Workspace {
         }
     }
 
-    pub fn insert_focus_queue(&mut self, mapped: MappedWindow) {
+    pub fn insert_into_focus_queue(&mut self, mapped: MappedWindow) {
         self.focus_queue.insert(0, mapped);
     }
 
-    pub fn update_focus_queue(&mut self, mapped: MappedWindow) {
+    pub fn append_to_focus_queue(&mut self, mapped: MappedWindow) {
         if let Some(index) = self.focus_queue.iter().position(|m| *m == mapped) {
             self.focus_queue.remove(index);
         }
         self.focus_queue.push(mapped);
     }
 
-    pub fn last_focus_window(&self) -> Option<MappedWindow> {
-        self.focus_queue.last().cloned()
+    pub fn get_last_focused_window(&self) -> Option<&MappedWindow> {
+        self.focus_queue.last()
     }
 
-    fn remove_focus_queue(&mut self, mapped: &MappedWindow) {
+    fn remove_from_focus_queue(&mut self, mapped: &MappedWindow) {
         if let Some(index) = self.focus_queue.iter().position(|m| m == mapped) {
             self.focus_queue.remove(index);
         }
@@ -180,23 +162,17 @@ impl Workspace {
             .iter()
             .position(|mapped| mapped.toplevel().wl_surface() == surface)
             .map(|i| self.floating.remove(i))?;
-        self.remove_focus_queue(&mapped);
+        self.remove_from_focus_queue(&mapped);
         Some(mapped)
     }
 
     fn remove_tiling_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         let mapped = self.tiling.remove(surface).inspect(|_| {
             let output = &self.output;
-            self.tiling.update_window_size(
-                output.current_location(),
-                output
-                    .current_mode()
-                    .unwrap()
-                    .size
-                    .to_logical(output.current_scale().integer_scale()),
-            );
+            self.tiling
+                .update_window_size(output.current_location(), self.get_output_size());
         })?;
-        self.remove_focus_queue(&mapped);
+        self.remove_from_focus_queue(&mapped);
         Some(mapped)
     }
 
@@ -205,7 +181,7 @@ impl Workspace {
             .or(self.remove_tiling_window(surface))
     }
 
-    pub fn apply_rule_to_mapped_windows(&mut self, window_rules: &WindowRules) {
+    pub fn apply_rule_to_windows(&mut self, window_rules: &WindowRules) {
         let workspace = self.get_name().clone();
         for mapped in self
             .floating
@@ -230,21 +206,21 @@ impl Workspace {
     pub fn find_mapped_window_under(
         &self,
         point: Point<f64, Logical>,
-    ) -> Option<(MappedWindow, Point<i32, Logical>)> {
+    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
         self.windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
             if mapped
                 .window()
                 .is_in_input_region(&(point - render_location.to_f64()))
             {
-                Some((mapped.clone(), render_location))
+                Some((mapped, render_location))
             } else {
                 None
             }
         })
     }
 
-    pub fn output_size(&self) -> Size<i32, Logical> {
+    pub fn get_output_size(&self) -> Size<i32, Logical> {
         let output = &self.output;
         output
             .current_mode()
