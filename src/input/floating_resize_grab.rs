@@ -326,7 +326,7 @@ pub fn handle_commit(mapped: &mut MappedWindow) -> Option<()> {
     let geometry = mapped.window().geometry();
 
     let new_loc: Point<Option<i32>, Logical> =
-        ResizeSurfaceState::with(mapped.toplevel().wl_surface(), |state| {
+        ResizeSurfaceState::with(&mapped.wl_surface(), |state| {
             state
                 .commit()
                 .and_then(|(edges, initial_rect)| {

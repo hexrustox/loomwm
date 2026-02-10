@@ -95,7 +95,7 @@ impl Workspace {
 
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
-            .find(|mapped| mapped.toplevel().wl_surface() == surface)
+            .find(|mapped| mapped.wl_surface() == *surface)
     }
 
     pub fn last_focused_tiling_window_in_direction(
@@ -129,7 +129,7 @@ impl Workspace {
         if let Some(index) = self
             .floating
             .iter()
-            .position(|mapped| mapped.toplevel().wl_surface() == surface)
+            .position(|mapped| mapped.wl_surface() == *surface)
         {
             self.floating[0..=index].rotate_right(1);
         }
@@ -160,7 +160,7 @@ impl Workspace {
         let mapped = self
             .floating
             .iter()
-            .position(|mapped| mapped.toplevel().wl_surface() == surface)
+            .position(|mapped| mapped.wl_surface() == *surface)
             .map(|i| self.floating.remove(i))?;
         self.remove_from_focus_queue(&mapped);
         Some(mapped)
@@ -188,7 +188,7 @@ impl Workspace {
             .iter_mut()
             .chain(self.tiling.windows_iter_mut())
         {
-            let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+            let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
             let properties = window_rules.get_properties(
                 WindowRuleCandidate {
                     app_id,

@@ -200,7 +200,7 @@ impl WindowManagerState {
         let Some(mapped) = mapped else {
             return;
         };
-        let (app_id, title) = get_app_id_and_title(mapped.toplevel().wl_surface());
+        let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
 
         let candidate = WindowRuleCandidate {
             app_id,
