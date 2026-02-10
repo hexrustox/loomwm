@@ -2,7 +2,6 @@ use std::cell::RefCell;
 
 use bitflags::bitflags;
 use smithay::{
-    desktop::Window,
     input::pointer::{
         AxisFrame, ButtonEvent, GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent,
         GesturePinchEndEvent, GesturePinchUpdateEvent, GestureSwipeBeginEvent,
@@ -43,7 +42,7 @@ impl From<xdg_toplevel::ResizeEdge> for ResizeEdge {
 
 pub struct FloatingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
-    window: Window,
+    mapped: MappedWindow,
 
     edges: ResizeEdge,
 
@@ -54,13 +53,13 @@ pub struct FloatingResizeGrab {
 impl FloatingResizeGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
-        window: Window,
+        mapped: MappedWindow,
         edges: ResizeEdge,
         initial_window_rect: Rectangle<i32, Logical>,
     ) -> Self {
         let initial_rect = initial_window_rect;
 
-        ResizeSurfaceState::with(window.toplevel().unwrap().wl_surface(), |state| {
+        ResizeSurfaceState::with(&mapped.wl_surface(), |state| {
             *state = ResizeSurfaceState::Resizing {
                 edges,
                 initial_rect,
@@ -69,7 +68,7 @@ impl FloatingResizeGrab {
 
         Self {
             start_data,
-            window,
+            mapped,
             edges,
             initial_rect,
             last_window_size: initial_rect.size,
@@ -108,12 +107,11 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
             new_window_height = (self.initial_rect.size.h as f64 + delta.y) as i32;
         }
 
-        let (min_size, max_size) =
-            compositor::with_states(self.window.toplevel().unwrap().wl_surface(), |states| {
-                let mut guard = states.cached_state.get::<SurfaceCachedState>();
-                let data = guard.current();
-                (data.min_size, data.max_size)
-            });
+        let (min_size, max_size) = compositor::with_states(&self.mapped.wl_surface(), |states| {
+            let mut guard = states.cached_state.get::<SurfaceCachedState>();
+            let data = guard.current();
+            (data.min_size, data.max_size)
+        });
 
         let min_width = min_size.w.max(1);
         let min_height = min_size.h.max(1);
@@ -130,17 +128,17 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
         };
 
         self.last_window_size = Size::from((
-            new_window_width.max(min_width).min(max_width),
-            new_window_height.max(min_height).min(max_height),
+            new_window_width.clamp(min_width, max_width),
+            new_window_height.clamp(min_height, max_height),
         ));
 
-        let xdg = self.window.toplevel().unwrap();
-        xdg.with_pending_state(|state| {
+        let toplevel = self.mapped.toplevel();
+        toplevel.with_pending_state(|state| {
             state.states.set(xdg_toplevel::State::Resizing);
             state.size = Some(self.last_window_size);
         });
 
-        xdg.send_pending_configure();
+        toplevel.send_pending_configure();
     }
 
     fn relative_motion(
@@ -164,15 +162,15 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
         if !handle.current_pressed().contains(&self.start_data.button) {
             handle.unset_grab(self, data, event.serial, event.time, true);
 
-            let xdg = self.window.toplevel().unwrap();
-            xdg.with_pending_state(|state| {
+            let toplevel = self.mapped.toplevel();
+            toplevel.with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Resizing);
                 state.size = Some(self.last_window_size);
             });
 
-            xdg.send_pending_configure();
+            toplevel.send_pending_configure();
 
-            ResizeSurfaceState::with(xdg.wl_surface(), |state| {
+            ResizeSurfaceState::with(toplevel.wl_surface(), |state| {
                 *state = ResizeSurfaceState::WaitingForLastCommit {
                     edges: self.edges,
                     initial_rect: self.initial_rect,

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use smithay::{
     backend::renderer::{
@@ -45,17 +45,15 @@ pub enum UnmappedWindowState {
     NotConfigured,
 }
 
-type Inner = Rc<RefCell<MappedWindowInner>>;
-
 #[derive(Debug, Clone)]
 pub struct MappedWindow {
-    inner: Inner,
+    inner: Arc<Mutex<MappedWindowInner>>,
 }
 
 impl MappedWindow {
     pub fn new(window: Window, focus: bool, floating: bool) -> Self {
         Self {
-            inner: Rc::new(RefCell::new(MappedWindowInner {
+            inner: Arc::new(Mutex::new(MappedWindowInner {
                 window,
                 focus,
                 floating,
@@ -65,41 +63,40 @@ impl MappedWindow {
         }
     }
 
-    pub fn get_focus(&self) -> bool {
-        self.inner.borrow().focus
+    fn inner(&self) -> MutexGuard<'_, MappedWindowInner> {
+        self.inner.lock().expect("Mapped window lock panic")
     }
 
-    pub fn set_focus(&self, value: bool) {
-        self.inner.borrow_mut().focus = value;
+    pub fn get_focus(&self) -> bool {
+        self.inner().focus
+    }
+
+    pub fn set_focus(&self, focus: bool) {
+        self.inner().focus = focus;
     }
 
     pub fn get_floating(&self) -> bool {
-        self.inner.borrow().floating
+        self.inner().floating
     }
 
-    pub fn set_floating(&self, value: bool) {
-        self.inner.borrow_mut().floating = value;
+    pub fn set_floating(&self, floating: bool) {
+        self.inner().floating = floating;
     }
 
     pub fn get_opacity(&self) -> f32 {
-        self.inner.borrow().opacity
+        self.inner().opacity
     }
 
-    pub fn set_opacity(&self, value: f32) {
-        self.inner.borrow_mut().opacity = value;
+    pub fn set_opacity(&self, opacity: f32) {
+        self.inner().opacity = opacity;
     }
 
     pub fn window(&self) -> Window {
-        self.inner.borrow().window.clone()
+        self.inner().window.clone()
     }
 
     pub fn toplevel(&self) -> ToplevelSurface {
-        self.inner
-            .borrow()
-            .window
-            .toplevel()
-            .expect("No X11 support")
-            .clone()
+        self.window().toplevel().expect("No X11 support").clone()
     }
 
     pub fn wl_surface(&self) -> WlSurface {
@@ -107,13 +104,17 @@ impl MappedWindow {
     }
 
     pub fn center_location(&self) -> Point<i32, Logical> {
-        let location = self.inner.borrow().location;
-        let size = self.inner.borrow().window.geometry().size;
+        let inner = self.inner();
+        let location = inner.location;
+        let size = inner.window.geometry().size;
         Point::new(size.w / 2 + location.x, size.h / 2 + location.y)
     }
 
     pub fn render_location(&self) -> Point<i32, Logical> {
-        self.inner.borrow().location - self.inner.borrow().window.geometry().loc
+        let inner = self.inner();
+        let location = inner.location;
+        let loc = inner.window.geometry().loc;
+        location - loc
     }
 
     pub fn render_elements<R: Renderer + ImportAll>(
@@ -125,12 +126,10 @@ impl MappedWindow {
         <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
     {
         let location = self.render_location().to_physical_precise_round(scale);
-        self.inner.borrow().window.render_elements(
-            renderer,
-            location,
-            scale,
-            self.inner.borrow().opacity,
-        )
+        let opacity = self.inner().opacity;
+        self.inner()
+            .window
+            .render_elements(renderer, location, scale, opacity)
     }
 }
 
@@ -151,15 +150,15 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn get_location(&self) -> Point<i32, Logical> {
-        self.inner.borrow().location
+        self.inner().location
     }
 
     fn get_size(&self) -> Size<i32, Logical> {
-        self.inner.borrow().window.geometry().size
+        self.inner().window.geometry().size
     }
 
     fn set_location(&mut self, location: Point<i32, Logical>) {
-        self.inner.borrow_mut().location = location;
+        self.inner().location = location;
     }
 
     fn set_size(&mut self, size: Size<i32, Logical>) {
@@ -170,11 +169,11 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn get_buffer(&self) -> Self::Buffer {
-        self.inner.borrow().window.clone()
+        self.inner().window.clone()
     }
 
     fn set_buffer(&mut self, buffer: Self::Buffer) {
-        self.inner.borrow_mut().window = buffer;
+        self.inner().window = buffer;
     }
 }
 

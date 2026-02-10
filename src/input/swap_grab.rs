@@ -1,30 +1,26 @@
-use crate::{monitor::FoundMappedWindow, state::WindowManagerState};
-use smithay::{
-    desktop::Window,
-    input::{
-        SeatHandler,
-        pointer::{
-            AxisFrame, ButtonEvent, GestureHoldBeginEvent, GestureHoldEndEvent,
-            GesturePinchBeginEvent, GesturePinchEndEvent, GesturePinchUpdateEvent,
-            GestureSwipeBeginEvent, GestureSwipeEndEvent, GestureSwipeUpdateEvent,
-            GrabStartData as PointerGrabStartData, MotionEvent, PointerGrab, PointerInnerHandle,
-            RelativeMotionEvent,
-        },
+use crate::{monitor::FoundMappedWindow, state::WindowManagerState, window::MappedWindow};
+use smithay::input::{
+    SeatHandler,
+    pointer::{
+        AxisFrame, ButtonEvent, GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent,
+        GesturePinchEndEvent, GesturePinchUpdateEvent, GestureSwipeBeginEvent,
+        GestureSwipeEndEvent, GestureSwipeUpdateEvent, GrabStartData as PointerGrabStartData,
+        MotionEvent, PointerGrab, PointerInnerHandle, RelativeMotionEvent,
     },
 };
 
 pub struct SwapGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
-    window: Window,
-    last_window: Option<(Window, f32)>,
+    mapped: MappedWindow,
+    last_mapped: Option<(MappedWindow, f32)>,
 }
 
 impl SwapGrab {
-    pub fn new(start_data: PointerGrabStartData<WindowManagerState>, window: Window) -> Self {
+    pub fn new(start_data: PointerGrabStartData<WindowManagerState>, mapped: MappedWindow) -> Self {
         Self {
             start_data,
-            window,
-            last_window: None,
+            mapped,
+            last_mapped: None,
         }
     }
 }
@@ -45,28 +41,19 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
         if let Some(FoundMappedWindow { mapped, .. }) =
             data.find_mapped_window_under(event.location)
         {
-            if self
-                .last_window
-                .as_ref()
-                .is_some_and(|(w, _)| *w == mapped.window())
-            {
+            if self.last_mapped.as_ref().is_some_and(|(w, _)| *w == mapped) {
                 return;
             }
 
-            let last_window = self.last_window.clone();
-
-            if self.window == mapped.window() {
-                self.last_window = None;
+            if self.mapped == mapped {
+                self.last_mapped = None;
             } else {
-                self.last_window = Some((mapped.window(), mapped.get_opacity()));
-                mapped.set_opacity(0.5);
+                self.last_mapped = Some((mapped.clone(), mapped.get_opacity()));
+                mapped.set_opacity(data.pointer_config.selection);
             }
 
-            if let Some((window, opacity)) = last_window
-                && let Some(FoundMappedWindow { mapped, .. }) =
-                    data.find_mapped_window(window.toplevel().unwrap().wl_surface())
-            {
-                mapped.set_opacity(opacity);
+            if let Some((mapped, opacity)) = &self.last_mapped {
+                mapped.set_opacity(*opacity);
             }
         }
     }
@@ -93,19 +80,12 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
         handle.button(data, event);
 
         if !handle.current_pressed().contains(&self.start_data.button) {
-            if let Some((window, opacity)) = self.last_window.clone()
-                && let Some(FoundMappedWindow { mapped, .. }) =
-                    data.find_mapped_window(window.toplevel().unwrap().wl_surface())
-            {
-                mapped.set_opacity(opacity);
-            }
-            if let Some((window, _)) = &self.last_window
-                && *window != self.window
-            {
-                data.swap_tiling_window(
-                    self.window.toplevel().unwrap().wl_surface(),
-                    window.toplevel().unwrap().wl_surface(),
-                );
+            let Some((mapped, opacity)) = self.last_mapped.take() else {
+                return;
+            };
+            mapped.set_opacity(opacity);
+            if mapped != self.mapped {
+                data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
             }
 
             handle.unset_grab(self, data, event.serial, event.time, true);

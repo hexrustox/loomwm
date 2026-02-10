@@ -159,12 +159,12 @@ impl WindowManagerState {
                             if mapped.get_floating() {
                                 let grab = MoveGrab::new(
                                     start_data,
-                                    mapped.window().clone(),
+                                    mapped.clone(),
                                     mapped.get_location().to_f64(),
                                 );
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             } else {
-                                let grab = SwapGrab::new(start_data, mapped.window().clone());
+                                let grab = SwapGrab::new(start_data, mapped.clone());
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             }
                         }
@@ -243,7 +243,7 @@ impl WindowManagerState {
                         if mapped.get_floating() {
                             let grab = FloatingResizeGrab::new(
                                 start_data,
-                                mapped.window().clone(),
+                                mapped.clone(),
                                 edge,
                                 Rectangle::new(mapped.get_location(), mapped.get_size()),
                             );
