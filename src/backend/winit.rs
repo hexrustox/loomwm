@@ -76,11 +76,12 @@ impl Winit {
                             .submit(render_output.damage.map(|damage| &**damage))
                             .unwrap();
                         data.compositor.active_windows_iter().for_each(|mapped| {
-                            mapped
-                                .window
-                                .send_frame(output, get_monotonic_time(), None, |_, _| {
-                                    Some(output.clone())
-                                });
+                            mapped.window().send_frame(
+                                output,
+                                get_monotonic_time(),
+                                None,
+                                |_, _| Some(output.clone()),
+                            );
                         });
                     }
 

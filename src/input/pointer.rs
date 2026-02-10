@@ -12,6 +12,7 @@ use smithay::{
 
 use crate::input::swap_grab::SwapGrab;
 use crate::input::tiling_resize_grab::TilingResizeGrab;
+use crate::monitor::{FoundMappedWindow, TileTreeWindow};
 use crate::{
     input::{
         KeyModifiers,
@@ -129,10 +130,10 @@ impl WindowManagerState {
         let button_state = event.state();
 
         if button_state == ButtonState::Pressed
-            && let Some((mapped, _)) = self.find_mapped_window_under(pointer.current_location())
+            && let Some(FoundMappedWindow { mapped, .. }) =
+                self.find_mapped_window_under(pointer.current_location())
         {
-            let surface = mapped.toplevel().wl_surface().clone();
-            self.focus_window(&surface);
+            self.focus_window(&mapped.wl_surface());
         }
 
         if button_state == ButtonState::Pressed
@@ -144,7 +145,7 @@ impl WindowManagerState {
             use PointerActions::*;
             match action {
                 Move => {
-                    if let Some((mapped, _)) =
+                    if let Some(FoundMappedWindow { mapped, .. }) =
                         self.find_mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
@@ -155,22 +156,22 @@ impl WindowManagerState {
                                 button,
                                 location,
                             };
-                            if mapped.floating {
+                            if mapped.get_floating() {
                                 let grab = MoveGrab::new(
                                     start_data,
-                                    mapped.window.clone(),
-                                    mapped.location.to_f64(),
+                                    mapped.window().clone(),
+                                    mapped.get_location().to_f64(),
                                 );
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             } else {
-                                let grab = SwapGrab::new(start_data, mapped.window.clone());
+                                let grab = SwapGrab::new(start_data, mapped.window().clone());
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             }
                         }
                     }
                 }
                 Resize => {
-                    if let Some((mapped, _)) =
+                    if let Some(FoundMappedWindow { mapped, .. }) =
                         self.find_mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
@@ -200,13 +201,13 @@ impl WindowManagerState {
                                 }
                             }
                             ResizeLocation::Edge => {
-                                let size = mapped.window.geometry().size;
+                                let size = mapped.get_size();
                                 let width_1_3 = size.w as f64 * 1. / 3.;
                                 let width_2_3 = size.w as f64 * 2. / 3.;
                                 let height_1_3 = size.h as f64 * 1. / 3.;
                                 let height_2_3 = size.h as f64 * 2. / 3.;
 
-                                let window_location = mapped.location.to_f64();
+                                let window_location = mapped.get_location().to_f64();
                                 let x = location.x - window_location.x;
                                 let y = location.y - window_location.y;
 
@@ -239,12 +240,12 @@ impl WindowManagerState {
                             }
                         };
 
-                        if mapped.floating {
+                        if mapped.get_floating() {
                             let grab = FloatingResizeGrab::new(
                                 start_data,
-                                mapped.window.clone(),
+                                mapped.window().clone(),
                                 edge,
-                                Rectangle::new(mapped.location, mapped.window.geometry().size),
+                                Rectangle::new(mapped.get_location(), mapped.get_size()),
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         } else {

@@ -162,7 +162,7 @@ impl std::hash::Hash for WindowDynamicProperties {
 }
 
 impl WindowProperties {
-    fn merge(self, rhs: Self) -> Self {
+    pub fn merge(self, rhs: Self) -> Self {
         Self {
             opening: if let Some(rhs) = rhs.opening {
                 self.opening.map(|opening| opening.override_with(rhs))
@@ -193,6 +193,7 @@ impl WindowDynamicProperties {
     }
 }
 
+// TODO default
 #[derive(Debug)]
 pub struct WindowRuleCandidate {
     pub app_id: String,

@@ -17,7 +17,7 @@ use smithay::{
     wayland::{compositor, shell::xdg::SurfaceCachedState},
 };
 
-use crate::{state::WindowManagerState, window::MappedWindow};
+use crate::{monitor::TileTreeWindow, state::WindowManagerState, window::MappedWindow};
 
 bitflags! {
     #[derive(Debug, Default, Clone, Copy)]
@@ -324,8 +324,8 @@ impl ResizeSurfaceState {
 }
 
 pub fn handle_commit(mapped: &mut MappedWindow) -> Option<()> {
-    let mut window_loc = mapped.location;
-    let geometry = mapped.window.geometry();
+    let mut window_loc = mapped.get_location();
+    let geometry = mapped.window().geometry();
 
     let new_loc: Point<Option<i32>, Logical> =
         ResizeSurfaceState::with(mapped.toplevel().wl_surface(), |state| {
@@ -355,7 +355,7 @@ pub fn handle_commit(mapped: &mut MappedWindow) -> Option<()> {
     }
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
-        mapped.location = window_loc;
+        mapped.set_location(window_loc);
     }
 
     Some(())

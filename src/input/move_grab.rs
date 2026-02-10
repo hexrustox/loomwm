@@ -10,7 +10,10 @@ use smithay::{
     utils::{Logical, Point},
 };
 
-use crate::state::WindowManagerState;
+use crate::{
+    monitor::{FoundMappedWindow, TileTreeWindow},
+    state::WindowManagerState,
+};
 
 pub struct MoveGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
@@ -44,10 +47,10 @@ impl PointerGrab<WindowManagerState> for MoveGrab {
 
         let delta = event.location - self.start_data.location;
         let new_location = self.last_location + delta;
-        if let Some((mapped, _)) =
-            data.find_mapped_window_mut(self.window.toplevel().unwrap().wl_surface())
+        if let Some(FoundMappedWindow { mut mapped, .. }) =
+            data.find_mapped_window(self.window.toplevel().unwrap().wl_surface())
         {
-            mapped.location = new_location.to_i32_round();
+            mapped.set_location(new_location.to_i32_round());
         }
     }
 

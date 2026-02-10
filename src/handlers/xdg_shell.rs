@@ -20,6 +20,7 @@ use smithay::{
 
 use crate::{
     input::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
+    monitor::{FoundMappedWindow, TileTreeWindow},
     state::WindowManagerState,
     window::UnmappedWindow,
 };
@@ -66,11 +67,14 @@ impl XdgShellHandler for WindowManagerState {
         if let Some(start_data) = check_grab(&seat, surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            if let Some((mapped, _)) = self.find_mapped_window(surface)
-                && mapped.floating
+            if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
+                && mapped.get_floating()
             {
-                let grab =
-                    MoveGrab::new(start_data, mapped.window.clone(), mapped.location.to_f64());
+                let grab = MoveGrab::new(
+                    start_data,
+                    mapped.window().clone(),
+                    mapped.get_location().to_f64(),
+                );
                 pointer.set_grab(self, grab, serial, Focus::Clear);
             }
         }
@@ -94,8 +98,8 @@ impl XdgShellHandler for WindowManagerState {
         if let Some(start_data) = check_grab(&seat, surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            if let Some((mapped, _)) = self.find_mapped_window(surface)
-                && mapped.floating
+            if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
+                && mapped.get_floating()
             {
                 toplevel.with_pending_state(|state| {
                     state.states.set(xdg_toplevel::State::Resizing);
@@ -104,9 +108,9 @@ impl XdgShellHandler for WindowManagerState {
 
                 let grab = FloatingResizeGrab::new(
                     start_data,
-                    mapped.window.clone(),
+                    mapped.window().clone(),
                     edges.into(),
-                    Rectangle::new(mapped.location, mapped.window.geometry().size),
+                    Rectangle::new(mapped.get_location(), mapped.get_size()),
                 );
                 pointer.set_grab(self, grab, serial, Focus::Clear);
             }
@@ -114,8 +118,10 @@ impl XdgShellHandler for WindowManagerState {
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
-        if let Some((_, name)) = self.remove_mapped_window(toplevel.wl_surface()) {
-            self.restore_workspace_focus(&name);
+        if let Some(FoundMappedWindow { workspace, .. }) =
+            self.remove_mapped_window(toplevel.wl_surface())
+        {
+            self.restore_workspace_focus(&workspace);
         };
     }
 }

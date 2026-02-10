@@ -20,6 +20,7 @@ use smithay::{
 
 use crate::{
     input::floating_resize_grab,
+    monitor::FoundMappedWindow,
     state::WindowManagerState,
     utils::{get_app_id_and_title, is_mapped},
     window::{
@@ -102,9 +103,9 @@ impl CompositorHandler for WindowManagerState {
             }
 
             // previously-mapped root
-            if let Some((mapped, _)) = self.find_mapped_window_mut(surface) {
-                mapped.window.on_commit();
-                floating_resize_grab::handle_commit(mapped);
+            if let Some(FoundMappedWindow { mut mapped, .. }) = self.find_mapped_window(surface) {
+                mapped.window().on_commit();
+                floating_resize_grab::handle_commit(&mut mapped);
 
                 // handle toplevel unmapped
                 return;
@@ -112,8 +113,8 @@ impl CompositorHandler for WindowManagerState {
         }
 
         // non-root
-        if let Some((mapped, _)) = self.find_mapped_window(&root_surface) {
-            mapped.window.on_commit();
+        if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(&root_surface) {
+            mapped.window().on_commit();
         }
 
         // popup, layer shell & other surface

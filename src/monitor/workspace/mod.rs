@@ -5,7 +5,7 @@ use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
     },
-    desktop::{Window, space::SpaceElement},
+    desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale, Size},
@@ -41,7 +41,7 @@ pub struct Workspace {
     tiling: TileTree,
     floating: Vec<MappedWindow>,
 
-    focus_queue: Vec<Window>,
+    focus_queue: Vec<MappedWindow>,
 }
 
 impl Workspace {
@@ -65,7 +65,7 @@ impl Workspace {
     }
 
     pub fn add_floating_window(&mut self, mapped: MappedWindow) {
-        self.insert_focus_queue(mapped.window.clone());
+        self.insert_focus_queue(mapped.clone());
         self.floating.insert(0, mapped);
     }
 
@@ -86,7 +86,7 @@ impl Workspace {
         mapped: MappedWindow,
         ratio: Option<TileRatio>,
     ) -> Option<MappedWindow> {
-        self.insert_focus_queue(mapped.window.clone());
+        self.insert_focus_queue(mapped.clone());
         if let mapped @ Some(_) = self.tiling.insert(mapped, ratio) {
             return mapped;
         } else {
@@ -119,13 +119,14 @@ impl Workspace {
         &self,
         surface: &WlSurface,
         direction: WindowDirection,
-    ) -> Option<&Window> {
-        // TODO
+    ) -> Option<MappedWindow> {
+        // TODO do closest distance instead of last focus as well
         let mapped_list = self.tiling.find_windows_in_direction(surface, direction);
         self.focus_queue
             .iter()
             .rev()
-            .find(|&window| mapped_list.iter().any(|mapped| mapped.window == *window))
+            .find(|&m| mapped_list.contains(&m))
+            .cloned()
     }
 
     pub fn swap_tiling_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
@@ -152,27 +153,23 @@ impl Workspace {
         }
     }
 
-    pub fn insert_focus_queue(&mut self, window: Window) {
-        self.focus_queue.insert(0, window);
+    pub fn insert_focus_queue(&mut self, mapped: MappedWindow) {
+        self.focus_queue.insert(0, mapped);
     }
 
-    pub fn update_focus_queue(&mut self, window: Window) {
-        if let Some(index) = self.focus_queue.iter().position(|w| *w == window) {
+    pub fn update_focus_queue(&mut self, mapped: MappedWindow) {
+        if let Some(index) = self.focus_queue.iter().position(|m| *m == mapped) {
             self.focus_queue.remove(index);
         }
-        self.focus_queue.push(window);
+        self.focus_queue.push(mapped);
     }
 
-    pub fn last_focus_window(&self) -> Option<&Window> {
-        self.focus_queue.last()
+    pub fn last_focus_window(&self) -> Option<MappedWindow> {
+        self.focus_queue.last().cloned()
     }
 
     fn remove_focus_queue(&mut self, mapped: &MappedWindow) {
-        if let Some(index) = self
-            .focus_queue
-            .iter()
-            .position(|window| *window == mapped.window)
-        {
+        if let Some(index) = self.focus_queue.iter().position(|m| m == mapped) {
             self.focus_queue.remove(index);
         }
     }
@@ -220,8 +217,8 @@ impl Workspace {
                 WindowRuleCandidate {
                     app_id,
                     title,
-                    focus: mapped.focus,
-                    float: mapped.floating,
+                    focus: mapped.get_focus(),
+                    float: mapped.get_floating(),
                     workspace: workspace.clone(),
                 },
                 false,
@@ -233,31 +230,14 @@ impl Workspace {
     pub fn find_mapped_window_under(
         &self,
         point: Point<f64, Logical>,
-    ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
+    ) -> Option<(MappedWindow, Point<i32, Logical>)> {
         self.windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
             if mapped
-                .window
+                .window()
                 .is_in_input_region(&(point - render_location.to_f64()))
             {
-                Some((mapped, render_location))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn find_mapped_window_mut_under(
-        &mut self,
-        point: Point<f64, Logical>,
-    ) -> Option<(&mut MappedWindow, Point<i32, Logical>)> {
-        self.windows_iter_mut().find_map(|mapped| {
-            let render_location = mapped.render_location();
-            if mapped
-                .window
-                .is_in_input_region(&(point - render_location.to_f64()))
-            {
-                Some((mapped, render_location))
+                Some((mapped.clone(), render_location))
             } else {
                 None
             }

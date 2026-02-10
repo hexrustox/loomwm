@@ -1,7 +1,4 @@
-use crate::{
-    monitor::apply_rule_to_mapped_window, state::WindowManagerState,
-    window::rule::WindowDynamicProperties,
-};
+use crate::{monitor::FoundMappedWindow, state::WindowManagerState};
 use smithay::{
     desktop::Window,
     input::{
@@ -19,7 +16,7 @@ use smithay::{
 pub struct SwapGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     window: Window,
-    last_window: Option<(Window, WindowDynamicProperties)>,
+    last_window: Option<(Window, f32)>,
 }
 
 impl SwapGrab {
@@ -45,40 +42,31 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
     ) {
         handle.motion(data, None, event);
 
-        let props = data.pointer_config.selection.clone();
-        if let Some((mapped, _)) = data.find_mapped_window_mut_under(event.location) {
+        if let Some(FoundMappedWindow { mapped, .. }) =
+            data.find_mapped_window_under(event.location)
+        {
             if self
                 .last_window
                 .as_ref()
-                .is_some_and(|(w, _)| *w == mapped.window)
+                .is_some_and(|(w, _)| *w == mapped.window())
             {
                 return;
             }
 
             let last_window = self.last_window.clone();
 
-            if self.window == mapped.window {
+            if self.window == mapped.window() {
                 self.last_window = None;
             } else {
-                self.last_window = Some((
-                    mapped.window.clone(),
-                    WindowDynamicProperties {
-                        decoration: mapped
-                            .toplevel()
-                            .current_state()
-                            .decoration_mode
-                            .map(|m| m.into()),
-                        opacity: Some(mapped.opacity),
-                    },
-                ));
-                apply_rule_to_mapped_window(mapped, props);
+                self.last_window = Some((mapped.window(), mapped.get_opacity()));
+                mapped.set_opacity(0.5);
             }
 
-            if let Some((window, properties)) = last_window
-                && let Some((mapped, _)) =
-                    data.find_mapped_window_mut(window.toplevel().unwrap().wl_surface())
+            if let Some((window, opacity)) = last_window
+                && let Some(FoundMappedWindow { mapped, .. }) =
+                    data.find_mapped_window(window.toplevel().unwrap().wl_surface())
             {
-                apply_rule_to_mapped_window(mapped, properties);
+                mapped.set_opacity(opacity);
             }
         }
     }
@@ -105,11 +93,11 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
         handle.button(data, event);
 
         if !handle.current_pressed().contains(&self.start_data.button) {
-            if let Some((window, properties)) = self.last_window.clone()
-                && let Some((mapped, _)) =
-                    data.find_mapped_window_mut(window.toplevel().unwrap().wl_surface())
+            if let Some((window, opacity)) = self.last_window.clone()
+                && let Some(FoundMappedWindow { mapped, .. }) =
+                    data.find_mapped_window(window.toplevel().unwrap().wl_surface())
             {
-                apply_rule_to_mapped_window(mapped, properties);
+                mapped.set_opacity(opacity);
             }
             if let Some((window, _)) = &self.last_window
                 && *window != self.window

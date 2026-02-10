@@ -106,15 +106,15 @@ enum TileKind<T> {
 }
 
 pub trait TileTreeWindow: Debug {
-    type Inner;
+    type Buffer;
 
     fn match_id(&self, id: TileTreeWindowId) -> bool;
     fn get_location(&self) -> Point<i32, Logical>;
     fn get_size(&self) -> Size<i32, Logical>;
     fn set_location(&mut self, location: Point<i32, Logical>);
     fn set_size(&mut self, size: Size<i32, Logical>);
-    fn get_inner(&self) -> Self::Inner;
-    fn set_inner(&mut self, inner: Self::Inner);
+    fn get_buffer(&self) -> Self::Buffer;
+    fn set_buffer(&mut self, buffer: Self::Buffer);
 }
 
 #[derive(Clone, Copy)]
@@ -714,11 +714,11 @@ impl<T: TileTreeWindow> TileTree<T> {
             return;
         }
 
-        let lhs_inner = self.arena[lhs_id].as_window().get_inner();
-        let rhs_inner = self.arena[rhs_id].as_window().get_inner();
+        let lhs_inner = self.arena[lhs_id].as_window().get_buffer();
+        let rhs_inner = self.arena[rhs_id].as_window().get_buffer();
 
-        self.arena[lhs_id].as_window_mut().set_inner(rhs_inner);
-        self.arena[rhs_id].as_window_mut().set_inner(lhs_inner);
+        self.arena[lhs_id].as_window_mut().set_buffer(rhs_inner);
+        self.arena[rhs_id].as_window_mut().set_buffer(lhs_inner);
     }
 
     fn adjust_adjacent_ratios(
@@ -881,7 +881,7 @@ mod tests {
     }
 
     impl TileTreeWindow for TestWindow {
-        type Inner = Option<u32>;
+        type Buffer = Option<u32>;
 
         fn match_id(&self, id: TileTreeWindowId) -> bool {
             match id {
@@ -906,12 +906,12 @@ mod tests {
             self.size = size;
         }
 
-        fn get_inner(&self) -> Self::Inner {
+        fn get_buffer(&self) -> Self::Buffer {
             self.id
         }
 
-        fn set_inner(&mut self, inner: Self::Inner) {
-            self.id = inner;
+        fn set_buffer(&mut self, buffer: Self::Buffer) {
+            self.id = buffer;
         }
     }
 
