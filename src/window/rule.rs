@@ -124,7 +124,6 @@ pub struct WindowRuleMatch {
 }
 
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct WindowProperties {
     #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
@@ -143,6 +142,7 @@ impl Default for WindowProperties {
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WindowOpeningProperties {
     #[serde(rename = "open-with-focus")]
     pub focus: Option<bool>,
@@ -153,6 +153,7 @@ pub struct WindowOpeningProperties {
 }
 
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub opacity: Option<f32>,
@@ -240,9 +241,7 @@ pub enum WindowState {
 
 impl Default for WindowState {
     fn default() -> Self {
-        Self::Tile {
-            ratio: Some(TileRatio::default()),
-        }
+        Self::Tile { ratio: None }
     }
 }
 
@@ -313,7 +312,7 @@ mod tests {
     }
 
     #[test_case(r#"p = { open-with-focus = true }"#, WindowProperties { opening: Some(WindowOpeningProperties { focus: Some(true), ..Default::default() }), ..Default::default() })]
-    #[test_case(r#"p = { opacity = 0.1 }"#, WindowProperties { dynamic: WindowDynamicProperties { opacity: Some(0.1), ..Default::default() }, ..Default::default() })]
+    #[test_case(r#"p = { opacity = 0.1 }"#, WindowProperties { opening: None, dynamic: WindowDynamicProperties { opacity: Some(0.1), ..Default::default() } })]
     fn test_deserialize_window_properties(input: &str, expected: WindowProperties) {
         assert_eq!(toml::from_str::<T>(input).unwrap().p, Some(expected))
     }

@@ -187,6 +187,7 @@ impl LayoutSet {
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LayoutSchema {
     #[serde(default)]
     split: TileSplit,
@@ -196,7 +197,7 @@ struct LayoutSchema {
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 struct LayoutNode {
     layout: Option<String>,
     repeat: TileRepeat,
