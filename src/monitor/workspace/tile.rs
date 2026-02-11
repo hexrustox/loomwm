@@ -1,5 +1,6 @@
 use crate::{
     input::{WindowDirection, WindowUnit},
+    utils::floats_to_ints,
     window::MappedWindow,
 };
 use serde::Deserialize;
@@ -478,43 +479,25 @@ impl<T: TileTreeWindow> TileTree<T> {
                 TileSplit::Vertical => area.w,
                 TileSplit::Horizontal => area.h,
             };
-            let mut remaining_length = total_length;
+
+            let mut floats = Vec::new();
+            for tile_id in tiles {
+                let tile = &arena[*tile_id];
+
+                floats.push(total_length as f64 * tile.ratio.0 / total_ratio);
+            }
+            let ints = floats_to_ints(&floats, total_length);
 
             let len = tiles.len();
             let is_reversed = matches!(orientation, TileOrientation::TopLeft);
 
-            let mut round_up = None;
+            #[allow(clippy::needless_range_loop)]
             for i in 0..len {
                 let idx = if is_reversed { len - 1 - i } else { i };
                 let tile_id = tiles[idx];
                 let tile = &arena[tile_id];
 
-                let new_length = if i == len - 1 {
-                    remaining_length
-                } else {
-                    let mut length = total_length as f64 * tile.ratio.0 / total_ratio;
-                    let original = length;
-                    if let Some(flag) = round_up.as_mut() {
-                        if *flag {
-                            length = length.ceil();
-                        } else {
-                            length = length.floor();
-                        }
-                        if length != original {
-                            *flag = !*flag;
-                        }
-                    } else {
-                        length = length.round();
-                        if length > original {
-                            round_up = Some(true)
-                        } else if length < original {
-                            round_up = Some(false)
-                        }
-                    }
-                    let length = length as i32;
-                    remaining_length -= length;
-                    length
-                };
+                let new_length = ints[idx];
 
                 let new_area = match split {
                     TileSplit::Vertical => Size::new(new_length, area.h),
@@ -1642,9 +1625,9 @@ mod tests {
         tile_tree!(layout() [
             window(ratio: 1, pos: (0, 0), size: (7, 100)),
             window(ratio: 3, pos: (7, 0), size: (20, 100)),
-            window(ratio: 2, pos: (27, 0), size: (14, 100)),
-            window(ratio: 5, pos: (41, 0), size: (33, 100)),
-            window(ratio: 4, pos: (74, 0), size: (26, 100)),
+            window(ratio: 2, pos: (27, 0), size: (13, 100)),
+            window(ratio: 5, pos: (40, 0), size: (33, 100)),
+            window(ratio: 4, pos: (73, 0), size: (27, 100)),
         ]);
         "windows with different ratios"
     )]
@@ -1674,7 +1657,7 @@ mod tests {
         tile_tree!(layout() [
             window(),
             layout(split: Horizontal, orient: TopLeft) [
-                window(),
+                window(ratio: 2),
                 layout(split: Horizontal) [
                     window(),
                     window(),
@@ -1684,10 +1667,10 @@ mod tests {
         tile_tree!(layout() [
             window(pos: (0, 0), size: (50, 100)),
             layout(split: Horizontal, orient: TopLeft) [
-                window(pos: (50, 50), size: (50, 50)),
+                window(pos: (50, 33), size: (50, 67), ratio: 2),
                 layout(split: Horizontal) [
-                    window(pos: (50, 0), size: (50, 25)),
-                    window(pos: (50, 25), size: (50, 25)),
+                    window(pos: (50, 0), size: (50, 17)),
+                    window(pos: (50, 17), size: (50, 16)),
                 ]
             ]
         ]);
@@ -2155,7 +2138,7 @@ mod tests {
             window(id: 0, pos: (0, 0), size: (90, 100), ratio: 0.9),
             window(id: 1, pos: (90, 0), size: (110, 100), ratio: 1.1),
         ]);
-        "resize window left at edge - no change"
+        "resize window left at edge - grows right neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2169,7 +2152,7 @@ mod tests {
             window(id: 0, pos: (0, 0), size: (110, 100), ratio: 1.1),
             window(id: 1, pos: (110, 0), size: (90, 100), ratio: 0.9),
         ]);
-        "resize window right at edge - no change"
+        "resize window right at edge - grows left neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2183,7 +2166,7 @@ mod tests {
             window(id: 0, pos: (0, 0), size: (200, 40), ratio: 0.8),
             window(id: 1, pos: (0, 40), size: (200, 60), ratio: 1.2),
         ]);
-        "resize window up at edge - no change"
+        "resize window up at edge - grows bottom neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2203,7 +2186,7 @@ mod tests {
                 window(id: 2, pos: (100, 60), size: (100, 40)),
             ]
         ]);
-        "resize window down at edge - no change"
+        "resize window down at edge - grows top neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2236,8 +2219,8 @@ mod tests {
         10,
         tile_tree!(layout() [
             window(id: 0, pos: (0, 0), size: (57, 100), ratio: 0.85),
-            window(id: 1, pos: (57, 0), size: (77, 100), ratio: 1.15),
-            window(id: 2, pos: (134, 0), size: (66, 100), ratio: 1),
+            window(id: 1, pos: (57, 0), size: (76, 100), ratio: 1.15),
+            window(id: 2, pos: (133, 0), size: (67, 100), ratio: 1),
         ]);
         "resize middle window left - only affects left neighbor"
     )]
@@ -2264,9 +2247,9 @@ mod tests {
                 window(id: 2, pos: (67, 50), size: (57, 50), ratio: 1),
             ],
             layout(split: Horizontal, ratio: 1.15) [
-                window(id: 3, pos: (124, 0), size: (76, 33), ratio: 1),
-                window(id: 4, pos: (124, 33), size: (76, 33), ratio: 1),
-                window(id: 5, pos: (124, 66), size: (76, 34), ratio: 1),
+                window(id: 3, pos: (124, 0), size: (76, 34), ratio: 1),
+                window(id: 4, pos: (124, 34), size: (76, 33), ratio: 1),
+                window(id: 5, pos: (124, 67), size: (76, 33), ratio: 1),
             ]
         ]);
         "resize window left - affects multiple parent layouts"

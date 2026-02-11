@@ -31,3 +31,47 @@ pub fn get_app_id_and_title(surface: &WlSurface) -> (String, String) {
         }
     })
 }
+
+pub fn floats_to_ints(floats: &[f64], target_sum: i32) -> Vec<i32> {
+    let floored: Vec<_> = floats.iter().map(|&x| x.floor() as i32).collect();
+    let remainders: Vec<f64> = floats
+        .iter()
+        .zip(floored.iter())
+        .map(|(&original, &floor)| original - floor as f64)
+        .collect();
+
+    let current_sum: i32 = floored.iter().sum();
+    let mut deficit = target_sum - current_sum;
+
+    let mut indices: Vec<usize> = (0..floats.len()).collect();
+    indices.sort_by(|&a, &b| {
+        remainders[b]
+            .partial_cmp(&remainders[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut result = floored;
+
+    if deficit > 0 {
+        for &idx in &indices {
+            if deficit <= 0 {
+                break;
+            }
+            result[idx] += 1;
+            deficit -= 1;
+        }
+    }
+
+    if deficit < 0 {
+        indices.reverse();
+        for &idx in &indices {
+            if deficit >= 0 {
+                break;
+            }
+            result[idx] -= 1;
+            deficit += 1;
+        }
+    }
+
+    result
+}

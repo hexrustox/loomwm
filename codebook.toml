@@ -1,6 +1,7 @@
 words = [
     "alacritty",
     "bbox",
+    "ints",
     "keysym",
     "shm",
     "smithay",
