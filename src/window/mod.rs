@@ -12,7 +12,7 @@ use smithay::{
 };
 
 use crate::{
-    monitor::{TileTreeWindow, TileTreeWindowId},
+    monitor::{TileTreeSearchKey, TileTreeWindow},
     window::rule::WindowProperties,
 };
 
@@ -142,15 +142,15 @@ impl PartialEq for MappedWindow {
 }
 
 impl TileTreeWindow for MappedWindow {
-    fn match_id(&self, #[allow(unused_variables)] id: TileTreeWindowId) -> bool {
+    fn match_id(&self, #[allow(unused_variables)] key: TileTreeSearchKey) -> bool {
         #[cfg(test)]
         {
             false
         }
         #[cfg(not(test))]
         {
-            match id {
-                TileTreeWindowId::WlSurface(surface) => self.wl_surface() == *surface,
+            match key {
+                TileTreeSearchKey::WlSurface(surface) => self.wl_surface() == *surface,
             }
         }
     }

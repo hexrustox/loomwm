@@ -27,7 +27,7 @@ use crate::{
     },
 };
 
-pub use workspace::{LayoutSet, TileRatio, TileTreeWindow, TileTreeWindowId, WorkspaceName};
+pub use workspace::{LayoutSet, TileRatio, TileTreeSearchKey, TileTreeWindow, WorkspaceName};
 
 mod workspace;
 

@@ -23,7 +23,7 @@ use crate::{
 
 mod tile;
 
-pub use tile::{LayoutSet, TileRatio, TileTreeWindow, TileTreeWindowId};
+pub use tile::{LayoutSet, TileRatio, TileTreeWindow, TileTreeSearchKey};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Hash)]
 #[serde(untagged)]

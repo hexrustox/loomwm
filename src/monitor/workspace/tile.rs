@@ -116,7 +116,7 @@ enum TileKind<T> {
 }
 
 pub trait TileTreeWindow: Debug + Clone {
-    fn match_id(&self, id: TileTreeWindowId) -> bool;
+    fn match_id(&self, key: TileTreeSearchKey) -> bool;
     fn get_location(&self) -> Point<i32, Logical>;
     fn get_size(&self) -> Size<i32, Logical>;
     fn set_location(&mut self, location: Point<i32, Logical>);
@@ -125,7 +125,7 @@ pub trait TileTreeWindow: Debug + Clone {
 }
 
 #[derive(Clone, Copy)]
-pub enum TileTreeWindowId<'a> {
+pub enum TileTreeSearchKey<'a> {
     #[cfg(test)]
     Id(u32),
     #[allow(dead_code)]
@@ -133,13 +133,13 @@ pub enum TileTreeWindowId<'a> {
 }
 
 #[cfg(test)]
-impl From<u32> for TileTreeWindowId<'_> {
+impl From<u32> for TileTreeSearchKey<'_> {
     fn from(value: u32) -> Self {
         Self::Id(value)
     }
 }
 
-impl<'a> From<&'a WlSurface> for TileTreeWindowId<'a> {
+impl<'a> From<&'a WlSurface> for TileTreeSearchKey<'a> {
     fn from(value: &'a WlSurface) -> Self {
         Self::WlSurface(value)
     }
@@ -230,6 +230,9 @@ impl TileLayoutTrace {
         }
     }
 }
+
+pub trait SearchKey<'a>: Into<TileTreeSearchKey<'a>> + Copy {}
+impl<'a, T> SearchKey<'a> for T where T: Into<TileTreeSearchKey<'a>> + Copy {}
 
 impl<T: TileTreeWindow> TileTree<T> {
     pub fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
@@ -326,21 +329,21 @@ impl<T: TileTreeWindow> TileTree<T> {
     }
 
     // TODO improve efficiency
-    fn find_tile_id(&self, id: TileTreeWindowId) -> Option<TileId> {
+    fn find_tile_id(&self, key: TileTreeSearchKey) -> Option<TileId> {
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,
             current_id: TileId,
-            target_id: TileTreeWindowId,
+            key: TileTreeSearchKey,
         ) -> Option<TileId> {
             match &arena[current_id].kind {
                 TileKind::Window(window) => {
-                    if window.match_id(target_id) {
+                    if window.match_id(key) {
                         return Some(current_id);
                     }
                 }
                 TileKind::Layout { tiles, .. } => {
                     for &child_id in tiles.iter() {
-                        if let res @ Some(_) = traverse(arena, child_id, target_id) {
+                        if let res @ Some(_) = traverse(arena, child_id, key) {
                             return res;
                         }
                     }
@@ -349,11 +352,11 @@ impl<T: TileTreeWindow> TileTree<T> {
             None
         }
 
-        traverse(&self.arena, self.root, id)
+        traverse(&self.arena, self.root, key)
     }
 
     // TODO improve efficiency
-    pub fn remove<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, id: I) -> Option<T> {
+    pub fn remove<'a>(&mut self, key: impl SearchKey<'a>) -> Option<T> {
         struct RemoveTile {
             parent: TileId,
             index: usize,
@@ -362,7 +365,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,
             layout_id: TileId,
-            id: TileTreeWindowId<'_>,
+            key: TileTreeSearchKey<'_>,
         ) -> Option<RemoveTile> {
             for (index, tile_id) in arena[layout_id].as_layout_tiles().iter().enumerate() {
                 match &arena[*tile_id] {
@@ -370,7 +373,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                         kind: TileKind::Window(window),
                         ..
                     } => {
-                        if window.match_id(id) {
+                        if window.match_id(key) {
                             return Some(RemoveTile {
                                 parent: layout_id,
                                 index,
@@ -378,7 +381,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                         }
                     }
                     _ => {
-                        if let res @ Some(_) = traverse(arena, *tile_id, id) {
+                        if let res @ Some(_) = traverse(arena, *tile_id, key) {
                             return res;
                         }
                     }
@@ -388,7 +391,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             None
         }
 
-        if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, id.into()) {
+        if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, key.into()) {
             let remove_id = self.arena[parent].as_layout_tiles_mut().remove(index);
             let window = self.arena.remove(remove_id).unwrap().into_window();
 
@@ -620,9 +623,9 @@ impl<T: TileTreeWindow> TileTree<T> {
         })
     }
 
-    pub fn find_windows_in_direction<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
+    pub fn find_windows_in_direction<'a>(
         &self,
-        id: I,
+        key: impl SearchKey<'a>,
         direction: WindowDirection,
     ) -> Vec<&T> {
         #[derive(Debug)]
@@ -674,7 +677,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
         }
 
-        let Some(target_id) = self.find_tile_id(id.into()) else {
+        let Some(target_id) = self.find_tile_id(key.into()) else {
             return Vec::new();
         };
         let target_tile = &self.arena[target_id];
@@ -706,7 +709,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         candidates
     }
 
-    pub fn swap_window<'a, I: Into<TileTreeWindowId<'a>> + Copy>(&mut self, lhs: I, rhs: I) {
+    pub fn swap_window<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {
         let lhs_id = match self.find_tile_id(lhs.into()) {
             Some(id) => id,
             None => return,
@@ -741,7 +744,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             ..
         } = &parent.kind
         else {
-            panic!();
+            return;
         };
 
         let mut offset = match edge {
@@ -753,7 +756,11 @@ impl<T: TileTreeWindow> TileTree<T> {
             TileOrientation::TopLeft => -1,
         };
 
-        let index = tiles.iter().position(|t| *t == child_id).unwrap() as i32 + offset;
+        let index = tiles
+            .iter()
+            .position(|t| *t == child_id)
+            .expect("Cannot find tile in its parent") as i32
+            + offset;
 
         if (0..(tiles.len() as i32)).contains(&index) {
             let total_ratio = tiles
@@ -798,7 +805,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         while let Some(parent) = some_parent {
             let TileKind::Layout { split, .. } = &self.arena[parent].kind else {
-                panic!();
+                return None;
             };
             if *split == current_split {
                 return Some((parent, refer));
@@ -809,24 +816,28 @@ impl<T: TileTreeWindow> TileTree<T> {
         None
     }
 
-    pub fn resize_tile<'a, I: Into<TileTreeWindowId<'a>> + Copy>(
+    pub fn resize_tile<'a>(
         &mut self,
-        id: I,
+        key: impl SearchKey<'a>,
         edge: WindowDirection,
         unit: WindowUnit,
     ) {
-        let window_id = self.find_tile_id(id.into()).unwrap();
-        let parent = self.arena[window_id].parent.unwrap();
-        let TileKind::Layout { split, .. } = &self.arena[parent].kind else {
-            panic!()
+        let Some(window_id) = self.find_tile_id(key.into()) else {
+            return;
+        };
+        let Some(parent_id) = self.arena[window_id].parent else {
+            return;
+        };
+        let TileKind::Layout { split, .. } = &self.arena[parent_id].kind else {
+            return;
         };
 
         match (split, edge) {
             (TileSplit::Vertical, WindowDirection::Left | WindowDirection::Right) => {
-                self.adjust_adjacent_ratios(parent, window_id, edge, unit, false);
+                self.adjust_adjacent_ratios(parent_id, window_id, edge, unit, false);
             }
             (TileSplit::Horizontal, WindowDirection::Up | WindowDirection::Down) => {
-                self.adjust_adjacent_ratios(parent, window_id, edge, unit, false);
+                self.adjust_adjacent_ratios(parent_id, window_id, edge, unit, false);
             }
             (TileSplit::Vertical, WindowDirection::Up | WindowDirection::Down) => {
                 if let Some((ancestor_id, refer_id)) =
@@ -872,9 +883,9 @@ mod tests {
     }
 
     impl TileTreeWindow for TestWindow {
-        fn match_id(&self, id: TileTreeWindowId) -> bool {
-            match id {
-                TileTreeWindowId::Id(x) => self.inner.borrow().id == Some(x),
+        fn match_id(&self, key: TileTreeSearchKey) -> bool {
+            match key {
+                TileTreeSearchKey::Id(x) => self.inner.borrow().id == Some(x),
                 _ => false,
             }
         }
