@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{
+    mem,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 use smithay::{
     backend::renderer::{
@@ -181,13 +184,11 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn swap(&mut self, other: &mut Self) {
-        let temp = self.window();
-        self.inner().window = other.window();
-        other.inner().window = temp;
-
-        let temp = self.inner().data.clone();
-        self.inner().data = other.inner().data.clone();
-        other.inner().data = temp;
+        let temp = self.get_size();
+        self.set_size(other.get_size());
+        other.set_size(temp);
+        mem::swap(&mut self.inner().window, &mut other.inner().window);
+        mem::swap(&mut self.inner().data, &mut other.inner().data);
     }
 }
 

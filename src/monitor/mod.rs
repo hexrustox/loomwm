@@ -506,38 +506,28 @@ impl WindowManagerState {
         }
     }
 
-    // TODO fix swapping
     pub fn swap_tiling_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
         let Some(FoundMappedWindow {
-            mapped: mut mapped_lhs,
-            workspace_name: workspace_name_lhs,
+            mapped: mapped_lhs,
+            workspace_name,
             ..
         }) = self.find_mapped_window(lhs)
         else {
             return;
         };
         let Some(FoundMappedWindow {
-            mapped: mut mapped_rhs,
-            workspace_name: workspace_name_rhs,
-            ..
+            mapped: mapped_rhs, ..
         }) = self.find_mapped_window(rhs)
         else {
             return;
         };
-        if workspace_name_lhs != workspace_name_rhs {
-            return;
-        }
         if mapped_lhs.get_floating() || mapped_rhs.get_floating() {
             return;
         }
 
         let monitor = self.monitors.get_monitor_mut();
-        let workspace = monitor.get_workspace_mut(&workspace_name_lhs);
+        let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.swap_tiling_window(lhs, rhs);
-
-        let temp = mapped_lhs.get_size();
-        mapped_lhs.set_size(mapped_rhs.get_size());
-        mapped_rhs.set_size(temp);
     }
 
     pub fn swap_tiling_window_in_direction(&mut self, direction: WindowDirection) {
@@ -546,7 +536,7 @@ impl WindowManagerState {
             return;
         };
         let Some(FoundMappedWindow {
-            mapped: mut mapped_lhs,
+            mapped: mapped_lhs,
             workspace_name,
             ..
         }) = self.find_mapped_window(&surface)
@@ -559,15 +549,11 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        if let Some(mut mapped_rhs) = workspace
+        if let Some(mapped_rhs) = workspace
             .last_focused_tiling_window_in_direction(&surface, direction)
             .cloned()
         {
             workspace.swap_tiling_window(&mapped_lhs.wl_surface(), &mapped_rhs.wl_surface());
-
-            let temp = mapped_lhs.get_size();
-            mapped_lhs.set_size(mapped_rhs.get_size());
-            mapped_rhs.set_size(temp);
         }
     }
 
