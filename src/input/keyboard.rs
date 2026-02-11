@@ -227,6 +227,7 @@ impl WindowManagerState {
                     return FilterResult::Intercept(());
                 }
 
+                // TODO count key down
                 let key = keysym_handle.raw_syms().swap_remove(0);
                 let bind = KeyCombo {
                     modifiers: data.key_modifiers,

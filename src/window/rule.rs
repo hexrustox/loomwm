@@ -110,6 +110,7 @@ impl WindowRule {
     }
 }
 
+// TODO tags
 #[derive(Debug, Default, Deserialize, Hash)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct WindowRuleMatch {

@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use smithay::{
     backend::renderer::{
+        element::{surface::WaylandSurfaceRenderElement, AsRenderElements},
         ImportAll, Renderer, RendererSuper,
-        element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
     },
     desktop::Window,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -173,6 +173,7 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn set_buffer(&mut self, buffer: Self::Buffer) {
+        // FIXME
         self.inner().window = buffer;
     }
 }

@@ -52,6 +52,7 @@ impl Winit {
                 }
                 Input(event) => data.compositor.process_input_event(event),
                 Redraw => {
+                    // TODO redraw queue
                     let winit = &mut data.backend.winit().unwrap();
                     let output = &winit.output;
                     let backend = &mut winit.backend;

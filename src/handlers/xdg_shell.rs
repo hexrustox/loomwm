@@ -121,6 +121,17 @@ impl XdgShellHandler for WindowManagerState {
             self.restore_workspace_focus(&workspace_name);
         };
     }
+
+    // TODO minimize, maximize, fullscreen
+
+    // TODO
+    // fn app_id_changed(&mut self, surface: ToplevelSurface) {
+
+    // }
+
+    // fn title_changed(&mut self, surface: ToplevelSurface) {
+
+    // }
 }
 
 delegate_xdg_shell!(WindowManagerState);

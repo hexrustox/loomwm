@@ -40,7 +40,7 @@ pub struct Workspace {
 
     tiling: TileTree,
     floating: Vec<MappedWindow>,
-
+    // TODO hide floating
     focus_queue: Vec<MappedWindow>,
 }
 
