@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, process::Command};
+use std::{collections::HashMap, fmt, ops::Neg, process::Command};
 
 use bitflags::bitflags;
 use serde::{
@@ -130,11 +130,33 @@ pub enum WindowDirection {
     Right,
 }
 
+impl WindowDirection {
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Up => Self::Down,
+            Self::Down => Self::Up,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum WindowUnit {
     Ratio(TileRatio),
     Px(i32),
+}
+
+impl Neg for WindowUnit {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Self::Ratio(r) => Self::Ratio(-r),
+            Self::Px(px) => Self::Px(-px),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for WindowUnit {
