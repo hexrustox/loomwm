@@ -45,15 +45,15 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
                 return;
             }
 
+            if let Some((mapped, opacity)) = &self.last_mapped {
+                mapped.set_opacity(*opacity);
+            }
+
             if self.mapped == mapped {
                 self.last_mapped = None;
             } else {
                 self.last_mapped = Some((mapped.clone(), mapped.get_opacity()));
                 mapped.set_opacity(data.pointer_config.selection);
-            }
-
-            if let Some((mapped, opacity)) = &self.last_mapped {
-                mapped.set_opacity(*opacity);
             }
         }
     }
@@ -79,15 +79,13 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
     ) {
         handle.button(data, event);
 
-        if !handle.current_pressed().contains(&self.start_data.button) {
-            let Some((mapped, opacity)) = self.last_mapped.take() else {
-                return;
-            };
-            mapped.set_opacity(opacity);
-            if mapped != self.mapped {
-                data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
-            }
-
+        if !handle.current_pressed().contains(&self.start_data.button)
+            && let Some((mapped, opacity)) = self.last_mapped.as_ref()
+        {
+            mapped.set_opacity(*opacity);
+            #[cfg(test)]
+            assert!(*mapped != self.mapped);
+            data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
             handle.unset_grab(self, data, event.serial, event.time, true);
         }
     }

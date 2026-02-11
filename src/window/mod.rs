@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use smithay::{
     backend::renderer::{
-        element::{surface::WaylandSurfaceRenderElement, AsRenderElements},
         ImportAll, Renderer, RendererSuper,
+        element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
     },
     desktop::Window,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -55,10 +55,12 @@ impl MappedWindow {
         Self {
             inner: Arc::new(Mutex::new(MappedWindowInner {
                 window,
-                focus,
-                floating,
                 location: (0, 0).into(),
-                opacity: 1.,
+                data: MappedWindowData {
+                    focus,
+                    floating,
+                    opacity: 1.,
+                },
             })),
         }
     }
@@ -68,27 +70,27 @@ impl MappedWindow {
     }
 
     pub fn get_focus(&self) -> bool {
-        self.inner().focus
+        self.inner().data.focus
     }
 
     pub fn set_focus(&self, focus: bool) {
-        self.inner().focus = focus;
+        self.inner().data.focus = focus;
     }
 
     pub fn get_floating(&self) -> bool {
-        self.inner().floating
+        self.inner().data.floating
     }
 
     pub fn set_floating(&self, floating: bool) {
-        self.inner().floating = floating;
+        self.inner().data.floating = floating;
     }
 
     pub fn get_opacity(&self) -> f32 {
-        self.inner().opacity
+        self.inner().data.opacity
     }
 
     pub fn set_opacity(&self, opacity: f32) {
-        self.inner().opacity = opacity;
+        self.inner().data.opacity = opacity;
     }
 
     pub fn window(&self) -> Window {
@@ -126,7 +128,7 @@ impl MappedWindow {
         <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
     {
         let location = self.render_location().to_physical_precise_round(scale);
-        let opacity = self.inner().opacity;
+        let opacity = self.get_opacity();
         self.inner()
             .window
             .render_elements(renderer, location, scale, opacity)
@@ -140,12 +142,16 @@ impl PartialEq for MappedWindow {
 }
 
 impl TileTreeWindow for MappedWindow {
-    type Buffer = Window;
-
-    fn match_id(&self, id: TileTreeWindowId) -> bool {
-        match id {
-            TileTreeWindowId::WlSurface(surface) => self.toplevel().wl_surface() == surface,
-            _ => false,
+    fn match_id(&self, #[allow(unused_variables)] id: TileTreeWindowId) -> bool {
+        #[cfg(test)]
+        {
+            false
+        }
+        #[cfg(not(test))]
+        {
+            match id {
+                TileTreeWindowId::WlSurface(surface) => self.wl_surface() == *surface,
+            }
         }
     }
 
@@ -168,21 +174,27 @@ impl TileTreeWindow for MappedWindow {
         self.toplevel().send_pending_configure();
     }
 
-    fn get_buffer(&self) -> Self::Buffer {
-        self.inner().window.clone()
-    }
+    fn swap(&mut self, other: &mut Self) {
+        let temp = self.window();
+        self.inner().window = other.window();
+        other.inner().window = temp;
 
-    fn set_buffer(&mut self, buffer: Self::Buffer) {
-        // FIXME
-        self.inner().window = buffer;
+        let temp = self.inner().data.clone();
+        self.inner().data = other.inner().data.clone();
+        other.inner().data = temp;
     }
 }
 
 #[derive(Debug)]
 pub struct MappedWindowInner {
     window: Window,
+    location: Point<i32, Logical>,
+    data: MappedWindowData,
+}
+
+#[derive(Debug, Clone)]
+pub struct MappedWindowData {
     focus: bool,
     floating: bool,
-    location: Point<i32, Logical>,
     opacity: f32,
 }

@@ -115,25 +115,24 @@ enum TileKind<T> {
     },
 }
 
-pub trait TileTreeWindow: Debug {
-    type Buffer;
-
+pub trait TileTreeWindow: Debug + Clone {
     fn match_id(&self, id: TileTreeWindowId) -> bool;
     fn get_location(&self) -> Point<i32, Logical>;
     fn get_size(&self) -> Size<i32, Logical>;
     fn set_location(&mut self, location: Point<i32, Logical>);
     fn set_size(&mut self, size: Size<i32, Logical>);
-    fn get_buffer(&self) -> Self::Buffer;
-    fn set_buffer(&mut self, buffer: Self::Buffer);
+    fn swap(&mut self, other: &mut Self);
 }
 
 #[derive(Clone, Copy)]
 pub enum TileTreeWindowId<'a> {
-    #[allow(unused)]
+    #[cfg(test)]
     Id(u32),
+    #[allow(dead_code)]
     WlSurface(&'a WlSurface),
 }
 
+#[cfg(test)]
 impl From<u32> for TileTreeWindowId<'_> {
     fn from(value: u32) -> Self {
         Self::Id(value)
@@ -720,11 +719,9 @@ impl<T: TileTreeWindow> TileTree<T> {
             return;
         }
 
-        let lhs_inner = self.arena[lhs_id].as_window().get_buffer();
-        let rhs_inner = self.arena[rhs_id].as_window().get_buffer();
-
-        self.arena[lhs_id].as_window_mut().set_buffer(rhs_inner);
-        self.arena[rhs_id].as_window_mut().set_buffer(lhs_inner);
+        let mut lhs_inner = self.arena[lhs_id].as_window().clone();
+        let mut rhs_inner = self.arena[rhs_id].as_window().clone();
+        lhs_inner.swap(&mut rhs_inner);
     }
 
     fn adjust_adjacent_ratios(
@@ -851,13 +848,18 @@ impl<T: TileTreeWindow> TileTree<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::LazyLock;
+    use std::{cell::RefCell, sync::LazyLock};
 
     use super::*;
     use test_case::test_case;
 
-    #[derive(Debug, Default, PartialEq)]
+    #[derive(Debug, Default, Clone, PartialEq)]
     pub struct TestWindow {
+        inner: Rc<RefCell<TestWindowInner>>,
+    }
+
+    #[derive(Debug, Default, PartialEq)]
+    struct TestWindowInner {
         pub id: Option<u32>,
         pub location: Point<i32, Logical>,
         pub size: Size<i32, Logical>,
@@ -870,37 +872,33 @@ mod tests {
     }
 
     impl TileTreeWindow for TestWindow {
-        type Buffer = Option<u32>;
-
         fn match_id(&self, id: TileTreeWindowId) -> bool {
             match id {
-                TileTreeWindowId::Id(x) => self.id == Some(x),
+                TileTreeWindowId::Id(x) => self.inner.borrow().id == Some(x),
                 _ => false,
             }
         }
 
         fn get_location(&self) -> Point<i32, Logical> {
-            self.location
+            self.inner.borrow().location
         }
 
         fn get_size(&self) -> Size<i32, Logical> {
-            self.size
+            self.inner.borrow().size
         }
 
         fn set_location(&mut self, location: Point<i32, Logical>) {
-            self.location = location;
+            self.inner.borrow_mut().location = location;
         }
 
         fn set_size(&mut self, size: Size<i32, Logical>) {
-            self.size = size;
+            self.inner.borrow_mut().size = size;
         }
 
-        fn get_buffer(&self) -> Self::Buffer {
-            self.id
-        }
-
-        fn set_buffer(&mut self, buffer: Self::Buffer) {
-            self.id = buffer;
+        fn swap(&mut self, other: &mut Self) {
+            let temp = self.inner.borrow().id;
+            self.inner.borrow_mut().id = other.inner.borrow().id;
+            other.inner.borrow_mut().id = temp;
         }
     }
 
@@ -1000,15 +998,15 @@ mod tests {
                 TileKind::Window(window) => {
                     f.push_str(&format!(
                         "Window {}[point: ({}, {}), area: ({}, {}), ratio: {}]\n",
-                        if let Some(id) = window.id {
+                        if let Some(id) = window.inner.borrow().id {
                             id.to_string() + " "
                         } else {
                             "".to_string()
                         },
-                        window.location.x,
-                        window.location.y,
-                        window.size.w,
-                        window.size.h,
+                        window.inner.borrow().location.x,
+                        window.inner.borrow().location.y,
+                        window.inner.borrow().size.w,
+                        window.inner.borrow().size.h,
                         tile.ratio.0
                     ));
                 }
@@ -1053,13 +1051,13 @@ mod tests {
         };
 
         (@window_opt $window:ident $size:ident id: $id:expr $(, $($rest:tt)*)?) => {
-            $window.id = Some($id);
+            $window.inner.borrow_mut().id = Some($id);
             $(tile_tree!(@window_opt $window $size $($rest)*);)?
         };
 
         (@window_opt $window:ident $size:ident pos: $point:expr, size: $sz:expr $(, $($rest:tt)*)?) => {
-            $window.location = $point.into();
-            $window.size = $sz.into();
+            $window.inner.borrow_mut().location = $point.into();
+            $window.inner.borrow_mut().size = $sz.into();
             $(tile_tree!(@window_opt $window $size $($rest)*);)?
         };
 
@@ -1593,13 +1591,18 @@ mod tests {
         for i in 0..tiles {
             tree.insert(
                 TestWindow {
-                    id: Some(i),
-                    ..Default::default()
+                    inner: Rc::new(RefCell::new(TestWindowInner {
+                        id: Some(i),
+                        ..Default::default()
+                    })),
                 },
                 None,
             );
         }
-        assert_eq!(tree.remove(remove).map(|t| t.id), Some(Some(remove)));
+        assert_eq!(
+            tree.remove(remove).map(|t| t.inner.borrow().id),
+            Some(Some(remove))
+        );
         assert_tree_eq!(tree, expected);
     }
 
@@ -1889,7 +1892,7 @@ mod tests {
         assert_eq!(
             tree.find_windows_in_direction(id, direction)
                 .iter()
-                .map(|w| w.id.unwrap())
+                .map(|w| w.inner.borrow().id.unwrap())
                 .collect::<Vec<_>>(),
             expected
         );
