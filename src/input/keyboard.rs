@@ -122,7 +122,7 @@ fn default_focus() -> bool {
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum WindowDirection {
     Up,
     Down,

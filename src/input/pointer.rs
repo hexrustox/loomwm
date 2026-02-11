@@ -80,14 +80,14 @@ impl<'de> Deserialize<'de> for PointerCombo {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum PointerActions {
     Move,
     Resize,
 }
 
 #[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum ResizeLocation {
     #[default]
     Corner,

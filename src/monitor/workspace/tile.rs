@@ -147,7 +147,7 @@ impl<'a> From<&'a WlSurface> for TileTreeSearchKey<'a> {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 enum TileSplit {
     #[default]
     Vertical,
