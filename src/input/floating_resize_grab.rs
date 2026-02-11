@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use bitflags::bitflags;
 use smithay::{
     input::pointer::{
@@ -16,7 +14,7 @@ use smithay::{
     wayland::{compositor, shell::xdg::SurfaceCachedState},
 };
 
-use crate::{monitor::TileTreeWindow, state::WindowManagerState, window::MappedWindow};
+use crate::{state::WindowManagerState, window::MappedWindow};
 
 bitflags! {
     #[derive(Debug, Default, Clone, Copy)]
@@ -55,17 +53,12 @@ impl FloatingResizeGrab {
         start_data: PointerGrabStartData<WindowManagerState>,
         mapped: MappedWindow,
         edges: ResizeEdge,
-        initial_window_rect: Rectangle<i32, Logical>,
+        initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
-        let initial_rect = initial_window_rect;
-
-        ResizeSurfaceState::with(&mapped.wl_surface(), |state| {
-            *state = ResizeSurfaceState::Resizing {
-                edges,
-                initial_rect,
-            };
+        mapped.set_resize_state(ResizeGrabState::Resizing {
+            edges,
+            initial_rect,
         });
-
         Self {
             start_data,
             mapped,
@@ -170,12 +163,11 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
 
             toplevel.send_pending_configure();
 
-            ResizeSurfaceState::with(toplevel.wl_surface(), |state| {
-                *state = ResizeSurfaceState::WaitingForLastCommit {
+            self.mapped
+                .set_resize_state(ResizeGrabState::WaitingForLastCommit {
                     edges: self.edges,
                     initial_rect: self.initial_rect,
-                };
-            });
+                });
         }
     }
 
@@ -276,7 +268,7 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-enum ResizeSurfaceState {
+pub enum ResizeGrabState {
     #[default]
     Idle,
     Resizing {
@@ -289,20 +281,8 @@ enum ResizeSurfaceState {
     },
 }
 
-impl ResizeSurfaceState {
-    fn with<F, T>(surface: &WlSurface, cb: F) -> T
-    where
-        F: FnOnce(&mut Self) -> T,
-    {
-        compositor::with_states(surface, |states| {
-            states.data_map.insert_if_missing(RefCell::<Self>::default);
-            let state = states.data_map.get::<RefCell<Self>>().unwrap();
-
-            cb(&mut state.borrow_mut())
-        })
-    }
-
-    fn commit(&mut self) -> Option<(ResizeEdge, Rectangle<i32, Logical>)> {
+impl ResizeGrabState {
+    pub fn commit(&mut self) -> Option<(ResizeEdge, Rectangle<i32, Logical>)> {
         match *self {
             Self::Resizing {
                 edges,
@@ -313,48 +293,9 @@ impl ResizeSurfaceState {
                 initial_rect,
             } => {
                 *self = Self::Idle;
-
                 Some((edges, initial_rect))
             }
             Self::Idle => None,
         }
     }
-}
-
-pub fn handle_commit(mapped: &mut MappedWindow) -> Option<()> {
-    let mut window_loc = mapped.get_location();
-    let geometry = mapped.window().geometry();
-
-    let new_loc: Point<Option<i32>, Logical> =
-        ResizeSurfaceState::with(&mapped.wl_surface(), |state| {
-            state
-                .commit()
-                .and_then(|(edges, initial_rect)| {
-                    edges.intersects(ResizeEdge::TOP_LEFT).then(|| {
-                        let new_x = edges.intersects(ResizeEdge::LEFT).then_some(
-                            initial_rect.loc.x + (initial_rect.size.w - geometry.size.w),
-                        );
-
-                        let new_y = edges.intersects(ResizeEdge::TOP).then_some(
-                            initial_rect.loc.y + (initial_rect.size.h - geometry.size.h),
-                        );
-
-                        (new_x, new_y).into()
-                    })
-                })
-                .unwrap_or_default()
-        });
-
-    if let Some(new_x) = new_loc.x {
-        window_loc.x = new_x;
-    }
-    if let Some(new_y) = new_loc.y {
-        window_loc.y = new_y;
-    }
-
-    if new_loc.x.is_some() || new_loc.y.is_some() {
-        mapped.set_location(window_loc);
-    }
-
-    Some(())
 }

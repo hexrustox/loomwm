@@ -506,6 +506,7 @@ impl WindowManagerState {
         }
     }
 
+    // TODO fix swapping
     pub fn swap_tiling_window(&mut self, lhs: &WlSurface, rhs: &WlSurface) {
         let Some(FoundMappedWindow {
             mapped: mut mapped_lhs,

@@ -12,6 +12,7 @@ use smithay::{
 };
 
 use crate::{
+    input::floating_resize_grab::{ResizeEdge, ResizeGrabState},
     monitor::{TileTreeSearchKey, TileTreeWindow},
     window::rule::WindowProperties,
 };
@@ -60,6 +61,7 @@ impl MappedWindow {
                     focus,
                     floating,
                     opacity: 1.,
+                    resize_state: ResizeGrabState::default(),
                 },
             })),
         }
@@ -67,6 +69,18 @@ impl MappedWindow {
 
     fn inner(&self) -> MutexGuard<'_, MappedWindowInner> {
         self.inner.lock().expect("Mapped window lock panic")
+    }
+
+    pub fn window(&self) -> Window {
+        self.inner().window.clone()
+    }
+
+    pub fn toplevel(&self) -> ToplevelSurface {
+        self.window().toplevel().expect("No X11 support").clone()
+    }
+
+    pub fn wl_surface(&self) -> WlSurface {
+        self.toplevel().wl_surface().clone()
     }
 
     pub fn get_focus(&self) -> bool {
@@ -93,16 +107,8 @@ impl MappedWindow {
         self.inner().data.opacity = opacity;
     }
 
-    pub fn window(&self) -> Window {
-        self.inner().window.clone()
-    }
-
-    pub fn toplevel(&self) -> ToplevelSurface {
-        self.window().toplevel().expect("No X11 support").clone()
-    }
-
-    pub fn wl_surface(&self) -> WlSurface {
-        self.toplevel().wl_surface().clone()
+    pub fn set_resize_state(&self, state: ResizeGrabState) {
+        self.inner().data.resize_state = state;
     }
 
     pub fn center_location(&self) -> Point<i32, Logical> {
@@ -197,4 +203,35 @@ pub struct MappedWindowData {
     focus: bool,
     floating: bool,
     opacity: f32,
+    resize_state: ResizeGrabState,
+}
+
+impl MappedWindow {
+    pub fn update_window(&mut self) {
+        let mut location = self.get_location();
+        let geometry = self.window().geometry();
+
+        let mut new_x = None;
+        let mut new_y = None;
+
+        if let Some((edges, initial_rect)) = self.inner().data.resize_state.commit()
+            && edges.intersects(ResizeEdge::TOP_LEFT)
+        {
+            if edges.intersects(ResizeEdge::LEFT) {
+                new_x = Some(initial_rect.loc.x + (initial_rect.size.w - geometry.size.w))
+            };
+            if edges.intersects(ResizeEdge::TOP) {
+                new_y = Some(initial_rect.loc.y + (initial_rect.size.h - geometry.size.h))
+            };
+        }
+
+        if let Some(x) = new_x {
+            location.x = x;
+        }
+        if let Some(y) = new_y {
+            location.y = y;
+        }
+
+        self.set_location(location);
+    }
 }
