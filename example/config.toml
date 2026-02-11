@@ -63,5 +63,5 @@ default = "master"
 "alt+btn_right" = "resize"
 
 [pointer]
-resize-at = "corner"
+resize-at = "edge_or_corner"
 selection = 0.8

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, ops::Neg, process::Command};
+use std::{collections::HashMap, fmt, process::Command};
 
 use bitflags::bitflags;
 use serde::{
@@ -145,17 +145,6 @@ pub enum WindowUnit {
     Px(i32),
 }
 
-impl Neg for WindowUnit {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        match self {
-            Self::Ratio(r) => Self::Ratio(-r),
-            Self::Px(px) => Self::Px(-px),
-        }
-    }
-}
-
 impl<'de> Deserialize<'de> for WindowUnit {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -245,10 +234,10 @@ impl WindowManagerState {
                             data.focus_tiling_window_in_direction(*direction);
                         }
                         SwapWindow { direction } => {
-                            data.swap_tiling_window_in_direction(*direction);
+                            data.swap_focused_tiling_window_in_direction(*direction);
                         }
                         ResizeWindow { edge, unit } => {
-                            data.resize_tiling_window_in_edge(*edge, *unit);
+                            data.resize_focused_tiling_window_in_edge(*edge, *unit);
                         }
                         ToggleFloating => {
                             data.toggle_focused_window_floating();

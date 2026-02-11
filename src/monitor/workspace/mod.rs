@@ -12,7 +12,7 @@ use smithay::{
 };
 
 use crate::{
-    input::{WindowDirection, WindowUnit},
+    input::WindowDirection,
     monitor::{apply_rule_to_mapped_window, workspace::tile::TileTree},
     utils::get_app_id_and_title,
     window::{
@@ -23,7 +23,7 @@ use crate::{
 
 mod tile;
 
-pub use tile::{LayoutSet, TileRatio, TileTreeWindow, TileTreeSearchKey};
+pub use tile::{LayoutSet, TileRatio, TileResizeUnit, TileTreeSearchKey, TileTreeWindow};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Hash)]
 #[serde(untagged)]
@@ -119,7 +119,7 @@ impl Workspace {
         &mut self,
         surface: &WlSurface,
         edge: WindowDirection,
-        unit: WindowUnit,
+        unit: impl Into<TileResizeUnit>,
     ) {
         self.tiling.resize_tile(surface, edge, unit);
         self.update_tiling_window_size();

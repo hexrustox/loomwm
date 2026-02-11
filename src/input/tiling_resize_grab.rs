@@ -1,6 +1,6 @@
 // FIXME
 use crate::{
-    input::{WindowDirection, WindowUnit, floating_resize_grab::ResizeEdge},
+    input::{WindowDirection, floating_resize_grab::ResizeEdge},
     state::WindowManagerState,
 };
 use smithay::{
@@ -14,25 +14,25 @@ use smithay::{
             RelativeMotionEvent,
         },
     },
-    utils::{Logical, Point},
+    utils::{Logical, Rectangle},
 };
 
 pub struct TilingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     edges: ResizeEdge,
-    last_location: Point<f64, Logical>,
+    initial_rect: Rectangle<i32, Logical>,
 }
 
 impl TilingResizeGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
         edges: ResizeEdge,
-        last_location: Point<f64, Logical>,
+        initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
         Self {
             start_data,
             edges,
-            last_location,
+            initial_rect,
         }
     }
 }
@@ -50,23 +50,33 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
     ) {
         handle.motion(data, None, event);
 
-        let delta = event.location - self.last_location;
-        if self.edges.intersects(ResizeEdge::TOP) {
-            let unit = WindowUnit::Px(-delta.y as i32);
-            data.resize_tiling_window_in_edge(WindowDirection::Up, unit);
-        } else if self.edges.intersects(ResizeEdge::BOTTOM) {
-            let unit = WindowUnit::Px(delta.y as i32);
-            data.resize_tiling_window_in_edge(WindowDirection::Up, unit);
-        }
+        let delta = event.location - self.start_data.location;
+
         if self.edges.intersects(ResizeEdge::LEFT) {
-            let unit = WindowUnit::Px(-delta.x as i32);
-            data.resize_tiling_window_in_edge(WindowDirection::Left, unit);
-        } else if self.edges.intersects(ResizeEdge::RIGHT) {
-            let unit = WindowUnit::Px(delta.x as i32);
-            data.resize_tiling_window_in_edge(WindowDirection::Right, unit);
+            data.resize_focused_tiling_window_in_edge(
+                WindowDirection::Left,
+                (self.initial_rect.size.w as f64 - delta.x) as i32,
+            );
+        }
+        if self.edges.intersects(ResizeEdge::RIGHT) {
+            data.resize_focused_tiling_window_in_edge(
+                WindowDirection::Right,
+                (self.initial_rect.size.w as f64 + delta.x) as i32,
+            );
         }
 
-        self.last_location = event.location;
+        if self.edges.intersects(ResizeEdge::TOP) {
+            data.resize_focused_tiling_window_in_edge(
+                WindowDirection::Up,
+                (self.initial_rect.size.h as f64 - delta.y) as i32,
+            );
+        }
+        if self.edges.intersects(ResizeEdge::BOTTOM) {
+            data.resize_focused_tiling_window_in_edge(
+                WindowDirection::Down,
+                (self.initial_rect.size.h as f64 + delta.y) as i32,
+            );
+        }
     }
 
     fn relative_motion(

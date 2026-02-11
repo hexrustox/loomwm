@@ -187,7 +187,7 @@ impl WindowManagerState {
                             state.states.set(xdg_toplevel::State::Resizing);
                         });
                         toplevel.send_pending_configure();
-                        let edge = match self.pointer_config.resize {
+                        let edges = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
                                 let center = mapped.center_location().to_f64();
                                 if location.x <= center.x && location.y <= center.y {
@@ -244,12 +244,16 @@ impl WindowManagerState {
                             let grab = FloatingResizeGrab::new(
                                 start_data,
                                 mapped.clone(),
-                                edge,
+                                edges,
                                 Rectangle::new(mapped.get_location(), mapped.get_size()),
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         } else {
-                            let grab = TilingResizeGrab::new(start_data, edge, location);
+                            let grab = TilingResizeGrab::new(
+                                start_data,
+                                edges,
+                                Rectangle::new(mapped.get_location(), mapped.get_size()),
+                            );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         }
                     }

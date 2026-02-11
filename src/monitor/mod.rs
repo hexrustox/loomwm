@@ -14,8 +14,8 @@ use smithay::{
 };
 
 use crate::{
-    input::{WindowDirection, WindowUnit},
-    monitor::workspace::Workspace,
+    input::WindowDirection,
+    monitor::workspace::{TileResizeUnit, Workspace},
     state::WindowManagerState,
     utils::get_app_id_and_title,
     window::{
@@ -530,7 +530,7 @@ impl WindowManagerState {
         workspace.swap_tiling_window(lhs, rhs);
     }
 
-    pub fn swap_tiling_window_in_direction(&mut self, direction: WindowDirection) {
+    pub fn swap_focused_tiling_window_in_direction(&mut self, direction: WindowDirection) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -557,7 +557,11 @@ impl WindowManagerState {
         }
     }
 
-    pub fn resize_tiling_window_in_edge(&mut self, edge: WindowDirection, unit: WindowUnit) {
+    pub fn resize_focused_tiling_window_in_edge(
+        &mut self,
+        edge: WindowDirection,
+        unit: impl Into<TileResizeUnit>,
+    ) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
