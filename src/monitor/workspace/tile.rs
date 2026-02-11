@@ -154,8 +154,7 @@ enum TileSplit {
     Horizontal,
 }
 
-#[derive(Debug, Default, Clone, Copy, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 enum TileOrientation {
     #[default]

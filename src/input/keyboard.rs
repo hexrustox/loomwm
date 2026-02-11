@@ -87,8 +87,7 @@ impl<'de> Deserialize<'de> for KeyCombo {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyAction {
     SwitchWorkspace {
@@ -120,8 +119,7 @@ fn default_focus() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowDirection {
     Up,
@@ -141,8 +139,7 @@ impl WindowDirection {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WindowUnit {
     Ratio(TileRatio),
     Px(i32),
