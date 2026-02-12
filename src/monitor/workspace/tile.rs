@@ -475,6 +475,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         None
     }
 
+    // TODO improve efficiency
     pub fn update_tile_size(&mut self, location: Point<i32, Logical>, size: Size<i32, Logical>) {
         enum Update {
             Win(TileId, Point<i32, Logical>, Size<i32, Logical>),
@@ -1425,6 +1426,16 @@ mod tests {
         "windows with different ratios"
     )]
     #[test_case(
+        LayoutType::Ref("layout"),
+        1,
+        tile_tree!(layout() [
+            layout() [
+                window()
+            ]
+        ]);
+        "single nested layout"
+    )]
+    #[test_case(
         LayoutType::New(vec![
             ("root", schema!(nodes: [
                 node!(ref: "windows", ratio: 2),
@@ -1437,16 +1448,6 @@ mod tests {
             ]
         ]);
         "nested layout with ratio"
-    )]
-    #[test_case(
-        LayoutType::Ref("layout"),
-        1,
-        tile_tree!(layout() [
-            layout() [
-                window()
-            ]
-        ]);
-        "single nested layout"
     )]
     #[test_case(
         LayoutType::Ref("layouts"),
@@ -1463,6 +1464,19 @@ mod tests {
             ],
         ]);
         "multiple nested layouts with repeat"
+    )]
+    #[test_case(
+        LayoutType::Ref("nested layout"),
+        2,
+        tile_tree!(layout() [
+            layout() [
+                layout() [
+                    window(),
+                    window(),
+                ]
+            ]
+        ]);
+        "deeply nested layouts"
     )]
     #[test_case(
         LayoutType::Ref("mix windows layouts"),
@@ -1492,19 +1506,6 @@ mod tests {
             ],
         ]);
         "mixed windows and layouts with repeat"
-    )]
-    #[test_case(
-        LayoutType::Ref("nested layout"),
-        2,
-        tile_tree!(layout() [
-            layout() [
-                layout() [
-                    window(),
-                    window(),
-                ]
-            ]
-        ]);
-        "deeply nested layouts"
     )]
     #[test_case(
         LayoutType::New(vec![
@@ -1597,7 +1598,7 @@ mod tests {
         1,
         0,
         tile_tree!(layout() []);
-        "remove only window - empty tree"
+        "single window becomes empty"
     )]
     #[test_case(
         "windows",
@@ -1607,7 +1608,7 @@ mod tests {
             window(id: 1),
             window(id: 2),
         ]);
-        "remove first window from multiple"
+        "three windows remove first"
     )]
     #[test_case(
         "windows",
@@ -1617,7 +1618,7 @@ mod tests {
             window(id: 0),
             window(id: 2),
         ]);
-        "remove middle window"
+        "three windows remove middle"
     )]
     #[test_case(
         "windows",
@@ -1627,7 +1628,7 @@ mod tests {
             window(id: 0),
             window(id: 1),
         ]);
-        "remove last window"
+        "three windows remove last"
     )]
     #[test_case(
         "layout",
@@ -1639,20 +1640,14 @@ mod tests {
                 window(id: 1),
             ]
         ]);
-        "remove window from nested layout"
+        "nested layout single remove one"
     )]
     #[test_case(
-        "layouts",
-        4,
-        3,
-        tile_tree!(layout() [
-            layout() [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-        ]);
-        "remove last window - layout pruned"
+        "nested layout",
+        1,
+        0,
+        tile_tree!(layout() []);
+        "nested layout single becomes empty"
     )]
     #[test_case(
         "layouts",
@@ -1665,7 +1660,7 @@ mod tests {
                 window(id: 3),
             ],
         ]);
-        "remove first window from first layout"
+        "multi layout remove from first"
     )]
     #[test_case(
         "layouts",
@@ -1681,7 +1676,37 @@ mod tests {
                 window(id: 4),
             ],
         ]);
-        "remove window from second layout"
+        "multi layout remove from second"
+    )]
+    #[test_case(
+        "layouts",
+        4,
+        3,
+        tile_tree!(layout() [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+        ]);
+        "multi layout prune empty layout"
+    )]
+    #[test_case(
+        "layouts",
+        6,
+        3,
+        tile_tree!(layout() [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 4),
+                window(id: 5),
+            ],
+        ]);
+        "multi layout remove first from second"
     )]
     #[test_case(
         "nested layout",
@@ -1695,14 +1720,26 @@ mod tests {
                 ]
             ]
         ]);
-        "remove from deeply nested layout"
+        "deeply nested three levels"
     )]
     #[test_case(
-        "nested layout",
-        1,
-        0,
-        tile_tree!(layout() []);
-        "remove from nested layout - empty tree"
+        "mix windows layouts",
+        8,
+        3,
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            layout() [
+                window(id: 2),
+                window(id: 4),
+                window(id: 5),
+            ],
+            layout() [
+                window(id: 6),
+                window(id: 7),
+            ],
+        ]);
+        "mixed windows and layouts"
     )]
     fn test_remove(layout_name: &str, tiles: u32, remove: u32, expected: TileTree<TestWindow>) {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
@@ -1725,6 +1762,32 @@ mod tests {
         assert_tree_eq!(tree, expected);
     }
 
+    #[test]
+    fn test_remove_nonexistent_window() {
+        let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
+        let mut tree = TileTree::<TestWindow>::new(layouts, "windows");
+
+        for i in 0..2 {
+            tree.insert(
+                TestWindow {
+                    inner: Rc::new(RefCell::new(TestWindowInner {
+                        id: Some(i),
+                        ..Default::default()
+                    })),
+                },
+                None,
+            );
+        }
+
+        assert_eq!(tree.remove(99), None);
+
+        let expected = tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]);
+        assert_tree_eq!(tree, expected);
+    }
+
     #[test_case(
         tile_tree!(layout() [
             window(),
@@ -1734,7 +1797,29 @@ mod tests {
             window(loc: (0, 0), size: (50, 100)),
             window(loc: (50, 0), size: (50, 100)),
         ]);
-        "two windows split evenly"
+        "two windows vertical split"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(),
+            window(),
+        ]),
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (100, 100)) [
+            window(loc: (0, 0), size: (100, 50)),
+            window(loc: (0, 50), size: (100, 50)),
+        ]);
+        "two windows horizontal split"
+    )]
+    #[test_case(
+        tile_tree!(layout(orient: TopLeft) [
+            window(),
+            window(),
+        ]),
+        tile_tree!(layout(orient: TopLeft, loc: (0, 0), size: (100, 100)) [
+            window(loc: (50, 0), size: (50, 100)),
+            window(loc: (0, 0), size: (50, 100)),
+        ]);
+        "two windows top left orientation"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -1751,29 +1836,7 @@ mod tests {
             window(ratio: 5, loc: (40, 0), size: (33, 100)),
             window(ratio: 4, loc: (73, 0), size: (27, 100)),
         ]);
-        "windows with different ratios"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(),
-            window(),
-        ]),
-        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (100, 100)) [
-            window(loc: (0, 0), size: (100, 50)),
-            window(loc: (0, 50), size: (100, 50)),
-        ]);
-        "horizontal split layout"
-    )]
-    #[test_case(
-        tile_tree!(layout(orient: TopLeft) [
-            window(),
-            window(),
-        ]),
-        tile_tree!(layout(orient: TopLeft, loc: (0, 0), size: (100, 100)) [
-            window(loc: (50, 0), size: (50, 100)),
-            window(loc: (0, 0), size: (50, 100)),
-        ]);
-        "layout with top-left orientation"
+        "five windows different ratios"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -1796,7 +1859,7 @@ mod tests {
                 ]
             ]
         ]);
-        "nested layouts with mixed split and orientation"
+        "nested layouts mixed split and orientation"
     )]
     fn test_update_tile_size(mut tree: TileTree<TestWindow>, expected: TileTree<TestWindow>) {
         tree.update_tile_size((0, 0).into(), (100, 100).into());
@@ -1808,17 +1871,27 @@ mod tests {
         0,
         ResizeEdge::TOP,
         vec![];
-        "single window - no neighbors"
+        "single window no neighbors"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
             window(id: 0),
             window(id: 1),
         ]),
-        1,
+        0,
         ResizeEdge::TOP,
-        vec![0];
-        "horizontal split - navigate up"
+        vec![];
+        "horizontal split top has no up neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::LEFT,
+        vec![];
+        "horizontal split left no meaning"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -1828,17 +1901,17 @@ mod tests {
         0,
         ResizeEdge::BOTTOM,
         vec![1];
-        "horizontal split - navigate down"
+        "horizontal split two windows down"
     )]
     #[test_case(
-        tile_tree!(layout() [
+        tile_tree!(layout(split: Horizontal) [
             window(id: 0),
             window(id: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        ResizeEdge::TOP,
         vec![0];
-        "vertical split - navigate left"
+        "horizontal split two windows up"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -1848,58 +1921,51 @@ mod tests {
         0,
         ResizeEdge::RIGHT,
         vec![1];
-        "vertical split - navigate right"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            layout() [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout() [
-                window(id: 3),
-                window(id: 4),
-            ]
-        ]),
-        3,
-        ResizeEdge::TOP,
-        vec![0, 1];
-        "nested rows - navigate up from bottom row"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            layout() [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout() [
-                window(id: 3),
-                window(id: 4),
-            ]
-        ]),
-        1,
-        ResizeEdge::BOTTOM,
-        vec![3, 4];
-        "nested rows - navigate down from top row"
+        "vertical split two windows right"
     )]
     #[test_case(
         tile_tree!(layout() [
-            layout(split: Horizontal) [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout(split: Horizontal) [
-                window(id: 3),
-                window(id: 4),
-            ]
+            window(id: 0),
+            window(id: 1),
         ]),
-        4,
+        1,
         ResizeEdge::LEFT,
-        vec![1, 2];
-        "nested columns - navigate left from right column"
+        vec![0];
+        "vertical split two windows left"
+    )]
+    #[test_case(
+        tile_tree!(layout(orient: TopLeft) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::LEFT,
+        vec![1];
+        "two windows TopLeft orientation left"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            window(id: 3),
+        ]),
+        1,
+        ResizeEdge::RIGHT,
+        vec![2, 3];
+        "four windows multiple in direction"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            window(id: 3),
+        ]),
+        1,
+        ResizeEdge::BOTTOM,
+        vec![2, 3];
+        "four horizontal skip neighbor multiple below"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -1916,51 +1982,58 @@ mod tests {
         2,
         ResizeEdge::RIGHT,
         vec![4];
-        "nested columns - navigate right from left column"
+        "nested columns right from left column"
     )]
     #[test_case(
         tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-            window(id: 2),
-            window(id: 3),
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout(split: Horizontal) [
+                window(id: 3),
+                window(id: 4),
+            ]
         ]),
-        1,
-        ResizeEdge::RIGHT,
-        vec![2, 3];
-        "multiple windows in direction"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        ResizeEdge::TOP,
-        vec![];
-        "horizontal split - top window has no up neighbor"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
+        4,
         ResizeEdge::LEFT,
-        vec![];
-        "horizontal split - left has no meaning"
+        vec![1, 2];
+        "nested columns left from right column"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-            window(id: 2),
-            window(id: 3),
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 3),
+                window(id: 4),
+            ]
         ]),
         1,
         ResizeEdge::BOTTOM,
-        vec![2, 3];
-        "navigate down skips immediate neighbor when multiple exist"
+        vec![3, 4];
+        "nested rows down from top row"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        3,
+        ResizeEdge::TOP,
+        vec![0, 1];
+        "nested rows up from bottom row"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -1973,7 +2046,7 @@ mod tests {
         0,
         ResizeEdge::RIGHT,
         vec![1, 2];
-        "navigate right into nested vertical stack"
+        "navigate into nested layout"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -1988,17 +2061,58 @@ mod tests {
         0,
         ResizeEdge::RIGHT,
         vec![1, 2];
-        "navigate right through multiple layout levels"
+        "navigate through multiple layout levels"
     )]
     #[test_case(
-        tile_tree!(layout(orient: TopLeft) [
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(orient: TopLeft, split: Horizontal) [
+                window(id: 1),
+                window(id: 2),
+            ],
+        ]),
+        0,
+        ResizeEdge::RIGHT,
+        vec![1, 2];
+        "navigate into TopLeft nested layout"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
             window(id: 0),
             window(id: 1),
         ]),
         0,
-        ResizeEdge::LEFT,
-        vec![1];
-        "orientation TopLeft - left neighbor"
+        ResizeEdge::TOP_LEFT,
+        vec![];
+        "composite edges no neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        ResizeEdge::BOTTOM_LEFT,
+        vec![0];
+        "composite edges finds window"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                layout() [
+                    layout(split: Horizontal) [
+                        window(id: 0),
+                        window(id: 1),
+                    ]
+                ],
+                window(id: 2),
+            ],
+            window(id: 3),
+        ]),
+        0,
+        ResizeEdge::BOTTOM,
+        vec![1, 2];
+        "deep nesting three levels down"
     )]
     fn test_find_windows_in_direction(
         mut tree: TileTree<TestWindow>,
@@ -2017,6 +2131,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_find_windows_in_direction_nonexistent_id() {
+        let mut tree = tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]);
+        tree.update_tile_size((0, 0).into(), (100, 100).into());
+
+        let result: Vec<u32> = tree
+            .find_windows_in_direction(99, ResizeEdge::RIGHT)
+            .iter()
+            .map(|w| w.inner.borrow().id.unwrap())
+            .collect();
+
+        assert_eq!(result, Vec::<u32>::new());
+    }
+
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        0,
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]);
+        "swap same window no change"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        99,
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]);
+        "swap invalid id no change"
+    )]
     #[test_case(
         tile_tree!(layout() [
             window(id: 0),
@@ -2028,7 +2185,96 @@ mod tests {
             window(id: 1),
             window(id: 0),
         ]);
-        "swap adjacent windows"
+        "swap adjacent two windows"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        1,
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 1),
+            window(id: 0),
+        ]);
+        "swap two windows horizontal split"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+        ]),
+        0,
+        2,
+        tile_tree!(layout() [
+            window(id: 2),
+            window(id: 1),
+            window(id: 0),
+        ]);
+        "swap first and last three windows"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0, ratio: 2),
+            window(id: 1, ratio: 3),
+        ]),
+        0,
+        1,
+        tile_tree!(layout() [
+            window(id: 1, ratio: 2),
+            window(id: 0, ratio: 3),
+        ]);
+        "swap windows preserve ratios"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout() [
+                window(id: 1),
+                layout() [
+                    window(id: 2),
+                ]
+            ]
+        ]),
+        0,
+        2,
+        tile_tree!(layout() [
+            window(id: 2),
+            layout() [
+                window(id: 1),
+                layout() [
+                    window(id: 0),
+                ]
+            ]
+        ]);
+        "swap different nesting levels"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+            ],
+            layout() [
+                window(id: 2),
+                window(id: 3),
+            ],
+        ]),
+        1,
+        2,
+        tile_tree!(layout() [
+            layout() [
+                window(id: 0),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 1),
+                window(id: 3),
+            ],
+        ]);
+        "swap between sibling layouts"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2053,122 +2299,7 @@ mod tests {
                 ]
             ]
         ]);
-        "swap across nested layouts"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-            window(id: 2),
-        ]),
-        0,
-        2,
-        tile_tree!(layout() [
-            window(id: 2),
-            window(id: 1),
-            window(id: 0),
-        ]);
-        "swap first and last window"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            layout() [
-                window(id: 0),
-                window(id: 1),
-            ],
-            layout() [
-                window(id: 2),
-                window(id: 3),
-            ],
-        ]),
-        1,
-        2,
-        tile_tree!(layout() [
-            layout() [
-                window(id: 0),
-                window(id: 2),
-            ],
-            layout() [
-                window(id: 1),
-                window(id: 3),
-            ],
-        ]);
-        "swap windows between sibling layouts"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            layout() [
-                window(id: 1),
-                layout() [
-                    window(id: 2),
-                ]
-            ]
-        ]),
-        0,
-        2,
-        tile_tree!(layout() [
-            window(id: 2),
-            layout() [
-                window(id: 1),
-                layout() [
-                    window(id: 0),
-                ]
-            ]
-        ]);
-        "swap windows at different nesting levels"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        0,
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]);
-        "swap window with itself - no change"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0, ratio: 2),
-            window(id: 1, ratio: 3),
-        ]),
-        0,
-        1,
-        tile_tree!(layout() [
-            window(id: 1, ratio: 2),
-            window(id: 0, ratio: 3),
-        ]);
-        "swap windows preserving ratios"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        1,
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 1),
-            window(id: 0),
-        ]);
-        "swap in horizontal split layout"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        99,
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]);
-        "swap with invalid id - no change"
+        "swap across deeply nested layout"
     )]
     fn test_swap_window(
         mut tree: TileTree<TestWindow>,
@@ -2190,21 +2321,7 @@ mod tests {
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 100)),
         ]);
-        "resize single window - no change"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        1,
-        ResizeEdge::LEFT,
-        10,
-        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
-            window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
-            window(id: 1, loc: (90, 0), size: (110, 100), ratio: 1.1),
-        ]);
-        "resize window left - shrinks left neighbor"
+        "resize single window no change"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2218,21 +2335,21 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
             window(id: 1, loc: (110, 0), size: (90, 100), ratio: 0.9),
         ]);
-        "resize window right - shrinks right neighbor"
+        "resize two windows right shrinks right neighbor"
     )]
     #[test_case(
-        tile_tree!(layout(split: Horizontal) [
+        tile_tree!(layout() [
             window(id: 0),
             window(id: 1),
         ]),
         1,
-        ResizeEdge::TOP,
+        ResizeEdge::LEFT,
         10,
-        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
-            window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
-            window(id: 1, loc: (0, 40), size: (200, 60), ratio: 1.2),
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
+            window(id: 1, loc: (90, 0), size: (110, 100), ratio: 1.1),
         ]);
-        "resize window up - shrinks top neighbor"
+        "resize two windows left shrinks left neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2245,8 +2362,8 @@ mod tests {
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
             window(id: 1, loc: (110, 0), size: (90, 100), ratio: 0.9),
-    ]);
-    "resize window left with negative offset - grows left neighbor"
+        ]);
+        "resize two windows negative offset grows left neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2260,7 +2377,7 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
             window(id: 1, loc: (90, 0), size: (110, 100), ratio: 1.1),
         ]);
-        "resize window left at edge - grows right neighbor"
+        "resize two windows left edge grows other neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2274,7 +2391,21 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
             window(id: 1, loc: (110, 0), size: (90, 100), ratio: 0.9),
         ]);
-        "resize window right at edge - grows left neighbor"
+        "resize two windows right edge grows other neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        ResizeEdge::TOP,
+        10,
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
+            window(id: 1, loc: (0, 40), size: (200, 60), ratio: 1.2),
+        ]);
+        "resize horizontal split up shrinks top neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2288,27 +2419,23 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
             window(id: 1, loc: (0, 40), size: (200, 60), ratio: 1.2),
         ]);
-        "resize window up at edge - grows bottom neighbor"
+        "resize horizontal split top edge grows bottom neighbor"
     )]
     #[test_case(
-        tile_tree!(layout(split: Horizontal) [
+        tile_tree!(layout() [
             window(id: 0),
-            layout() [
-                window(id: 1),
-                window(id: 2),
-            ]
+            window(id: 1),
+            window(id: 2),
         ]),
-        2,
-        ResizeEdge::BOTTOM,
+        1,
+        ResizeEdge::LEFT,
         10,
-        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
-            window(id: 0, loc: (0, 0), size: (200, 60), ratio: 1.2),
-            layout(loc: (0, 60), size: (200, 40), ratio: 0.8) [
-                window(id: 1, loc: (0, 60), size: (100, 40)),
-                window(id: 2, loc: (100, 60), size: (100, 40)),
-            ]
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (57, 100), ratio: 0.85),
+            window(id: 1, loc: (57, 0), size: (76, 100), ratio: 1.15),
+            window(id: 2, loc: (133, 0), size: (67, 100), ratio: 1),
         ]);
-        "resize window down at edge - grows top neighbor"
+        "resize three windows middle affects one neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2328,23 +2455,27 @@ mod tests {
                 window(id: 2, loc: (100, 40), size: (100, 60)),
             ]
         ]);
-        "resize window up - expands parent layout"
+        "resize nested layout up expands parent"
     )]
     #[test_case(
-        tile_tree!(layout() [
+        tile_tree!(layout(split: Horizontal) [
             window(id: 0),
-            window(id: 1),
-            window(id: 2),
+            layout() [
+                window(id: 1),
+                window(id: 2),
+            ]
         ]),
-        1,
-        ResizeEdge::LEFT,
+        2,
+        ResizeEdge::BOTTOM,
         10,
-        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
-            window(id: 0, loc: (0, 0), size: (57, 100), ratio: 0.85),
-            window(id: 1, loc: (57, 0), size: (76, 100), ratio: 1.15),
-            window(id: 2, loc: (133, 0), size: (67, 100), ratio: 1),
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 60), ratio: 1.2),
+            layout(loc: (0, 60), size: (200, 40), ratio: 0.8) [
+                window(id: 1, loc: (0, 60), size: (100, 40)),
+                window(id: 2, loc: (100, 60), size: (100, 40)),
+            ]
         ]);
-        "resize middle window left - only affects left neighbor"
+        "resize nested layout down grows top neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2374,7 +2505,7 @@ mod tests {
                 window(id: 5, loc: (124, 67), size: (76, 33), ratio: 1),
             ]
         ]);
-        "resize window left - affects multiple parent layouts"
+        "resize affects multiple parent layouts"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2402,7 +2533,7 @@ mod tests {
                 ]
             ],
         ]);
-        "resize deeply nested window - propagates through multiple layout levels"
+        "resize deep nesting propagates levels"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal, orient: TopLeft) [
@@ -2416,7 +2547,7 @@ mod tests {
             window(id: 0, loc: (0, 60), size: (200, 40), ratio: 0.8),
             window(id: 1, loc: (0, 0), size: (200, 60), ratio: 1.2),
         ]);
-        "resize window down with reverse orientation"
+        "resize reverse orientation"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2430,7 +2561,7 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (0, 100), ratio: 0),
             window(id: 1, loc: (0, 0), size: (200, 100), ratio: 2),
         ]);
-        "resize window beyond neighbor minimum - clamped"
+        "resize beyond minimum clamped"
     )]
     fn test_resize_tile(
         mut tree: TileTree<TestWindow>,
@@ -2448,6 +2579,111 @@ mod tests {
     #[test_case(
         tile_tree!(layout() [
             window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::RIGHT,
+        0.1,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
+            window(id: 1, loc: (110, 0), size: (90, 100), ratio: 0.9),
+        ]);
+        "resize ratio increases window size"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::RIGHT,
+        -0.1,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
+            window(id: 1, loc: (90, 0), size: (110, 100), ratio: 1.1),
+        ]);
+        "resize ratio decreases window size"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::BOTTOM,
+        0.2,
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 60), ratio: 1.2),
+            window(id: 1, loc: (0, 60), size: (200, 40), ratio: 0.8),
+        ]);
+        "resize ratio horizontal split down"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0, ratio: 1),
+            window(id: 1, ratio: 1),
+            window(id: 2, ratio: 1),
+        ]),
+        1,
+        ResizeEdge::LEFT,
+        0.1,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (60, 100), ratio: 0.9),
+            window(id: 1, loc: (60, 0), size: (73, 100), ratio: 1.1),
+            window(id: 2, loc: (133, 0), size: (67, 100), ratio: 1),
+        ]);
+        "resize ratio three windows middle left"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(split: Horizontal) [
+                window(id: 1),
+                window(id: 2),
+            ],
+        ]),
+        1,
+        ResizeEdge::TOP,
+        0.15,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (100, 100), ratio: 1),
+            layout(split: Horizontal, loc: (100, 0), size: (100, 100), ratio: 1) [
+                window(id: 1, loc: (100, 0), size: (100, 43), ratio: 0.85),
+                window(id: 2, loc: (100, 43), size: (100, 57), ratio: 1.15),
+            ],
+        ]);
+        "resize ratio nested layout up"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::RIGHT,
+        1.5,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 100), ratio: 2),
+            window(id: 1, loc: (200, 0), size: (0, 100), ratio: 0),
+        ]);
+        "resize ratio full clamp"
+    )]
+    fn test_resize_tile_ratio(
+        mut tree: TileTree<TestWindow>,
+        id: u32,
+        edge: ResizeEdge,
+        ratio: f64,
+        expected: TileTree<TestWindow>,
+    ) {
+        tree.update_tile_size((0, 0).into(), (200, 100).into());
+        tree.resize_tile(id, edge, TileResizeUnit::Ratio(ratio));
+        tree.update_tile_size((0, 0).into(), (200, 100).into());
+        assert_tree_eq!(tree, expected)
+    }
+
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
         ]),
         0,
         ResizeEdge::LEFT,
@@ -2455,7 +2691,7 @@ mod tests {
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 100)),
         ]);
-        "resize single window - no change"
+        "resize single window no change"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2469,7 +2705,7 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (80, 100), ratio: 0.8),
             window(id: 1, loc: (80, 0), size: (120, 100), ratio: 1.2),
         ]);
-        "resize window left - shrinks left neighbor"
+        "resize two windows left shrinks left neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2483,7 +2719,7 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (120, 100), ratio: 1.2),
             window(id: 1, loc: (120, 0), size: (80, 100), ratio: 0.8),
         ]);
-        "resize window right - shrinks right neighbor"
+        "resize two windows right shrinks right neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2497,7 +2733,7 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (200, 30), ratio: 0.6),
             window(id: 1, loc: (0, 30), size: (200, 70), ratio: 1.4),
         ]);
-        "resize window up - shrinks top neighbor"
+        "resize horizontal split up shrinks top neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2511,7 +2747,77 @@ mod tests {
             window(id: 0, loc: (0, 0), size: (200, 30), ratio: 0.6),
             window(id: 1, loc: (0, 30), size: (200, 70), ratio: 1.4),
         ]);
-        "resize window down - shrinks bottom neighbor"
+        "resize horizontal split down shrinks bottom neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+            ],
+            layout() [
+                window(id: 2),
+                window(id: 3),
+            ],
+        ]),
+        1,
+        ResizeEdge::BOTTOM,
+        30,
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            layout(loc: (0, 0), size: (200, 30), ratio: 0.6) [
+                window(id: 0, loc: (0, 0), size: (100, 30), ratio: 1),
+                window(id: 1, loc: (100, 0), size: (100, 30), ratio: 1),
+            ],
+            layout(loc: (0, 30), size: (200, 70), ratio: 1.4) [
+                window(id: 2, loc: (0, 30), size: (100, 70), ratio: 1),
+                window(id: 3, loc: (100, 30), size: (100, 70), ratio: 1),
+            ],
+        ]);
+        "resize exact nested layout internal"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+        ]),
+        1,
+        ResizeEdge::LEFT,
+        60,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (73, 100), ratio: 1.1),
+            window(id: 1, loc: (73, 0), size: (60, 100), ratio: 0.9),
+            window(id: 2, loc: (133, 0), size: (67, 100), ratio: 1),
+        ]);
+        "resize exact three windows middle"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::RIGHT,
+        300,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 100), ratio: 2),
+            window(id: 1, loc: (200, 0), size: (0, 100), ratio: 0),
+        ]);
+        "resize exact beyond maximum clamped"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        ResizeEdge::RIGHT,
+        -50,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (0, 100), ratio: 0),
+            window(id: 1, loc: (0, 0), size: (200, 100), ratio: 2),
+        ]);
+        "resize exact zero minimum clamped"
     )]
     fn test_resize_tile_exact(
         mut tree: TileTree<TestWindow>,
