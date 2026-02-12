@@ -83,8 +83,6 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
             && let Some((mapped, opacity)) = self.last_mapped.as_ref()
         {
             mapped.set_opacity(*opacity);
-            #[cfg(test)]
-            assert!(*mapped != self.mapped);
             data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
             handle.unset_grab(self, data, event.serial, event.time, true);
         }

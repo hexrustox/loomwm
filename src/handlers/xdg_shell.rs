@@ -101,7 +101,7 @@ impl XdgShellHandler for WindowManagerState {
                 toplevel.with_pending_state(|state| {
                     state.states.set(xdg_toplevel::State::Resizing);
                 });
-                toplevel.send_pending_configure();
+                mapped.set_dirty(true);
 
                 let grab = FloatingResizeGrab::new(
                     start_data,

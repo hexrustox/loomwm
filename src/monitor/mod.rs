@@ -633,7 +633,7 @@ pub fn apply_rule_to_mapped_window(mapped: &MappedWindow, properties: WindowDyna
     mapped.toplevel().with_pending_state(|state| {
         state.decoration_mode = properties.decoration.map(|d| d.into());
     });
-    mapped.toplevel().send_pending_configure();
+    mapped.set_dirty(true);
 
     if let Some(opacity) = properties.opacity {
         mapped.set_opacity(opacity);

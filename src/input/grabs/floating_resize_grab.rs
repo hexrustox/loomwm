@@ -11,13 +11,12 @@ use smithay::{
         wayland_server::protocol::wl_surface::WlSurface,
     },
     utils::{Logical, Point, Rectangle, Size},
-    wayland::{compositor, shell::xdg::SurfaceCachedState},
 };
 
-use crate::{state::WindowManagerState, window::MappedWindow};
+use crate::{monitor::TileTreeWindow, state::WindowManagerState, window::MappedWindow};
 
 bitflags! {
-    #[derive(Debug, Default, Clone, Copy)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq)]
     pub struct ResizeEdge: u32 {
         const TOP          = 0b0001;
         const BOTTOM       = 0b0010;
@@ -45,7 +44,7 @@ pub struct FloatingResizeGrab {
     edges: ResizeEdge,
 
     initial_rect: Rectangle<i32, Logical>,
-    last_window_size: Size<i32, Logical>,
+    last_size: Size<i32, Logical>,
 }
 
 impl FloatingResizeGrab {
@@ -64,7 +63,7 @@ impl FloatingResizeGrab {
             mapped,
             edges,
             initial_rect,
-            last_window_size: initial_rect.size,
+            last_size: initial_rect.size,
         }
     }
 }
@@ -81,15 +80,15 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
 
         let mut delta = event.location - self.start_data.location;
 
-        let mut new_window_width = self.initial_rect.size.w;
-        let mut new_window_height = self.initial_rect.size.h;
+        let mut new_width = self.initial_rect.size.w;
+        let mut new_height = self.initial_rect.size.h;
 
         if self.edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
             if self.edges.intersects(ResizeEdge::LEFT) {
                 delta.x = -delta.x;
             }
 
-            new_window_width = (self.initial_rect.size.w as f64 + delta.x) as i32;
+            new_width = (self.initial_rect.size.w as f64 + delta.x) as i32;
         }
 
         if self.edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
@@ -97,41 +96,17 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
                 delta.y = -delta.y;
             }
 
-            new_window_height = (self.initial_rect.size.h as f64 + delta.y) as i32;
+            new_height = (self.initial_rect.size.h as f64 + delta.y) as i32;
         }
 
-        let (min_size, max_size) = compositor::with_states(&self.mapped.wl_surface(), |states| {
-            let mut guard = states.cached_state.get::<SurfaceCachedState>();
-            let data = guard.current();
-            (data.min_size, data.max_size)
-        });
+        self.last_size = Size::from((new_width, new_height));
 
-        let min_width = min_size.w.max(1);
-        let min_height = min_size.h.max(1);
-
-        let max_width = if max_size.w == 0 {
-            i32::MAX
-        } else {
-            max_size.w
-        };
-        let max_height = if max_size.h == 0 {
-            i32::MAX
-        } else {
-            max_size.h
-        };
-
-        self.last_window_size = Size::from((
-            new_window_width.clamp(min_width, max_width),
-            new_window_height.clamp(min_height, max_height),
-        ));
-
-        let toplevel = self.mapped.toplevel();
-        toplevel.with_pending_state(|state| {
+        self.mapped.set_size(self.last_size);
+        self.mapped.toplevel().with_pending_state(|state| {
             state.states.set(xdg_toplevel::State::Resizing);
-            state.size = Some(self.last_window_size);
         });
 
-        toplevel.send_pending_configure();
+        self.mapped.set_dirty(true);
     }
 
     fn relative_motion(
@@ -158,10 +133,11 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
             let toplevel = self.mapped.toplevel();
             toplevel.with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Resizing);
-                state.size = Some(self.last_window_size);
+                state.size = Some(self.last_size);
             });
 
-            toplevel.send_pending_configure();
+            // toplevel.send_pending_configure();
+            self.mapped.set_dirty(true);
 
             self.mapped
                 .set_resize_state(ResizeGrabState::WaitingForLastCommit {
@@ -267,7 +243,7 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
     fn unset(&mut self, _data: &mut WindowManagerState) {}
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum ResizeGrabState {
     #[default]
     Idle,

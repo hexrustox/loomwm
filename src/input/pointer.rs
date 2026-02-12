@@ -178,11 +178,11 @@ impl WindowManagerState {
                             location,
                         };
 
-                        let toplevel = mapped.toplevel();
-                        toplevel.with_pending_state(|state| {
+                        mapped.toplevel().with_pending_state(|state| {
                             state.states.set(xdg_toplevel::State::Resizing);
                         });
-                        toplevel.send_pending_configure();
+                        mapped.set_dirty(true);
+
                         let edges = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
                                 let center = mapped.center_location().to_f64();
