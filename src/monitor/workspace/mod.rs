@@ -12,7 +12,7 @@ use smithay::{
 };
 
 use crate::{
-    input::WindowDirection,
+    input::grabs::floating_resize_grab::ResizeEdge,
     monitor::{apply_rule_to_mapped_window, workspace::tile::TileTree},
     utils::get_app_id_and_title,
     window::{
@@ -101,7 +101,7 @@ impl Workspace {
     pub fn last_focused_tiling_window_in_direction(
         &self,
         surface: &WlSurface,
-        direction: WindowDirection,
+        direction: ResizeEdge,
     ) -> Option<&MappedWindow> {
         // TODO do closest distance instead of last focus as well
         let mapped_list = self.tiling.find_windows_in_direction(surface, direction);
@@ -118,7 +118,7 @@ impl Workspace {
     pub fn resize_tiling_window(
         &mut self,
         surface: &WlSurface,
-        edge: WindowDirection,
+        edge: ResizeEdge,
         unit: impl Into<TileResizeUnit>,
     ) {
         self.tiling.resize_tile(surface, edge, unit);

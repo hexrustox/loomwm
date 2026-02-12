@@ -43,16 +43,16 @@ default = "master"
 "alt+ctrl+4" = { action = "move_to_workspace", name = 4, focus = false }
 "alt+ctrl+5" = { action = "move_to_workspace", name = 5, focus = false }
 "alt+h" = { action = "focus_window", direction = "left" }
-"alt+j" = { action = "focus_window", direction = "down" }
-"alt+k" = { action = "focus_window", direction = "up" }
+"alt+j" = { action = "focus_window", direction = "bottom" }
+"alt+k" = { action = "focus_window", direction = "top" }
 "alt+l" = { action = "focus_window", direction = "right" }
 "alt+shift+h" = { action = "swap_window", direction = "left" }
-"alt+shift+j" = { action = "swap_window", direction = "down" }
-"alt+shift+k" = { action = "swap_window", direction = "up" }
+"alt+shift+j" = { action = "swap_window", direction = "bottom" }
+"alt+shift+k" = { action = "swap_window", direction = "top" }
 "alt+shift+l" = { action = "swap_window", direction = "right" }
 "alt+ctrl+h" = { action = "resize_window", edge = "left", unit = "50px" }
-"alt+ctrl+j" = { action = "resize_window", edge = "down", unit = "50px" }
-"alt+ctrl+k" = { action = "resize_window", edge = "up", unit = "50px" }
+"alt+ctrl+j" = { action = "resize_window", edge = "bottom", unit = "50px" }
+"alt+ctrl+k" = { action = "resize_window", edge = "top", unit = "50px" }
 "alt+ctrl+l" = { action = "resize_window", edge = "right", unit = "50px" }
 "alt+space" = { action = "toggle_floating" }
 "alt+q" = { action = "close_window" }

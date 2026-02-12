@@ -1,7 +1,4 @@
-use crate::{
-    input::{WindowDirection, grabs::floating_resize_grab::ResizeEdge},
-    state::WindowManagerState,
-};
+use crate::{input::grabs::floating_resize_grab::ResizeEdge, state::WindowManagerState};
 use smithay::{
     input::{
         SeatHandler,
@@ -13,27 +10,25 @@ use smithay::{
             RelativeMotionEvent,
         },
     },
-    utils::{Logical, Rectangle, Size},
+    utils::{Logical, Size},
 };
 
 pub struct TilingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     edges: ResizeEdge,
-    initial_rect: Rectangle<i32, Logical>,
-    last_size: Size<i32, Logical>,
+    initial_size: Size<i32, Logical>,
 }
 
 impl TilingResizeGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
         edges: ResizeEdge,
-        initial_rect: Rectangle<i32, Logical>,
+        initial_size: Size<i32, Logical>,
     ) -> Self {
         Self {
             start_data,
             edges,
-            initial_rect,
-            last_size: initial_rect.size,
+            initial_size,
         }
     }
 }
@@ -52,52 +47,38 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
         handle.motion(data, None, event);
 
         let delta = event.location - self.start_data.location;
-        let initial = self.initial_rect.size;
 
-        let mut update_dim = |edge: ResizeEdge,
-                              direction: WindowDirection,
-                              initial_size: i32,
-                              delta_val: f64,
-                              last_size: &mut i32| {
-            if self.edges.intersects(edge) {
-                let new_size = (initial_size as f64 + delta_val) as i32;
+        if self.edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
+            let adjusted_x = if self.edges.intersects(ResizeEdge::LEFT) {
+                -delta.x
+            } else {
+                delta.x
+            };
 
-                if new_size != *last_size {
-                    data.resize_focused_tiling_window_in_edge(direction, new_size);
-                    *last_size = new_size;
-                }
-            }
-        };
+            let new_width = (self.initial_size.w as f64 + adjusted_x) as i32;
 
-        update_dim(
-            ResizeEdge::LEFT,
-            WindowDirection::Left,
-            initial.w,
-            -delta.x,
-            &mut self.last_size.w,
-        );
-        update_dim(
-            ResizeEdge::RIGHT,
-            WindowDirection::Right,
-            initial.w,
-            delta.x,
-            &mut self.last_size.w,
-        );
+            data.resize_focused_tiling_window_in_edge(
+                self.edges
+                    .intersection(ResizeEdge::LEFT | ResizeEdge::RIGHT),
+                new_width,
+            );
+        }
 
-        update_dim(
-            ResizeEdge::TOP,
-            WindowDirection::Up,
-            initial.h,
-            -delta.y,
-            &mut self.last_size.h,
-        );
-        update_dim(
-            ResizeEdge::BOTTOM,
-            WindowDirection::Down,
-            initial.h,
-            delta.y,
-            &mut self.last_size.h,
-        );
+        if self.edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
+            let adjusted_y = if self.edges.intersects(ResizeEdge::TOP) {
+                -delta.y
+            } else {
+                delta.y
+            };
+
+            let new_height = (self.initial_size.h as f64 + adjusted_y) as i32;
+
+            data.resize_focused_tiling_window_in_edge(
+                self.edges
+                    .intersection(ResizeEdge::TOP | ResizeEdge::BOTTOM),
+                new_height,
+            );
+        }
     }
 
     fn relative_motion(

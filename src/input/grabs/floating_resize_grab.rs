@@ -1,4 +1,10 @@
+use std::fmt;
+
 use bitflags::bitflags;
+use serde::{
+    Deserialize, Deserializer,
+    de::{self, Visitor},
+};
 use smithay::{
     input::pointer::{
         AxisFrame, ButtonEvent, GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent,
@@ -28,6 +34,54 @@ bitflags! {
 
         const TOP_RIGHT    = Self::TOP.bits() | Self::RIGHT.bits();
         const BOTTOM_RIGHT = Self::BOTTOM.bits() | Self::RIGHT.bits();
+    }
+}
+
+impl ResizeEdge {
+    pub fn opposite(mut self) -> Self {
+        if self.contains(ResizeEdge::TOP) {
+            self.remove(ResizeEdge::TOP);
+            self.insert(ResizeEdge::BOTTOM);
+        } else if self.contains(ResizeEdge::BOTTOM) {
+            self.remove(ResizeEdge::BOTTOM);
+            self.insert(ResizeEdge::TOP);
+        }
+        if self.contains(ResizeEdge::LEFT) {
+            self.remove(ResizeEdge::LEFT);
+            self.insert(ResizeEdge::RIGHT);
+        } else if self.contains(ResizeEdge::RIGHT) {
+            self.remove(ResizeEdge::RIGHT);
+            self.insert(ResizeEdge::LEFT);
+        }
+
+        self
+    }
+}
+
+impl<'de> Deserialize<'de> for ResizeEdge {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ResizeEdgeVisitor;
+
+        impl<'de> Visitor<'de> for ResizeEdgeVisitor {
+            type Value = ResizeEdge;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("one of the following flags: top, bottom, left, right, top_left, bottom_left, top_right, bottom_right")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                ResizeEdge::from_name(&value.to_uppercase())
+                    .ok_or(E::invalid_value(de::Unexpected::Str(value), &self))
+            }
+        }
+
+        deserializer.deserialize_str(ResizeEdgeVisitor)
     }
 }
 

@@ -13,6 +13,7 @@ use smithay::{
 use xkbcommon::xkb::{self, keysyms::KEY_NoSymbol};
 
 use crate::{
+    input::grabs::floating_resize_grab::ResizeEdge,
     monitor::{TileRatio, WorkspaceName},
     state::WindowManagerState,
 };
@@ -99,13 +100,13 @@ pub enum KeyAction {
         focus: bool,
     },
     FocusWindow {
-        direction: WindowDirection,
+        direction: ResizeEdge,
     },
     SwapWindow {
-        direction: WindowDirection,
+        direction: ResizeEdge,
     },
     ResizeWindow {
-        edge: WindowDirection,
+        edge: ResizeEdge,
         unit: WindowUnit,
     },
     ToggleFloating,
@@ -117,27 +118,6 @@ pub enum KeyAction {
 
 fn default_focus() -> bool {
     true
-}
-
-// TODO replace with ResizeEdge
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum WindowDirection {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-impl WindowDirection {
-    pub fn opposite(self) -> Self {
-        match self {
-            Self::Up => Self::Down,
-            Self::Down => Self::Up,
-            Self::Left => Self::Right,
-            Self::Right => Self::Left,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -299,8 +279,8 @@ mod tests {
     }
 
     #[test_case(r#"{ action = "switch_workspace", name = 1 }"#, KeyAction::SwitchWorkspace { name: WorkspaceName::Id(1) })]
-    #[test_case(r#"{ action = "focus_window", direction = "up" }"#, KeyAction::FocusWindow { direction: WindowDirection::Up })]
-    #[test_case(r#"{ action = "resize_window", edge = "right", unit = "10px" }"#, KeyAction::ResizeWindow { edge: WindowDirection::Right, unit: WindowUnit::Px(10) })]
+    #[test_case(r#"{ action = "focus_window", direction = "top" }"#, KeyAction::FocusWindow { direction: ResizeEdge::TOP })]
+    #[test_case(r#"{ action = "resize_window", edge = "right", unit = "10px" }"#, KeyAction::ResizeWindow { edge: ResizeEdge::RIGHT, unit: WindowUnit::Px(10) })]
     #[test_case(r#"{ action = "execute", command = [] }"#, KeyAction::Execute { command: vec![] })]
     fn test_deserialize_action(input: &str, expected: KeyAction) {
         assert_eq!(

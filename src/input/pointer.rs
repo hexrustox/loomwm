@@ -248,7 +248,7 @@ impl WindowManagerState {
                             let grab = TilingResizeGrab::new(
                                 start_data,
                                 edges,
-                                Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
+                                mapped.get_configured_size(),
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         }
