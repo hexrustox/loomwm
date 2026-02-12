@@ -155,15 +155,15 @@ impl WindowManagerState {
 
         match state.unwrap_or_default() {
             WindowState::Float { location, size } => {
+                let window_size = size
+                    .map(|(w, h)| (w, h).into())
+                    .unwrap_or(mapped.get_geometry_size());
                 match location {
                     Some(WindowLocation::Location(x, y)) => {
                         mapped.set_location((x, y).into());
                     }
                     Some(WindowLocation::Center) => {
                         let output_size = &workspace.get_output_size();
-                        let window_size = size
-                            .map(|(w, h)| (w, h).into())
-                            .unwrap_or(mapped.get_size());
                         mapped.set_location(
                             (
                                 output_size.w / 2 - window_size.w / 2,
@@ -174,12 +174,7 @@ impl WindowManagerState {
                     }
                     _ => {}
                 }
-                let size = size
-                    .map(|(w, h)| (w, h).into())
-                    .unwrap_or(mapped.get_size());
-                mapped.toplevel().with_pending_state(|state| {
-                    state.size = Some(size);
-                });
+                mapped.set_size(window_size);
 
                 apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 workspace.add_floating_window(mapped.clone());

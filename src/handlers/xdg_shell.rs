@@ -107,7 +107,7 @@ impl XdgShellHandler for WindowManagerState {
                     start_data,
                     mapped.clone(),
                     edges.into(),
-                    Rectangle::new(mapped.get_location(), mapped.get_size()),
+                    Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
                 );
                 pointer.set_grab(self, grab, serial, Focus::Clear);
             }

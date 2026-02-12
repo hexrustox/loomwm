@@ -64,6 +64,7 @@ impl MappedWindow {
                 location: (0, 0).into(),
                 data: MappedWindowData {
                     window,
+                    configured_size: (0, 0).into(),
                     dirty: false,
                     focus,
                     floating,
@@ -128,7 +129,7 @@ impl MappedWindow {
 
     pub fn center_location(&self) -> Point<i32, Logical> {
         let location = self.inner().location;
-        let size = self.get_size();
+        let size = self.get_geometry_size();
         Point::new(size.w / 2 + location.x, size.h / 2 + location.y)
     }
 
@@ -177,12 +178,16 @@ impl TileTreeWindow for MappedWindow {
         self.inner().location
     }
 
-    fn get_size(&self) -> Size<i32, Logical> {
+    fn set_location(&mut self, location: Point<i32, Logical>) {
+        self.inner().location = location;
+    }
+
+    fn get_geometry_size(&self) -> Size<i32, Logical> {
         self.window().geometry().size
     }
 
-    fn set_location(&mut self, location: Point<i32, Logical>) {
-        self.inner().location = location;
+    fn get_configured_size(&self) -> Size<i32, Logical> {
+        self.inner().data.configured_size
     }
 
     fn set_size(&mut self, size: Size<i32, Logical>) {
@@ -206,23 +211,23 @@ impl TileTreeWindow for MappedWindow {
             max_size.h
         };
 
+        let size = (
+            size.w.clamp(min_width, max_width),
+            size.h.clamp(min_height, max_height),
+        )
+            .into();
+        self.inner().data.configured_size = size;
         self.toplevel().with_pending_state(|state| {
-            state.size = Some(
-                (
-                    size.w.clamp(min_width, max_width),
-                    size.h.clamp(min_height, max_height),
-                )
-                    .into(),
-            );
+            state.size = Some(size);
         });
         self.set_dirty(true);
     }
 
     fn swap(&mut self, other: &mut Self) {
-        let temp = self.get_size();
-        self.set_size(other.get_size());
-        other.set_size(temp);
         mem::swap(&mut self.inner().data, &mut other.inner().data);
+        let temp = self.get_configured_size();
+        self.set_size(other.get_configured_size());
+        other.set_size(temp);
     }
 }
 
@@ -235,6 +240,7 @@ pub struct MappedWindowInner {
 #[derive(Debug, Clone)]
 pub struct MappedWindowData {
     window: Window,
+    configured_size: Size<i32, Logical>,
     dirty: bool,
     focus: bool,
     floating: bool,

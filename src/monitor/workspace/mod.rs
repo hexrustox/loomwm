@@ -86,7 +86,7 @@ impl Workspace {
     fn update_tiling_window_size(&mut self) {
         let output = &self.output;
         self.tiling
-            .update_window_size(output.current_location(), self.get_output_size());
+            .update_tile_size(output.current_location(), self.get_output_size());
     }
 
     pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
@@ -170,7 +170,7 @@ impl Workspace {
         let mapped = self.tiling.remove(surface).inspect(|_| {
             let output = &self.output;
             self.tiling
-                .update_window_size(output.current_location(), self.get_output_size());
+                .update_tile_size(output.current_location(), self.get_output_size());
         })?;
         self.remove_from_focus_queue(&mapped);
         Some(mapped)

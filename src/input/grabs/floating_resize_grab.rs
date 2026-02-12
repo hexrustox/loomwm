@@ -130,13 +130,10 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
         if !handle.current_pressed().contains(&self.start_data.button) {
             handle.unset_grab(self, data, event.serial, event.time, true);
 
-            let toplevel = self.mapped.toplevel();
-            toplevel.with_pending_state(|state| {
+            self.mapped.set_size(self.last_size);
+            self.mapped.toplevel().with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Resizing);
-                state.size = Some(self.last_size);
             });
-
-            // toplevel.send_pending_configure();
             self.mapped.set_dirty(true);
 
             self.mapped

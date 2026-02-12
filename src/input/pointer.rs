@@ -197,7 +197,7 @@ impl WindowManagerState {
                                 }
                             }
                             ResizeLocation::EdgeOrCorner => {
-                                let size = mapped.get_size();
+                                let size = mapped.get_geometry_size();
                                 let width_1_3 = size.w as f64 * 1. / 3.;
                                 let width_2_3 = size.w as f64 * 2. / 3.;
                                 let height_1_3 = size.h as f64 * 1. / 3.;
@@ -241,14 +241,14 @@ impl WindowManagerState {
                                 start_data,
                                 mapped.clone(),
                                 edges,
-                                Rectangle::new(mapped.get_location(), mapped.get_size()),
+                                Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         } else {
                             let grab = TilingResizeGrab::new(
                                 start_data,
                                 edges,
-                                Rectangle::new(mapped.get_location(), mapped.get_size()),
+                                Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         }
