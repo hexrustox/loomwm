@@ -15,7 +15,7 @@ use smithay::{
 };
 
 use crate::{
-    input::floating_resize_grab::{ResizeEdge, ResizeGrabState},
+    input::grabs::floating_resize_grab::{ResizeEdge, ResizeGrabState},
     monitor::{TileTreeSearchKey, TileTreeWindow},
     window::rule::WindowProperties,
 };

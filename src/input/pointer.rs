@@ -10,17 +10,13 @@ use smithay::{
     utils::{Rectangle, SERIAL_COUNTER},
 };
 
-use crate::input::swap_grab::SwapGrab;
-use crate::input::tiling_resize_grab::TilingResizeGrab;
+use crate::input::KeyModifiers;
+use crate::input::grabs::floating_resize_grab::{FloatingResizeGrab, ResizeEdge};
+use crate::input::grabs::move_grab::MoveGrab;
+use crate::input::grabs::swap_grab::SwapGrab;
+use crate::input::grabs::tiling_resize_grab::TilingResizeGrab;
 use crate::monitor::{FoundMappedWindow, TileTreeWindow};
-use crate::{
-    input::{
-        KeyModifiers,
-        floating_resize_grab::{FloatingResizeGrab, ResizeEdge},
-        move_grab::MoveGrab,
-    },
-    state::WindowManagerState,
-};
+use crate::state::WindowManagerState;
 
 pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
 

@@ -1,6 +1,5 @@
-// FIXME
 use crate::{
-    input::{WindowDirection, floating_resize_grab::ResizeEdge},
+    input::{WindowDirection, grabs::floating_resize_grab::ResizeEdge},
     state::WindowManagerState,
 };
 use smithay::{

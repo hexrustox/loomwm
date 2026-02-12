@@ -19,7 +19,7 @@ use smithay::{
 };
 
 use crate::{
-    input::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
+    input::grabs::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
     monitor::{FoundMappedWindow, TileTreeWindow},
     state::WindowManagerState,
     window::UnmappedWindow,
