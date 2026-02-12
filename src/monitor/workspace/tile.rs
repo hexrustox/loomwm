@@ -120,8 +120,7 @@ pub trait TileTreeWindow: Debug + Clone {
     fn match_id(&self, key: TileTreeSearchKey) -> bool;
     fn get_location(&self) -> Point<i32, Logical>;
     fn set_location(&mut self, location: Point<i32, Logical>);
-    fn get_geometry_size(&self) -> Size<i32, Logical>;
-    fn get_configured_size(&self) -> Size<i32, Logical>;
+    fn get_size(&self) -> Size<i32, Logical>;
     fn set_size(&mut self, size: Size<i32, Logical>);
     fn swap(&mut self, other: &mut Self);
 }
@@ -699,10 +698,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         let target_tile = &self.arena[target_id];
         let target_window = target_tile.as_window();
 
-        let target_rect = Rect::new(
-            target_window.get_location(),
-            target_window.get_configured_size(),
-        );
+        let target_rect = Rect::new(target_window.get_location(), target_window.get_size());
 
         let mut candidates = Vec::new();
 
@@ -713,8 +709,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             match &self.arena[tile_id].kind {
                 TileKind::Window(window) => {
                     if tile_id != target_id {
-                        let window_rect =
-                            Rect::new(window.get_location(), window.get_configured_size());
+                        let window_rect = Rect::new(window.get_location(), window.get_size());
                         if window_rect.is_in_direction(direction, &target_rect) {
                             candidates.push(window);
                         }
@@ -818,7 +813,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         };
 
         let kind_size = |k: &TileKind<T>| match k {
-            TileKind::Window(w) => w.get_configured_size(),
+            TileKind::Window(w) => w.get_size(),
             TileKind::Layout { size, .. } => *size,
         };
 
@@ -976,11 +971,7 @@ mod tests {
             self.inner.borrow_mut().location = location;
         }
 
-        fn get_geometry_size(&self) -> Size<i32, Logical> {
-            self.inner.borrow().size
-        }
-
-        fn get_configured_size(&self) -> Size<i32, Logical> {
+        fn get_size(&self) -> Size<i32, Logical> {
             self.inner.borrow().size
         }
 

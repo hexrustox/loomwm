@@ -91,6 +91,38 @@ impl MappedWindow {
         self.toplevel().wl_surface().clone()
     }
 
+    pub fn get_geometry_size(&self) -> Size<i32, Logical> {
+        self.window().geometry().size
+    }
+
+    pub fn clamp_size(&self, size: Size<i32, Logical>) -> Size<i32, Logical> {
+        let (min_size, max_size) = compositor::with_states(&self.wl_surface(), |states| {
+            let mut guard = states.cached_state.get::<SurfaceCachedState>();
+            let data = guard.current();
+            (data.min_size, data.max_size)
+        });
+
+        let min_width = min_size.w.max(1);
+        let min_height = min_size.h.max(1);
+
+        let max_width = if max_size.w == 0 {
+            i32::MAX
+        } else {
+            max_size.w
+        };
+        let max_height = if max_size.h == 0 {
+            i32::MAX
+        } else {
+            max_size.h
+        };
+
+        (
+            size.w.clamp(min_width, max_width),
+            size.h.clamp(min_height, max_height),
+        )
+            .into()
+    }
+
     pub fn get_dirty(&self) -> bool {
         self.inner().data.dirty
     }
@@ -182,40 +214,11 @@ impl TileTreeWindow for MappedWindow {
         self.inner().location = location;
     }
 
-    fn get_geometry_size(&self) -> Size<i32, Logical> {
-        self.window().geometry().size
-    }
-
-    fn get_configured_size(&self) -> Size<i32, Logical> {
+    fn get_size(&self) -> Size<i32, Logical> {
         self.inner().data.configured_size
     }
 
     fn set_size(&mut self, size: Size<i32, Logical>) {
-        let (min_size, max_size) = compositor::with_states(&self.wl_surface(), |states| {
-            let mut guard = states.cached_state.get::<SurfaceCachedState>();
-            let data = guard.current();
-            (data.min_size, data.max_size)
-        });
-
-        let min_width = min_size.w.max(1);
-        let min_height = min_size.h.max(1);
-
-        let max_width = if max_size.w == 0 {
-            i32::MAX
-        } else {
-            max_size.w
-        };
-        let max_height = if max_size.h == 0 {
-            i32::MAX
-        } else {
-            max_size.h
-        };
-
-        let size = (
-            size.w.clamp(min_width, max_width),
-            size.h.clamp(min_height, max_height),
-        )
-            .into();
         self.inner().data.configured_size = size;
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
@@ -225,8 +228,8 @@ impl TileTreeWindow for MappedWindow {
 
     fn swap(&mut self, other: &mut Self) {
         mem::swap(&mut self.inner().data, &mut other.inner().data);
-        let temp = self.get_configured_size();
-        self.set_size(other.get_configured_size());
+        let temp = self.get_size();
+        self.set_size(other.get_size());
         other.set_size(temp);
     }
 }

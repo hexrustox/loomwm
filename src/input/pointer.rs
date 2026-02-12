@@ -245,11 +245,7 @@ impl WindowManagerState {
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         } else {
-                            let grab = TilingResizeGrab::new(
-                                start_data,
-                                edges,
-                                mapped.get_configured_size(),
-                            );
+                            let grab = TilingResizeGrab::new(start_data, edges, mapped.get_size());
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         }
                     }

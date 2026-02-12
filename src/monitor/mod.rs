@@ -174,7 +174,7 @@ impl WindowManagerState {
                     }
                     _ => {}
                 }
-                mapped.set_size(window_size);
+                mapped.set_size(mapped.clamp_size(window_size));
 
                 apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 workspace.add_floating_window(mapped.clone());
