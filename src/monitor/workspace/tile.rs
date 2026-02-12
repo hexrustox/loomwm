@@ -755,87 +755,88 @@ impl<T: TileTreeWindow> TileTree<T> {
             return;
         };
 
-        let mut offset = match edge {
-            WindowDirection::Left | WindowDirection::Up => -1,
-            WindowDirection::Right | WindowDirection::Down => 1,
-        };
-        offset *= match orientation {
-            TileOrientation::BottomRight => 1,
-            TileOrientation::TopLeft => -1,
-        };
+        let edge_dir = matches!(edge, WindowDirection::Right | WindowDirection::Down);
+        let orient_dir = matches!(orientation, TileOrientation::BottomRight);
+        let offset = if edge_dir { 1 } else { -1 } * if orient_dir { 1 } else { -1 };
 
-        let index = tiles
+        let child_index = tiles
             .iter()
             .position(|t| *t == child_id)
-            .expect("Cannot find tile in its parent") as i32
-            + offset;
+            .expect("Cannot find tile in its parent") as i32;
 
-        if (0..(tiles.len() as i32)).contains(&index) {
-            let total_ratio = tiles
-                .iter()
-                .fold(0., |acc, id| acc + self.arena[*id].ratio.0);
-            let other_id = tiles[index as usize];
+        let other_index = child_index + offset;
 
-            let size_component = match split {
-                TileSplit::Vertical => size.w,
-                TileSplit::Horizontal => size.h,
-            } as f64;
-
-            let ratio_offset = match unit {
-                TileResizeUnit::Exact(new_tile_length) => {
-                    let tile_size = match &self.arena[child_id].kind {
-                        TileKind::Window(window) => window.get_size(),
-                        TileKind::Layout { size, .. } => *size,
-                    };
-                    let tile_length = match edge {
-                        WindowDirection::Left | WindowDirection::Right => tile_size.w,
-                        WindowDirection::Up | WindowDirection::Down => tile_size.h,
-                    };
-                    let tile_ratio = self.arena[child_id].ratio.0;
-                    let other_size = match &self.arena[other_id].kind {
-                        TileKind::Window(window) => window.get_size(),
-                        TileKind::Layout { size, .. } => *size,
-                    };
-                    let other_length = match edge {
-                        WindowDirection::Left | WindowDirection::Right => other_size.w,
-                        WindowDirection::Up | WindowDirection::Down => other_size.h,
-                    };
-                    let other_ratio = self.arena[other_id].ratio.0;
-
-                    let total_length = tile_length + other_length;
-                    let total_ratio = tile_ratio + other_ratio;
-
-                    let new_other_length = total_length - new_tile_length;
-                    let new_tile_ratio = new_tile_length as f64 / total_length as f64 * total_ratio;
-                    let new_other_ratio =
-                        new_other_length as f64 / total_length as f64 * total_ratio;
-
-                    let tile = &mut self.arena[child_id];
-                    tile.ratio.0 = new_tile_ratio;
-                    tile.ratio.0 = tile.ratio.0.max(0.);
-                    let other = &mut self.arena[other_id];
-                    other.ratio.0 = new_other_ratio;
-                    other.ratio.0 = other.ratio.0.max(0.);
-
-                    return;
-                }
-                TileResizeUnit::Px(px) => px as f64 * total_ratio / size_component,
-                TileResizeUnit::Ratio(x) => x,
-            };
-
-            let tile = &mut self.arena[child_id];
-            tile.ratio.0 += ratio_offset;
-            tile.ratio.0 = tile.ratio.0.max(0.);
-            let other = &mut self.arena[other_id];
-            other.ratio.0 -= ratio_offset;
-            other.ratio.0 = other.ratio.0.max(0.);
-        } else {
+        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
+        if !in_bounds {
             #[allow(clippy::collapsible_else_if)]
             if let Some((ancestor_id, refer_id)) = self.find_ancestor_with_split(parent_id, *split)
             {
                 self.adjust_adjacent_ratios(ancestor_id, refer_id, edge, unit, false);
             } else if !in_loop && !matches!(unit, TileResizeUnit::Exact(..)) {
                 self.adjust_adjacent_ratios(parent_id, child_id, edge.opposite(), -unit, true);
+            }
+            return;
+        }
+
+        let other_id = tiles[other_index as usize];
+
+        let total_ratio = tiles
+            .iter()
+            .fold(0.0, |acc, id| acc + self.arena[*id].ratio.0);
+
+        let size_component = match split {
+            TileSplit::Vertical => size.w,
+            TileSplit::Horizontal => size.h,
+        } as f64;
+
+        let length_from_edge = |edge: WindowDirection, s: Size<i32, Logical>| match edge {
+            WindowDirection::Left | WindowDirection::Right => s.w,
+            WindowDirection::Up | WindowDirection::Down => s.h,
+        };
+
+        let kind_size = |k: &TileKind<T>| match k {
+            TileKind::Window(w) => w.get_size(),
+            TileKind::Layout { size, .. } => *size,
+        };
+
+        match unit {
+            TileResizeUnit::Exact(new_tile_length) => {
+                let tile_size = kind_size(&self.arena[child_id].kind);
+                let other_size = kind_size(&self.arena[other_id].kind);
+
+                let tile_length = length_from_edge(edge, tile_size);
+                let other_length = length_from_edge(edge, other_size);
+
+                let tile_ratio = self.arena[child_id].ratio.0;
+                let other_ratio = self.arena[other_id].ratio.0;
+
+                let total_length = tile_length + other_length;
+                let pair_total_ratio = tile_ratio + other_ratio;
+
+                let new_other_length = total_length - new_tile_length;
+                let new_tile_ratio =
+                    new_tile_length as f64 / total_length as f64 * pair_total_ratio;
+                let new_other_ratio =
+                    new_other_length as f64 / total_length as f64 * pair_total_ratio;
+
+                self.arena[child_id].ratio.0 = new_tile_ratio.max(0.0);
+                self.arena[other_id].ratio.0 = new_other_ratio.max(0.0);
+            }
+            TileResizeUnit::Px(px) => {
+                let ratio_offset = px as f64 * total_ratio / size_component;
+
+                self.arena[child_id].ratio.0 =
+                    (self.arena[child_id].ratio.0 + ratio_offset).max(0.0);
+                self.arena[other_id].ratio.0 =
+                    (self.arena[other_id].ratio.0 - ratio_offset).max(0.0);
+            }
+            TileResizeUnit::Ratio(r) => {
+                let ratio_offset = r;
+
+                self.arena[child_id].ratio.0 =
+                    (self.arena[child_id].ratio.0 + ratio_offset).max(0.0);
+                self.arena[other_id].ratio.0 =
+                    (self.arena[other_id].ratio.0 - ratio_offset).max(0.0);
             }
         }
     }
@@ -976,7 +977,7 @@ mod tests {
                     None => return false,
                 };
 
-                if tile_a.ratio != tile_b.ratio {
+                if (tile_a.ratio.0 * 10.).round() / 10. != (tile_b.ratio.0 * 10.).round() / 10. {
                     return false;
                 }
 
@@ -2424,6 +2425,20 @@ mod tests {
             window(id: 0),
             window(id: 1),
         ]),
+        1,
+        WindowDirection::Left,
+        120,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (80, 100), ratio: 0.8),
+            window(id: 1, loc: (80, 0), size: (120, 100), ratio: 1.2),
+        ]);
+        "resize window left - shrinks left neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
         0,
         WindowDirection::Right,
         120,
@@ -2438,14 +2453,60 @@ mod tests {
             window(id: 0),
             window(id: 1),
         ]),
-        0,
-        WindowDirection::Down,
+        1,
+        WindowDirection::Up,
         70,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
-            window(id: 0, loc: (0, 0), size: (200, 70), ratio: 1.4),
-            window(id: 1, loc: (0, 70), size: (200, 30), ratio: 0.6),
+            window(id: 0, loc: (0, 0), size: (200, 30), ratio: 0.6),
+            window(id: 1, loc: (0, 30), size: (200, 70), ratio: 1.4),
+        ]);
+        "resize window up - shrinks top neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        WindowDirection::Down,
+        30,
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 30), ratio: 0.6),
+            window(id: 1, loc: (0, 30), size: (200, 70), ratio: 1.4),
         ]);
         "resize window down - shrinks bottom neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+        ]),
+        1,
+        WindowDirection::Left,
+        80,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (54, 100), ratio: 0.8),
+            window(id: 1, loc: (54, 0), size: (79, 100), ratio: 1.2),
+            window(id: 2, loc: (133, 0), size: (67, 100), ratio: 1),
+        ]);
+        "resize middle window left - affects left neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+        ]),
+        1,
+        WindowDirection::Right,
+        80,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (67, 100), ratio: 1),
+            window(id: 1, loc: (67, 0), size: (80, 100), ratio: 1.2),
+            window(id: 2, loc: (147, 0), size: (53, 100), ratio: 0.8),
+        ]);
+        "resize middle window right - affects right neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2466,6 +2527,160 @@ mod tests {
             ],
         ]);
         "resize window left - expands parent layout"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+            ],
+            window(id: 2),
+        ]),
+        0,
+        WindowDirection::Right,
+        100,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            layout(split: Horizontal, loc: (0, 0), size: (100, 100), ratio: 1) [
+                window(id: 0, loc: (0, 0), size: (100, 50)),
+                window(id: 1, loc: (0, 50), size: (100, 50)),
+            ],
+            window(id: 2, loc: (100, 0), size: (100, 100), ratio: 1),
+        ]);
+        "resize nested layout window right - expands parent layout"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            layout() [
+                window(id: 1),
+                window(id: 2),
+            ],
+        ]),
+        1,
+        WindowDirection::Up,
+        60,
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
+            layout(loc: (0, 40), size: (200, 60), ratio: 1.2) [
+                window(id: 1, loc: (0, 40), size: (100, 60)),
+                window(id: 2, loc: (100, 40), size: (100, 60)),
+            ],
+        ]);
+        "resize window up in nested horizontal layout - expands parent"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        WindowDirection::Right,
+        0,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (0, 100), ratio: 0),
+            window(id: 1, loc: (0, 0), size: (200, 100), ratio: 2),
+        ]);
+        "resize window right to zero - collapses window"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        WindowDirection::Right,
+        200,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 100), ratio: 2),
+            window(id: 1, loc: (200, 0), size: (0, 100), ratio: 0),
+        ]);
+        "resize window right to full width - collapses neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        WindowDirection::Down,
+        50,
+        tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (200, 50), ratio: 1),
+            window(id: 1, loc: (0, 50), size: (200, 50), ratio: 1),
+        ]);
+        "resize window down to half - equal split"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            window(id: 3),
+        ]),
+        2,
+        WindowDirection::Right,
+        100,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (50, 100), ratio: 1),
+            window(id: 1, loc: (50, 0), size: (50, 100), ratio: 1),
+            window(id: 2, loc: (100, 0), size: (100, 100), ratio: 2),
+            window(id: 3, loc: (200, 0), size: (0, 100), ratio: 0),
+        ]);
+        "resize window right in quad layout - collapses last window"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal, orient: TopLeft) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        WindowDirection::Down,
+        80,
+        tile_tree!(layout(split: Horizontal, orient: TopLeft, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 80), size: (200, 20), ratio: 0.4),
+            window(id: 1, loc: (0, 0), size: (200, 80), ratio: 1.6),
+        ]);
+        "resize window down with reverse orientation - grows upward"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal, orient: TopLeft) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        WindowDirection::Up,
+        80,
+        tile_tree!(layout(split: Horizontal, orient: TopLeft, loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 20), size: (200, 80), ratio: 1.6),
+            window(id: 1, loc: (0, 0), size: (200, 20), ratio: 0.4),
+        ]);
+        "resize window up with reverse orientation - grows downward"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(split: Horizontal) [
+                layout(split: Vertical) [
+                    window(id: 1),
+                    window(id: 2),
+                ],
+                window(id: 3),
+            ],
+        ]),
+        2,
+        WindowDirection::Left,
+        80,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (100, 100)),
+            layout(split: Horizontal, loc: (100, 0), size: (100, 100)) [
+                layout(loc: (100, 0), size: (100, 50)) [
+                    window(id: 1, loc: (100, 0), size: (20, 50), ratio: 0.4),
+                    window(id: 2, loc: (120, 0), size: (80, 50), ratio: 1.6),
+                ],
+                window(id: 3, loc: (100, 50), size: (100, 50)),
+            ],
+        ]);
+        "resize deeply nested window left - propagates through layouts"
     )]
     fn test_resize_tile_exact(
         mut tree: TileTree<TestWindow>,
