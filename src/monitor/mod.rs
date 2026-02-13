@@ -14,10 +14,9 @@ use smithay::{
 };
 
 use crate::{
-    input::grabs::floating_resize_grab::ResizeEdge,
     monitor::workspace::{TileResizeUnit, Workspace},
     state::WindowManagerState,
-    utils::get_app_id_and_title,
+    utils::{Direction, get_app_id_and_title},
     window::{
         MappedWindow,
         rule::{
@@ -477,7 +476,7 @@ impl WindowManagerState {
         mapped.toplevel().send_close();
     }
 
-    pub fn focus_tiling_window_in_direction(&mut self, direction: ResizeEdge) {
+    pub fn focus_tiling_window_in_direction(&mut self, direction: Direction) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -525,7 +524,7 @@ impl WindowManagerState {
         workspace.swap_tiling_window(lhs, rhs);
     }
 
-    pub fn swap_focused_tiling_window_in_direction(&mut self, direction: ResizeEdge) {
+    pub fn swap_focused_tiling_window_in_direction(&mut self, direction: Direction) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -552,9 +551,9 @@ impl WindowManagerState {
         }
     }
 
-    pub fn resize_focused_tiling_window_in_edge(
+    pub fn resize_focused_tiling_window(
         &mut self,
-        edges: ResizeEdge,
+        direction: Direction,
         unit: impl Into<TileResizeUnit>,
     ) {
         let keyboard = self.get_keyboard();
@@ -574,7 +573,7 @@ impl WindowManagerState {
         }
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.resize_tiling_window(&surface, edges, unit);
+        workspace.resize_tiling_window(&surface, direction, unit);
     }
 
     pub fn apply_rule_to_mapped_windows(&mut self) {

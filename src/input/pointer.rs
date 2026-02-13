@@ -11,12 +11,13 @@ use smithay::{
 };
 
 use crate::input::KeyModifiers;
-use crate::input::grabs::floating_resize_grab::{FloatingResizeGrab, ResizeEdge};
+use crate::input::grabs::floating_resize_grab::FloatingResizeGrab;
 use crate::input::grabs::move_grab::MoveGrab;
 use crate::input::grabs::swap_grab::SwapGrab;
 use crate::input::grabs::tiling_resize_grab::TilingResizeGrab;
 use crate::monitor::{FoundMappedWindow, TileTreeWindow};
 use crate::state::WindowManagerState;
+use crate::utils::Direction;
 
 pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
 
@@ -80,6 +81,8 @@ impl<'de> Deserialize<'de> for PointerCombo {
 pub enum PointerActions {
     Move,
     Resize,
+    // TODO
+    // Swap
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -88,6 +91,8 @@ pub enum ResizeLocation {
     #[default]
     Corner,
     EdgeOrCorner,
+    // TODO
+    // Edge
 }
 
 impl WindowManagerState {
@@ -183,17 +188,17 @@ impl WindowManagerState {
                         });
                         mapped.set_dirty(true);
 
-                        let edges = match self.pointer_config.resize {
+                        let direction = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
                                 let center = mapped.center_location().to_f64();
                                 if location.x <= center.x && location.y <= center.y {
-                                    ResizeEdge::TOP_LEFT
+                                    Direction::TOP_LEFT
                                 } else if location.x >= center.x && location.y <= center.y {
-                                    ResizeEdge::TOP_RIGHT
+                                    Direction::TOP_RIGHT
                                 } else if location.x <= center.x && location.y >= center.y {
-                                    ResizeEdge::BOTTOM_LEFT
+                                    Direction::BOTTOM_LEFT
                                 } else {
-                                    ResizeEdge::BOTTOM_RIGHT
+                                    Direction::BOTTOM_RIGHT
                                 }
                             }
                             ResizeLocation::EdgeOrCorner => {
@@ -209,28 +214,28 @@ impl WindowManagerState {
 
                                 if x <= width_1_3 {
                                     if y <= height_1_3 {
-                                        ResizeEdge::TOP_LEFT
+                                        Direction::TOP_LEFT
                                     } else if y <= height_2_3 {
-                                        ResizeEdge::LEFT
+                                        Direction::LEFT
                                     } else {
-                                        ResizeEdge::BOTTOM_LEFT
+                                        Direction::BOTTOM_LEFT
                                     }
                                 } else if x <= width_2_3 {
                                     if y <= height_1_3 {
-                                        ResizeEdge::TOP
+                                        Direction::TOP
                                     } else if y <= height_2_3 {
                                         return;
                                     } else {
-                                        ResizeEdge::BOTTOM
+                                        Direction::BOTTOM
                                     }
                                 } else {
                                     #[allow(clippy::collapsible_else_if)]
                                     if y <= height_1_3 {
-                                        ResizeEdge::TOP_RIGHT
+                                        Direction::TOP_RIGHT
                                     } else if y <= height_2_3 {
-                                        ResizeEdge::RIGHT
+                                        Direction::RIGHT
                                     } else {
-                                        ResizeEdge::BOTTOM_RIGHT
+                                        Direction::BOTTOM_RIGHT
                                     }
                                 }
                             }
@@ -240,12 +245,13 @@ impl WindowManagerState {
                             let grab = FloatingResizeGrab::new(
                                 start_data,
                                 mapped.clone(),
-                                edges,
+                                direction,
                                 Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         } else {
-                            let grab = TilingResizeGrab::new(start_data, edges, mapped.get_size());
+                            let grab =
+                                TilingResizeGrab::new(start_data, direction, mapped.get_size());
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         }
                     }

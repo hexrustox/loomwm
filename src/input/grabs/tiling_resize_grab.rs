@@ -1,4 +1,4 @@
-use crate::{input::grabs::floating_resize_grab::ResizeEdge, state::WindowManagerState};
+use crate::{state::WindowManagerState, utils::Direction};
 use smithay::{
     input::{
         SeatHandler,
@@ -15,19 +15,19 @@ use smithay::{
 
 pub struct TilingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
-    edges: ResizeEdge,
+    direction: Direction,
     initial_size: Size<i32, Logical>,
 }
 
 impl TilingResizeGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
-        edges: ResizeEdge,
+        direction: Direction,
         initial_size: Size<i32, Logical>,
     ) -> Self {
         Self {
             start_data,
-            edges,
+            direction,
             initial_size,
         }
     }
@@ -48,8 +48,11 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
 
         let delta = event.location - self.start_data.location;
 
-        if self.edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
-            let adjusted_x = if self.edges.intersects(ResizeEdge::LEFT) {
+        if self
+            .direction
+            .intersects(Direction::LEFT | Direction::RIGHT)
+        {
+            let adjusted_x = if self.direction.intersects(Direction::LEFT) {
                 -delta.x
             } else {
                 delta.x
@@ -57,15 +60,18 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
 
             let new_width = (self.initial_size.w as f64 + adjusted_x) as i32;
 
-            data.resize_focused_tiling_window_in_edge(
-                self.edges
-                    .intersection(ResizeEdge::LEFT | ResizeEdge::RIGHT),
+            data.resize_focused_tiling_window(
+                self.direction
+                    .intersection(Direction::LEFT | Direction::RIGHT),
                 new_width,
             );
         }
 
-        if self.edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
-            let adjusted_y = if self.edges.intersects(ResizeEdge::TOP) {
+        if self
+            .direction
+            .intersects(Direction::TOP | Direction::BOTTOM)
+        {
+            let adjusted_y = if self.direction.intersects(Direction::TOP) {
                 -delta.y
             } else {
                 delta.y
@@ -73,9 +79,9 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
 
             let new_height = (self.initial_size.h as f64 + adjusted_y) as i32;
 
-            data.resize_focused_tiling_window_in_edge(
-                self.edges
-                    .intersection(ResizeEdge::TOP | ResizeEdge::BOTTOM),
+            data.resize_focused_tiling_window(
+                self.direction
+                    .intersection(Direction::TOP | Direction::BOTTOM),
                 new_height,
             );
         }

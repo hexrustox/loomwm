@@ -1,10 +1,3 @@
-use std::fmt;
-
-use bitflags::bitflags;
-use serde::{
-    Deserialize, Deserializer,
-    de::{self, Visitor},
-};
 use smithay::{
     input::pointer::{
         AxisFrame, ButtonEvent, GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent,
@@ -19,73 +12,11 @@ use smithay::{
     utils::{Logical, Point, Rectangle, Size},
 };
 
-use crate::{monitor::TileTreeWindow, state::WindowManagerState, window::MappedWindow};
+use crate::{
+    monitor::TileTreeWindow, state::WindowManagerState, utils::Direction, window::MappedWindow,
+};
 
-bitflags! {
-    #[derive(Debug, Default, Clone, Copy, PartialEq)]
-    pub struct ResizeEdge: u32 {
-        const TOP          = 0b0001;
-        const BOTTOM       = 0b0010;
-        const LEFT         = 0b0100;
-        const RIGHT        = 0b1000;
-
-        const TOP_LEFT     = Self::TOP.bits() | Self::LEFT.bits();
-        const BOTTOM_LEFT  = Self::BOTTOM.bits() | Self::LEFT.bits();
-
-        const TOP_RIGHT    = Self::TOP.bits() | Self::RIGHT.bits();
-        const BOTTOM_RIGHT = Self::BOTTOM.bits() | Self::RIGHT.bits();
-    }
-}
-
-impl ResizeEdge {
-    pub fn opposite(mut self) -> Self {
-        if self.contains(ResizeEdge::TOP) {
-            self.remove(ResizeEdge::TOP);
-            self.insert(ResizeEdge::BOTTOM);
-        } else if self.contains(ResizeEdge::BOTTOM) {
-            self.remove(ResizeEdge::BOTTOM);
-            self.insert(ResizeEdge::TOP);
-        }
-        if self.contains(ResizeEdge::LEFT) {
-            self.remove(ResizeEdge::LEFT);
-            self.insert(ResizeEdge::RIGHT);
-        } else if self.contains(ResizeEdge::RIGHT) {
-            self.remove(ResizeEdge::RIGHT);
-            self.insert(ResizeEdge::LEFT);
-        }
-
-        self
-    }
-}
-
-impl<'de> Deserialize<'de> for ResizeEdge {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct ResizeEdgeVisitor;
-
-        impl<'de> Visitor<'de> for ResizeEdgeVisitor {
-            type Value = ResizeEdge;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("one of the following flags: top, bottom, left, right, top_left, bottom_left, top_right, bottom_right")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                ResizeEdge::from_name(&value.to_uppercase())
-                    .ok_or(E::invalid_value(de::Unexpected::Str(value), &self))
-            }
-        }
-
-        deserializer.deserialize_str(ResizeEdgeVisitor)
-    }
-}
-
-impl From<xdg_toplevel::ResizeEdge> for ResizeEdge {
+impl From<xdg_toplevel::ResizeEdge> for Direction {
     fn from(x: xdg_toplevel::ResizeEdge) -> Self {
         Self::from_bits(x as u32).unwrap()
     }
@@ -95,7 +26,7 @@ pub struct FloatingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     mapped: MappedWindow,
 
-    edges: ResizeEdge,
+    direction: Direction,
 
     initial_rect: Rectangle<i32, Logical>,
     last_size: Size<i32, Logical>,
@@ -105,17 +36,17 @@ impl FloatingResizeGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
         mapped: MappedWindow,
-        edges: ResizeEdge,
+        direction: Direction,
         initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
         mapped.set_resize_state(ResizeGrabState::Resizing {
-            edges,
+            direction,
             initial_rect,
         });
         Self {
             start_data,
             mapped,
-            edges,
+            direction,
             initial_rect,
             last_size: initial_rect.size,
         }
@@ -137,16 +68,22 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
         let mut new_width = self.initial_rect.size.w;
         let mut new_height = self.initial_rect.size.h;
 
-        if self.edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
-            if self.edges.intersects(ResizeEdge::LEFT) {
+        if self
+            .direction
+            .intersects(Direction::LEFT | Direction::RIGHT)
+        {
+            if self.direction.intersects(Direction::LEFT) {
                 delta.x = -delta.x;
             }
 
             new_width = (self.initial_rect.size.w as f64 + delta.x) as i32;
         }
 
-        if self.edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
-            if self.edges.intersects(ResizeEdge::TOP) {
+        if self
+            .direction
+            .intersects(Direction::TOP | Direction::BOTTOM)
+        {
+            if self.direction.intersects(Direction::TOP) {
                 delta.y = -delta.y;
             }
 
@@ -192,7 +129,7 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
 
             self.mapped
                 .set_resize_state(ResizeGrabState::WaitingForLastCommit {
-                    edges: self.edges,
+                    direction: self.direction,
                     initial_rect: self.initial_rect,
                 });
         }
@@ -299,28 +236,28 @@ pub enum ResizeGrabState {
     #[default]
     Idle,
     Resizing {
-        edges: ResizeEdge,
+        direction: Direction,
         initial_rect: Rectangle<i32, Logical>,
     },
     WaitingForLastCommit {
-        edges: ResizeEdge,
+        direction: Direction,
         initial_rect: Rectangle<i32, Logical>,
     },
 }
 
 impl ResizeGrabState {
-    pub fn commit(&mut self) -> Option<(ResizeEdge, Rectangle<i32, Logical>)> {
+    pub fn commit(&mut self) -> Option<(Direction, Rectangle<i32, Logical>)> {
         match *self {
             Self::Resizing {
-                edges,
+                direction,
                 initial_rect,
-            } => Some((edges, initial_rect)),
+            } => Some((direction, initial_rect)),
             Self::WaitingForLastCommit {
-                edges,
+                direction,
                 initial_rect,
             } => {
                 *self = Self::Idle;
-                Some((edges, initial_rect))
+                Some((direction, initial_rect))
             }
             Self::Idle => None,
         }

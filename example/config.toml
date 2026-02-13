@@ -50,10 +50,10 @@ default = "master"
 "alt+shift+j" = { action = "swap_window", direction = "bottom" }
 "alt+shift+k" = { action = "swap_window", direction = "top" }
 "alt+shift+l" = { action = "swap_window", direction = "right" }
-"alt+ctrl+h" = { action = "resize_window", edge = "left", unit = "50px" }
-"alt+ctrl+j" = { action = "resize_window", edge = "bottom", unit = "50px" }
-"alt+ctrl+k" = { action = "resize_window", edge = "top", unit = "50px" }
-"alt+ctrl+l" = { action = "resize_window", edge = "right", unit = "50px" }
+"alt+ctrl+h" = { action = "resize_window", direction = "left", unit = "50px" }
+"alt+ctrl+j" = { action = "resize_window", direction = "bottom", unit = "50px" }
+"alt+ctrl+k" = { action = "resize_window", direction = "top", unit = "50px" }
+"alt+ctrl+l" = { action = "resize_window", direction = "right", unit = "50px" }
 "alt+space" = { action = "toggle_floating" }
 "alt+q" = { action = "close_window" }
 "alt+t" = { action = "execute", command = ["alacritty"] }

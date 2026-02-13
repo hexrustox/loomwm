@@ -147,17 +147,4 @@ impl WindowManagerState {
             pointer_config: config.pointer,
         }
     }
-
-    pub fn update_config(&mut self, config: Config) {
-        if self.window_rules.get_hash() != config.window_rules.get_hash() {
-            self.window_rules = config.window_rules;
-            self.apply_rule_to_mapped_windows();
-        }
-
-        self.general_config = config.general;
-        self.layout_set = Rc::new(config.layouts.layout_set);
-        self.default_layout = Rc::from(config.layouts.default);
-        self.key_config = config.key;
-        self.pointer_config = config.pointer;
-    }
 }

@@ -13,9 +13,9 @@ use smithay::{
 use xkbcommon::xkb::{self, keysyms::KEY_NoSymbol};
 
 use crate::{
-    input::grabs::floating_resize_grab::ResizeEdge,
     monitor::{TileRatio, WorkspaceName},
     state::WindowManagerState,
+    utils::Direction,
 };
 
 bitflags! {
@@ -100,13 +100,13 @@ pub enum KeyAction {
         focus: bool,
     },
     FocusWindow {
-        direction: ResizeEdge,
+        direction: Direction,
     },
     SwapWindow {
-        direction: ResizeEdge,
+        direction: Direction,
     },
     ResizeWindow {
-        edge: ResizeEdge,
+        direction: Direction,
         unit: WindowUnit,
     },
     ToggleFloating,
@@ -217,8 +217,8 @@ impl WindowManagerState {
                         SwapWindow { direction } => {
                             data.swap_focused_tiling_window_in_direction(*direction);
                         }
-                        ResizeWindow { edge, unit } => {
-                            data.resize_focused_tiling_window_in_edge(*edge, *unit);
+                        ResizeWindow { direction, unit } => {
+                            data.resize_focused_tiling_window(*direction, *unit);
                         }
                         ToggleFloating => {
                             data.toggle_focused_window_floating();
@@ -279,8 +279,8 @@ mod tests {
     }
 
     #[test_case(r#"{ action = "switch_workspace", name = 1 }"#, KeyAction::SwitchWorkspace { name: WorkspaceName::Id(1) })]
-    #[test_case(r#"{ action = "focus_window", direction = "top" }"#, KeyAction::FocusWindow { direction: ResizeEdge::TOP })]
-    #[test_case(r#"{ action = "resize_window", edge = "right", unit = "10px" }"#, KeyAction::ResizeWindow { edge: ResizeEdge::RIGHT, unit: WindowUnit::Px(10) })]
+    #[test_case(r#"{ action = "focus_window", direction = "top" }"#, KeyAction::FocusWindow { direction: Direction::TOP })]
+    #[test_case(r#"{ action = "resize_window", direction = "right", unit = "10px" }"#, KeyAction::ResizeWindow { direction: Direction::RIGHT, unit: WindowUnit::Px(10) })]
     #[test_case(r#"{ action = "execute", command = [] }"#, KeyAction::Execute { command: vec![] })]
     fn test_deserialize_action(input: &str, expected: KeyAction) {
         assert_eq!(

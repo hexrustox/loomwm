@@ -1,6 +1,6 @@
 use crate::{
-    input::{WindowUnit, grabs::floating_resize_grab::ResizeEdge},
-    utils::floats_to_ints,
+    input::WindowUnit,
+    utils::{Direction, floats_to_ints},
     window::MappedWindow,
 };
 use serde::Deserialize;
@@ -636,7 +636,7 @@ impl<T: TileTreeWindow> TileTree<T> {
     pub fn find_windows_in_direction<'a>(
         &self,
         key: impl SearchKey<'a>,
-        direction: ResizeEdge,
+        direction: Direction,
     ) -> Vec<&T> {
         #[derive(Debug)]
         struct Rect {
@@ -676,17 +676,17 @@ impl<T: TileTreeWindow> TileTree<T> {
                 self.top() <= other.bottom() && self.bottom() >= other.top()
             }
 
-            fn is_in_direction(&self, direction: ResizeEdge, target: &Rect) -> bool {
-                direction.contains(ResizeEdge::TOP)
+            fn is_in_direction(&self, direction: Direction, target: &Rect) -> bool {
+                direction.contains(Direction::TOP)
                     && self.bottom() <= target.top()
                     && self.overlaps_horizontally(target)
-                    || direction.contains(ResizeEdge::BOTTOM)
+                    || direction.contains(Direction::BOTTOM)
                         && self.top() >= target.bottom()
                         && self.overlaps_horizontally(target)
-                    || direction.contains(ResizeEdge::LEFT)
+                    || direction.contains(Direction::LEFT)
                         && self.right() <= target.left()
                         && self.overlaps_vertically(target)
-                    || direction.contains(ResizeEdge::RIGHT)
+                    || direction.contains(Direction::RIGHT)
                         && self.left() >= target.right()
                         && self.overlaps_vertically(target)
             }
@@ -746,12 +746,12 @@ impl<T: TileTreeWindow> TileTree<T> {
         &mut self,
         parent_id: TileId,
         child_id: TileId,
-        edge: ResizeEdge,
+        direction: Direction,
         unit: TileResizeUnit,
         in_loop: bool,
     ) {
         #[cfg(test)]
-        assert!(edge.bits().count_ones() == 1);
+        assert!(direction.bits().count_ones() == 1);
 
         let parent = &self.arena[parent_id];
         let TileKind::Layout {
@@ -765,7 +765,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             return;
         };
 
-        let offset = if edge.intersects(ResizeEdge::BOTTOM_RIGHT) {
+        let offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
             1
         } else {
             -1
@@ -786,9 +786,9 @@ impl<T: TileTreeWindow> TileTree<T> {
         if !in_bounds {
             if let Some((ancestor_id, refer_id)) = self.find_ancestor_with_split(parent_id, *split)
             {
-                self.adjust_adjacent_ratios(ancestor_id, refer_id, edge, unit, false);
+                self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
             } else if !in_loop && !matches!(unit, TileResizeUnit::Exact(..)) {
-                self.adjust_adjacent_ratios(parent_id, child_id, edge.opposite(), -unit, true);
+                self.adjust_adjacent_ratios(parent_id, child_id, direction.opposite(), -unit, true);
             }
             return;
         }
@@ -804,8 +804,8 @@ impl<T: TileTreeWindow> TileTree<T> {
             TileSplit::Horizontal => size.h,
         } as f64;
 
-        let length_from_edge = |edge: ResizeEdge, s: Size<i32, Logical>| {
-            if edge.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
+        let length_from_direction = |direction: Direction, s: Size<i32, Logical>| {
+            if direction.intersects(Direction::LEFT | Direction::RIGHT) {
                 s.w
             } else {
                 s.h
@@ -822,8 +822,8 @@ impl<T: TileTreeWindow> TileTree<T> {
                 let tile_size = kind_size(&self.arena[child_id].kind);
                 let other_size = kind_size(&self.arena[other_id].kind);
 
-                let tile_length = length_from_edge(edge, tile_size);
-                let other_length = length_from_edge(edge, other_size);
+                let tile_length = length_from_direction(direction, tile_size);
+                let other_length = length_from_direction(direction, other_size);
 
                 let tile_ratio = self.arena[child_id].ratio.0;
                 let other_ratio = self.arena[other_id].ratio.0;
@@ -884,7 +884,7 @@ impl<T: TileTreeWindow> TileTree<T> {
     pub fn resize_tile<'a>(
         &mut self,
         key: impl SearchKey<'a>,
-        edges: ResizeEdge,
+        direction: Direction,
         unit: impl Into<TileResizeUnit>,
     ) {
         let Some(window_id) = self.find_tile_id(key.into()) else {
@@ -899,30 +899,30 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let split = *split;
         let unit = unit.into();
-        if edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
+        if direction.intersects(Direction::TOP | Direction::BOTTOM) {
             match split {
                 TileSplit::Vertical => {
                     if let Some((ancestor_id, refer_id)) =
                         self.find_ancestor_with_split(window_id, TileSplit::Horizontal)
                     {
-                        self.adjust_adjacent_ratios(ancestor_id, refer_id, edges, unit, false);
+                        self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
                     }
                 }
                 TileSplit::Horizontal => {
-                    self.adjust_adjacent_ratios(parent_id, window_id, edges, unit, false);
+                    self.adjust_adjacent_ratios(parent_id, window_id, direction, unit, false);
                 }
             }
         }
-        if edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
+        if direction.intersects(Direction::LEFT | Direction::RIGHT) {
             match split {
                 TileSplit::Vertical => {
-                    self.adjust_adjacent_ratios(parent_id, window_id, edges, unit, false);
+                    self.adjust_adjacent_ratios(parent_id, window_id, direction, unit, false);
                 }
                 TileSplit::Horizontal => {
                     if let Some((ancestor_id, refer_id)) =
                         self.find_ancestor_with_split(window_id, TileSplit::Vertical)
                     {
-                        self.adjust_adjacent_ratios(ancestor_id, refer_id, edges, unit, false);
+                        self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
                     }
                 }
             }
@@ -1860,7 +1860,7 @@ mod tests {
     #[test_case(
         tile_tree!(layout() [window(id: 0)]),
         0,
-        ResizeEdge::TOP,
+        Direction::TOP,
         vec![];
         "single window no neighbors"
     )]
@@ -1870,7 +1870,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::TOP,
+        Direction::TOP,
         vec![];
         "horizontal split top has no up neighbor"
     )]
@@ -1880,7 +1880,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         vec![];
         "horizontal split left no meaning"
     )]
@@ -1890,7 +1890,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         vec![1];
         "horizontal split two windows down"
     )]
@@ -1900,7 +1900,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::TOP,
+        Direction::TOP,
         vec![0];
         "horizontal split two windows up"
     )]
@@ -1910,7 +1910,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         vec![1];
         "vertical split two windows right"
     )]
@@ -1920,7 +1920,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         vec![0];
         "vertical split two windows left"
     )]
@@ -1930,7 +1930,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         vec![1];
         "two windows TopLeft orientation left"
     )]
@@ -1942,7 +1942,7 @@ mod tests {
             window(id: 3),
         ]),
         1,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         vec![2, 3];
         "four windows multiple in direction"
     )]
@@ -1954,7 +1954,7 @@ mod tests {
             window(id: 3),
         ]),
         1,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         vec![2, 3];
         "four horizontal skip neighbor multiple below"
     )]
@@ -1971,7 +1971,7 @@ mod tests {
             ]
         ]),
         2,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         vec![4];
         "nested columns right from left column"
     )]
@@ -1988,7 +1988,7 @@ mod tests {
             ]
         ]),
         4,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         vec![1, 2];
         "nested columns left from right column"
     )]
@@ -2005,7 +2005,7 @@ mod tests {
             ]
         ]),
         1,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         vec![3, 4];
         "nested rows down from top row"
     )]
@@ -2022,7 +2022,7 @@ mod tests {
             ]
         ]),
         3,
-        ResizeEdge::TOP,
+        Direction::TOP,
         vec![0, 1];
         "nested rows up from bottom row"
     )]
@@ -2035,7 +2035,7 @@ mod tests {
             ],
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         vec![1, 2];
         "navigate into nested layout"
     )]
@@ -2050,7 +2050,7 @@ mod tests {
             window(id: 2),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         vec![1, 2];
         "navigate through multiple layout levels"
     )]
@@ -2063,7 +2063,7 @@ mod tests {
             ],
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         vec![1, 2];
         "navigate into TopLeft nested layout"
     )]
@@ -2073,9 +2073,9 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::TOP_LEFT,
+        Direction::TOP_LEFT,
         vec![];
-        "composite edges no neighbor"
+        "composite direction no neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2083,9 +2083,9 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::BOTTOM_LEFT,
+        Direction::BOTTOM_LEFT,
         vec![0];
-        "composite edges finds window"
+        "composite direction finds window"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2101,14 +2101,14 @@ mod tests {
             window(id: 3),
         ]),
         0,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         vec![1, 2];
         "deep nesting three levels down"
     )]
     fn test_find_windows_in_direction(
         mut tree: TileTree<TestWindow>,
         id: u32,
-        direction: ResizeEdge,
+        direction: Direction,
         expected: Vec<u32>,
     ) {
         tree.update_tile_size((0, 0).into(), (100, 100).into());
@@ -2131,7 +2131,7 @@ mod tests {
         tree.update_tile_size((0, 0).into(), (100, 100).into());
 
         let result: Vec<u32> = tree
-            .find_windows_in_direction(99, ResizeEdge::RIGHT)
+            .find_windows_in_direction(99, Direction::RIGHT)
             .iter()
             .map(|w| w.inner.borrow().id.unwrap())
             .collect();
@@ -2307,7 +2307,7 @@ mod tests {
             window(id: 0),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 100)),
@@ -2320,7 +2320,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
@@ -2334,7 +2334,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
@@ -2348,7 +2348,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         -10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
@@ -2362,13 +2362,13 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
             window(id: 1, loc: (90, 0), size: (110, 100), ratio: 1.1),
         ]);
-        "resize two windows left edge grows other neighbor"
+        "resize two windows left direction grows other neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2376,13 +2376,13 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
             window(id: 1, loc: (110, 0), size: (90, 100), ratio: 0.9),
         ]);
-        "resize two windows right edge grows other neighbor"
+        "resize two windows right direction grows other neighbor"
     )]
     #[test_case(
         tile_tree!(layout(split: Horizontal) [
@@ -2390,7 +2390,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::TOP,
+        Direction::TOP,
         10,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
@@ -2404,13 +2404,13 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::TOP,
+        Direction::TOP,
         10,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
             window(id: 1, loc: (0, 40), size: (200, 60), ratio: 1.2),
         ]);
-        "resize horizontal split top edge grows bottom neighbor"
+        "resize horizontal split top direction grows bottom neighbor"
     )]
     #[test_case(
         tile_tree!(layout() [
@@ -2419,7 +2419,7 @@ mod tests {
             window(id: 2),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (57, 100), ratio: 0.85),
@@ -2437,7 +2437,7 @@ mod tests {
             ]
         ]),
         1,
-        ResizeEdge::TOP,
+        Direction::TOP,
         10,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 40), ratio: 0.8),
@@ -2457,7 +2457,7 @@ mod tests {
             ]
         ]),
         2,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         10,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 60), ratio: 1.2),
@@ -2482,7 +2482,7 @@ mod tests {
             ]
         ]),
         3,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (67, 100)),
@@ -2511,7 +2511,7 @@ mod tests {
             ],
         ]),
         2,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
@@ -2532,7 +2532,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         10,
         tile_tree!(layout(split: Horizontal, orient: TopLeft, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 60), size: (200, 40), ratio: 0.8),
@@ -2546,7 +2546,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         150,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (0, 100), ratio: 0),
@@ -2557,12 +2557,12 @@ mod tests {
     fn test_resize_tile(
         mut tree: TileTree<TestWindow>,
         id: u32,
-        edge: ResizeEdge,
+        direction: Direction,
         px: i32,
         expected: TileTree<TestWindow>,
     ) {
         tree.update_tile_size((0, 0).into(), (200, 100).into());
-        tree.resize_tile(id, edge, WindowUnit::Px(px));
+        tree.resize_tile(id, direction, WindowUnit::Px(px));
         tree.update_tile_size((0, 0).into(), (200, 100).into());
         assert_tree_eq!(tree, expected)
     }
@@ -2573,7 +2573,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         0.1,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (110, 100), ratio: 1.1),
@@ -2587,7 +2587,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         -0.1,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
@@ -2601,7 +2601,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         0.2,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 60), ratio: 1.2),
@@ -2616,7 +2616,7 @@ mod tests {
             window(id: 2, ratio: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         0.1,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (60, 100), ratio: 0.9),
@@ -2634,7 +2634,7 @@ mod tests {
             ],
         ]),
         1,
-        ResizeEdge::TOP,
+        Direction::TOP,
         0.15,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (100, 100), ratio: 1),
@@ -2651,7 +2651,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         1.5,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 100), ratio: 2),
@@ -2662,12 +2662,12 @@ mod tests {
     fn test_resize_tile_ratio(
         mut tree: TileTree<TestWindow>,
         id: u32,
-        edge: ResizeEdge,
+        direction: Direction,
         ratio: f64,
         expected: TileTree<TestWindow>,
     ) {
         tree.update_tile_size((0, 0).into(), (200, 100).into());
-        tree.resize_tile(id, edge, TileResizeUnit::Ratio(ratio));
+        tree.resize_tile(id, direction, TileResizeUnit::Ratio(ratio));
         tree.update_tile_size((0, 0).into(), (200, 100).into());
         assert_tree_eq!(tree, expected)
     }
@@ -2677,7 +2677,7 @@ mod tests {
             window(id: 0),
         ]),
         0,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         10,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 100)),
@@ -2690,7 +2690,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         120,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (80, 100), ratio: 0.8),
@@ -2704,7 +2704,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         120,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (120, 100), ratio: 1.2),
@@ -2718,7 +2718,7 @@ mod tests {
             window(id: 1),
         ]),
         1,
-        ResizeEdge::TOP,
+        Direction::TOP,
         70,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 30), ratio: 0.6),
@@ -2732,7 +2732,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         30,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 30), ratio: 0.6),
@@ -2752,7 +2752,7 @@ mod tests {
             ],
         ]),
         1,
-        ResizeEdge::BOTTOM,
+        Direction::BOTTOM,
         30,
         tile_tree!(layout(split: Horizontal, loc: (0, 0), size: (200, 100)) [
             layout(loc: (0, 0), size: (200, 30), ratio: 0.6) [
@@ -2773,7 +2773,7 @@ mod tests {
             window(id: 2),
         ]),
         1,
-        ResizeEdge::LEFT,
+        Direction::LEFT,
         60,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (73, 100), ratio: 1.1),
@@ -2788,7 +2788,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         300,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (200, 100), ratio: 2),
@@ -2802,7 +2802,7 @@ mod tests {
             window(id: 1),
         ]),
         0,
-        ResizeEdge::RIGHT,
+        Direction::RIGHT,
         -50,
         tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
             window(id: 0, loc: (0, 0), size: (0, 100), ratio: 0),
@@ -2813,12 +2813,12 @@ mod tests {
     fn test_resize_tile_exact(
         mut tree: TileTree<TestWindow>,
         id: u32,
-        edge: ResizeEdge,
+        direction: Direction,
         px: i32,
         expected: TileTree<TestWindow>,
     ) {
         tree.update_tile_size((0, 0).into(), (200, 100).into());
-        tree.resize_tile(id, edge, px);
+        tree.resize_tile(id, direction, px);
         tree.update_tile_size((0, 0).into(), (200, 100).into());
         assert_tree_eq!(tree, expected)
     }

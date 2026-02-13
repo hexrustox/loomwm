@@ -18,8 +18,9 @@ use smithay::{
 };
 
 use crate::{
-    input::grabs::floating_resize_grab::{ResizeEdge, ResizeGrabState},
+    input::grabs::floating_resize_grab::ResizeGrabState,
     monitor::{TileTreeSearchKey, TileTreeWindow},
+    utils::Direction,
     window::rule::WindowProperties,
 };
 
@@ -260,13 +261,13 @@ impl MappedWindow {
             let mut new_x = None;
             let mut new_y = None;
 
-            if let Some((edges, initial_rect)) = self.inner().data.resize_state.commit()
-                && edges.intersects(ResizeEdge::TOP_LEFT)
+            if let Some((direction, initial_rect)) = self.inner().data.resize_state.commit()
+                && direction.intersects(Direction::TOP_LEFT)
             {
-                if edges.intersects(ResizeEdge::LEFT) {
+                if direction.intersects(Direction::LEFT) {
                     new_x = Some(initial_rect.loc.x + (initial_rect.size.w - geometry.size.w))
                 };
-                if edges.intersects(ResizeEdge::TOP) {
+                if direction.intersects(Direction::TOP) {
                     new_y = Some(initial_rect.loc.y + (initial_rect.size.h - geometry.size.h))
                 };
             }
