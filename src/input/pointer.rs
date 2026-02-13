@@ -1,8 +1,7 @@
-use std::str::FromStr;
-use std::{collections::HashMap, fmt};
+use std::collections::HashMap;
 
 use evdev::KeyCode;
-use serde::{Deserialize, Deserializer, de};
+use serde::Deserialize;
 use smithay::{
     backend::input::{ButtonState, InputBackend, PointerButtonEvent, PointerMotionAbsoluteEvent},
     input::pointer::{ButtonEvent, Focus, GrabStartData as PointerGrabStartData, MotionEvent},
@@ -24,55 +23,12 @@ pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub struct PointerCombo {
     modifiers: KeyModifiers,
-    code: KeyCode,
+    key: KeyCode,
 }
 
-impl<'de> Deserialize<'de> for PointerCombo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct PointerBindingVisitor;
-
-        impl<'de> de::Visitor<'de> for PointerBindingVisitor {
-            type Value = PointerCombo;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a pointer binding string")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
-
-                if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
-                    return Err(E::custom("empty pointer binding"));
-                }
-
-                let mut modifiers = KeyModifiers::empty();
-
-                let (key_part, mod_parts) = parts.split_last().unwrap();
-
-                for &m in mod_parts {
-                    match m.to_lowercase().as_str() {
-                        "ctrl" => modifiers |= KeyModifiers::CTRL,
-                        "shift" => modifiers |= KeyModifiers::SHIFT,
-                        "alt" => modifiers |= KeyModifiers::ALT,
-                        "super" => modifiers |= KeyModifiers::SUPER,
-                        _ => return Err(E::custom(format!("unknown modifier: {}", m))),
-                    }
-                }
-
-                let code = KeyCode::from_str(&key_part.to_uppercase())
-                    .map_err(|_| E::custom(format!("unknown key code: {}", key_part)))?;
-
-                Ok(PointerCombo { modifiers, code })
-            }
-        }
-
-        deserializer.deserialize_str(PointerBindingVisitor)
+impl PointerCombo {
+    pub fn new(modifiers: KeyModifiers, key: KeyCode) -> Self {
+        Self { modifiers, key }
     }
 }
 
@@ -140,7 +96,7 @@ impl WindowManagerState {
         if button_state == ButtonState::Pressed
             && let Some(action) = self.pointer_config.bindings.get(&PointerCombo {
                 modifiers: self.key_modifiers,
-                code: KeyCode(button as u16),
+                key: KeyCode(button as u16),
             })
         {
             use PointerActions::*;
@@ -269,32 +225,5 @@ impl WindowManagerState {
             },
         );
         pointer.frame(self);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use test_case::test_case;
-
-    #[derive(Deserialize)]
-    struct T {
-        x: PointerCombo,
-    }
-
-    #[test_case(r#""btn_left""#, KeyCode::BTN_LEFT; "single key")]
-    fn test_deserialize(input: &str, code: KeyCode) {
-        assert_eq!(
-            toml::from_str::<T>(&("x = ".to_string() + input))
-                .unwrap()
-                .x
-                .code,
-            code
-        );
-    }
-
-    #[test_case(r#""foo""#)]
-    fn test_deserialize_fail(input: &str) {
-        assert!(toml::from_str::<T>(&("x = ".to_string() + input)).is_err())
     }
 }

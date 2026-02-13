@@ -29,6 +29,8 @@ where
     layout_trace: Vec<TileLayoutTrace>,
 }
 
+pub type TileRatio = f64;
+
 #[derive(Debug, Clone)]
 struct Tile<T> {
     kind: TileKind<T>,
@@ -77,30 +79,6 @@ impl<T> Tile<T> {
             TileKind::Layout { tiles, .. } => tiles,
             _ => unreachable!(),
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
-#[serde(transparent)]
-pub struct TileRatio(pub f64);
-
-impl Default for TileRatio {
-    fn default() -> Self {
-        Self(1.0)
-    }
-}
-
-impl std::hash::Hash for TileRatio {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.to_bits().hash(state);
-    }
-}
-
-impl Neg for TileRatio {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self(-self.0)
     }
 }
 
@@ -196,7 +174,9 @@ struct LayoutSchema {
     nodes: Vec<LayoutNode>,
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+pub type TileRepeat = usize;
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct LayoutNode {
     layout: Option<String>,
@@ -204,13 +184,13 @@ struct LayoutNode {
     ratio: TileRatio,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(transparent)]
-struct TileRepeat(usize);
-
-impl Default for TileRepeat {
+impl Default for LayoutNode {
     fn default() -> Self {
-        TileRepeat(1)
+        Self {
+            layout: None,
+            repeat: 1,
+            ratio: 1.,
+        }
     }
 }
 
@@ -248,7 +228,7 @@ impl From<WindowUnit> for TileResizeUnit {
     fn from(value: WindowUnit) -> Self {
         match value {
             WindowUnit::Px(x) => Self::Px(x),
-            WindowUnit::Ratio(x) => Self::Ratio(x.0),
+            WindowUnit::Ratio(x) => Self::Ratio(x),
         }
     }
 }
@@ -306,7 +286,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         for i in trace.index..layout.nodes.len() {
             trace.index = i;
             let node = &layout.nodes[i];
-            if trace.repeat < node.repeat.0 {
+            if trace.repeat < node.repeat {
                 if let Some(layout_name) = &node.layout {
                     let layout = self.layouts.get(layout_name);
                     let new_tile = Tile {
@@ -357,7 +337,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         if let Some(pre_trace) = self.layout_trace.last_mut() {
             let layout = self.layouts.get(&pre_trace.layout);
             let node = &layout.nodes[pre_trace.index];
-            if pre_trace.repeat >= node.repeat.0 {
+            if pre_trace.repeat >= node.repeat {
                 pre_trace.repeat = 0;
                 pre_trace.index += 1;
             }
@@ -500,7 +480,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 return;
             };
 
-            let total_ratio: f64 = tiles.iter().map(|&tid| arena[tid].ratio.0).sum();
+            let total_ratio: f64 = tiles.iter().map(|&tid| arena[tid].ratio).sum();
             let total_len = match split {
                 TileSplit::Vertical => size.w,
                 TileSplit::Horizontal => size.h,
@@ -508,7 +488,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
             let floats: Vec<_> = tiles
                 .iter()
-                .map(|&tid| total_len as f64 * arena[tid].ratio.0 / total_ratio)
+                .map(|&tid| total_len as f64 * arena[tid].ratio / total_ratio)
                 .collect();
             let ints = floats_to_ints(&floats, total_len);
 
@@ -797,7 +777,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let total_ratio = tiles
             .iter()
-            .fold(0.0, |acc, id| acc + self.arena[*id].ratio.0);
+            .fold(0.0, |acc, id| acc + self.arena[*id].ratio);
 
         let size_component = match split {
             TileSplit::Vertical => size.w,
@@ -825,8 +805,8 @@ impl<T: TileTreeWindow> TileTree<T> {
                 let tile_length = length_from_direction(direction, tile_size);
                 let other_length = length_from_direction(direction, other_size);
 
-                let tile_ratio = self.arena[child_id].ratio.0;
-                let other_ratio = self.arena[other_id].ratio.0;
+                let tile_ratio = self.arena[child_id].ratio;
+                let other_ratio = self.arena[other_id].ratio;
 
                 let total_length = tile_length + other_length;
                 let pair_total_ratio = tile_ratio + other_ratio;
@@ -839,23 +819,22 @@ impl<T: TileTreeWindow> TileTree<T> {
                 let new_other_ratio =
                     new_other_length as f64 / total_length as f64 * pair_total_ratio;
 
-                self.arena[child_id].ratio.0 = new_tile_ratio;
-                self.arena[other_id].ratio.0 = new_other_ratio;
+                self.arena[child_id].ratio = new_tile_ratio;
+                self.arena[other_id].ratio = new_other_ratio;
             }
             TileResizeUnit::Px(px) => {
                 let ratio_offset = px as f64 * total_ratio / size_component;
                 let ratio_offset =
-                    ratio_offset.clamp(-self.arena[child_id].ratio.0, self.arena[other_id].ratio.0);
+                    ratio_offset.clamp(-self.arena[child_id].ratio, self.arena[other_id].ratio);
 
-                self.arena[child_id].ratio.0 += ratio_offset;
-                self.arena[other_id].ratio.0 -= ratio_offset;
+                self.arena[child_id].ratio += ratio_offset;
+                self.arena[other_id].ratio -= ratio_offset;
             }
             TileResizeUnit::Ratio(r) => {
-                let ratio_offset =
-                    r.clamp(-self.arena[child_id].ratio.0, self.arena[other_id].ratio.0);
+                let ratio_offset = r.clamp(-self.arena[child_id].ratio, self.arena[other_id].ratio);
 
-                self.arena[child_id].ratio.0 += ratio_offset;
-                self.arena[other_id].ratio.0 -= ratio_offset;
+                self.arena[child_id].ratio += ratio_offset;
+                self.arena[other_id].ratio -= ratio_offset;
             }
         }
     }
@@ -1004,8 +983,8 @@ mod tests {
                 };
 
                 const PRECISION: f64 = 100.;
-                if (tile_a.ratio.0 * PRECISION).round() / PRECISION
-                    != (tile_b.ratio.0 * PRECISION).round() / PRECISION
+                if (tile_a.ratio * PRECISION).round() / PRECISION
+                    != (tile_b.ratio * PRECISION).round() / PRECISION
                 {
                     return false;
                 }
@@ -1098,7 +1077,7 @@ mod tests {
                         window.inner.borrow().location.y,
                         window.inner.borrow().size.w,
                         window.inner.borrow().size.h,
-                        tile.ratio.0
+                        tile.ratio
                     ));
                 }
                 TileKind::Layout {
@@ -1110,7 +1089,7 @@ mod tests {
                 } => {
                     f.push_str(&format!(
                         "Layout [{:?}, {:?}, loc: ({}, {}), size: ({}, {}), ratio: {}]\n",
-                        split, orientation, location.x, location.y, size.w, size.h, tile.ratio.0
+                        split, orientation, location.x, location.y, size.w, size.h, tile.ratio
                     ));
 
                     let new_prefix = format!(
@@ -1165,7 +1144,7 @@ mod tests {
             tile_tree!(@window_opt window ratio $($opts)*);
             $arena.insert(Tile {
                 kind: TileKind::Window(window),
-                ratio: TileRatio(ratio),
+                ratio,
                 parent: $parent,
             })
         }};
@@ -1218,7 +1197,7 @@ mod tests {
                     location,
                     size,
                 },
-                ratio: TileRatio(ratio),
+                ratio,
                 parent: $parent,
             });
 
@@ -1251,11 +1230,11 @@ mod tests {
     macro_rules! node {
         (@opt $layout:ident $repeat:ident $ratio:ident) => {};
         (@opt $layout:ident $repeat:ident $ratio:ident repeat: $r:expr $(, $($rest:tt)*)?) => {
-            $repeat = TileRepeat($r);
+            $repeat = $r;
             $(node!(@opt $layout $repeat $ratio $($rest)*);)?
         };
         (@opt $layout:ident $repeat:ident $ratio:ident ratio: $s:expr $(, $($rest:tt)*)?) => {
-            $ratio = $s;
+            $ratio = $s as f64;
             $(node!(@opt $layout $repeat $ratio $($rest)*);)?
         };
 
@@ -1263,22 +1242,22 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut layout = None;
             #[allow(unused_mut, unused_assignments)]
-            let mut repeat = TileRepeat(1);
+            let mut repeat = 1;
             #[allow(unused_mut, unused_assignments)]
-            let mut ratio = 1;
+            let mut ratio = 1.0;
             $(node!(@opt layout repeat ratio $($opts)*);)?
-            LayoutNode { layout, repeat, ratio: TileRatio(ratio as f64) }
+            LayoutNode { layout, repeat, ratio }
         }};
 
         (ref: $name:expr $(, $($opts:tt)*)?) => {{
             #[allow(unused_mut, unused_assignments)]
             let mut layout = Some($name.to_string());
             #[allow(unused_mut, unused_assignments)]
-            let mut repeat = TileRepeat(1);
+            let mut repeat = 1;
             #[allow(unused_mut, unused_assignments)]
-            let mut ratio = 1;
+            let mut ratio = 1.0;
             $(node!(@opt layout repeat ratio $($opts)*);)?
-            LayoutNode { layout, repeat, ratio: TileRatio(ratio as f64) }
+            LayoutNode { layout, repeat, ratio }
         }};
     }
 
@@ -1554,7 +1533,7 @@ mod tests {
             "root",
         );
         for i in 1..=3 {
-            tree.insert(TestWindow::new(), Some(TileRatio(i as f64)));
+            tree.insert(TestWindow::new(), Some(i as f64));
         }
         let expected = tile_tree!(layout() [
             window(ratio: 1),

@@ -10,7 +10,6 @@ use smithay::{
     input::keyboard::{FilterResult, Keysym},
     utils::SERIAL_COUNTER,
 };
-use xkbcommon::xkb::{self, keysyms::KEY_NoSymbol};
 
 use crate::{
     monitor::{TileRatio, WorkspaceName},
@@ -36,55 +35,9 @@ pub struct KeyCombo {
     key: Keysym,
 }
 
-impl<'de> Deserialize<'de> for KeyCombo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct KeyComboVisitor;
-
-        impl<'de> de::Visitor<'de> for KeyComboVisitor {
-            type Value = KeyCombo;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a keybinding string")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
-
-                if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
-                    return Err(E::custom("empty keybinding"));
-                }
-
-                let mut modifiers = KeyModifiers::empty();
-
-                let (key_part, mod_parts) = parts.split_last().unwrap();
-
-                for &m in mod_parts {
-                    match m.to_lowercase().as_str() {
-                        "ctrl" => modifiers |= KeyModifiers::CTRL,
-                        "shift" => modifiers |= KeyModifiers::SHIFT,
-                        "alt" => modifiers |= KeyModifiers::ALT,
-                        "super" => modifiers |= KeyModifiers::SUPER,
-                        _ => return Err(E::custom(format!("unknown modifier: {}", m))),
-                    }
-                }
-
-                let key = xkb::keysym_from_name(key_part, xkb::KEYSYM_CASE_INSENSITIVE);
-
-                if key.raw() == KEY_NoSymbol {
-                    return Err(E::custom(format!("unknown key: {}", key_part)));
-                }
-
-                Ok(KeyCombo { modifiers, key })
-            }
-        }
-
-        deserializer.deserialize_str(KeyComboVisitor)
+impl KeyCombo {
+    pub fn new(modifiers: KeyModifiers, key: Keysym) -> Self {
+        Self { modifiers, key }
     }
 }
 
@@ -238,57 +191,6 @@ impl WindowManagerState {
 
                 FilterResult::Forward
             },
-        );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use xkbcommon::xkb::keysyms::*;
-
-    use super::*;
-    use test_case::test_case;
-
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct T {
-        k: Option<KeyCombo>,
-        a: Option<KeyAction>,
-    }
-
-    #[test_case(r#""t""#, KeyModifiers::empty(), KEY_t; "single key")]
-    #[test_case(r#""Ctrl+Shift+Return""#, KeyModifiers::CTRL | KeyModifiers::SHIFT, KEY_Return; "with modifiers")]
-    fn test_deserialize_key(input: &str, modifiers: KeyModifiers, keysym: u32) {
-        assert_eq!(
-            toml::from_str::<T>(&("k = ".to_string() + input)).unwrap(),
-            T {
-                k: Some(KeyCombo {
-                    modifiers,
-                    key: keysym.into()
-                }),
-                a: None
-            }
-        );
-    }
-
-    #[test_case(r#""""#; "empty")]
-    #[test_case(r#""hello""#; "unknown key")]
-    #[test_case(r#""a+b""#; "multiple key")]
-    #[test_case(r#""Super""#; "modifier only")]
-    fn test_deserialize_key_fail(input: &str) {
-        assert!(toml::from_str::<T>(&("k = ".to_string() + input)).is_err());
-    }
-
-    #[test_case(r#"{ action = "switch_workspace", name = 1 }"#, KeyAction::SwitchWorkspace { name: WorkspaceName::Id(1) })]
-    #[test_case(r#"{ action = "focus_window", direction = "top" }"#, KeyAction::FocusWindow { direction: Direction::TOP })]
-    #[test_case(r#"{ action = "resize_window", direction = "right", unit = "10px" }"#, KeyAction::ResizeWindow { direction: Direction::RIGHT, unit: WindowUnit::Px(10) })]
-    #[test_case(r#"{ action = "execute", command = [] }"#, KeyAction::Execute { command: vec![] })]
-    fn test_deserialize_action(input: &str, expected: KeyAction) {
-        assert_eq!(
-            toml::from_str::<T>(&("a = ".to_string() + input)).unwrap(),
-            T {
-                k: None,
-                a: Some(expected)
-            }
         );
     }
 }
