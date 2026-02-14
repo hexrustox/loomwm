@@ -219,6 +219,7 @@ impl TileTreeWindow for MappedWindow {
         self.inner().data.configured_size
     }
 
+    // TODO set render bound
     fn set_size(&mut self, size: Size<i32, Logical>) {
         self.inner().data.configured_size = size;
         self.toplevel().with_pending_state(|state| {

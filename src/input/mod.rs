@@ -5,8 +5,10 @@ use smithay::{
 
 use crate::state::WindowManagerState;
 
-pub use keyboard::{KeyBindings, KeyCombo, KeyModifiers, WindowUnit};
-pub use pointer::{PointerBindings, PointerCombo, ResizeLocation};
+#[allow(unused_imports)]
+pub use keyboard::{KeyAction, KeyBindings, KeyCombo, KeyModifiers, WindowUnit};
+#[allow(unused_imports)]
+pub use pointer::{PointerActions, PointerBindings, PointerCombo, ResizeLocation};
 
 pub mod grabs;
 mod keyboard;

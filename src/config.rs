@@ -271,3 +271,118 @@ impl WindowManagerState {
         self.pointer_config = config.pointer;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use evdev::KeyCode;
+    use test_case::test_case;
+    use xkbcommon::xkb::Keysym;
+
+    use super::*;
+    use crate::input::{KeyCombo, KeyModifiers, PointerCombo};
+    use crate::utils::Direction;
+    use crate::window::rule::WindowLocation;
+
+    #[test_case("a" => KeyCombo::new(KeyModifiers::empty(), Keysym::a); "no modifier")]
+    #[test_case("alt+1" => KeyCombo::new(KeyModifiers::ALT, Keysym::_1); "single modifier")]
+    #[test_case("ctrl+shift+a" => KeyCombo::new(KeyModifiers::CTRL | KeyModifiers::SHIFT, Keysym::a); "multiple modifiers")]
+    #[test_case("super+space" => KeyCombo::new(KeyModifiers::SUPER, Keysym::space); "super modifier")]
+    fn test_keycombo_valid(s: &str) -> KeyCombo {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            key: KeyCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("key = \"{}\"", s))
+            .unwrap()
+            .key
+    }
+
+    #[test_case(""; "empty string")]
+    #[test_case("meta+1"; "unknown modifier")]
+    #[test_case("unknownkey"; "unknown key")]
+    fn test_keycombo_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            key: KeyCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("key = \"{}\"", s)).unwrap_err();
+    }
+
+    #[test_case("alt+btn_left" => PointerCombo::new(KeyModifiers::ALT, KeyCode::BTN_LEFT); "left button")]
+    #[test_case("ctrl+btn_right" => PointerCombo::new(KeyModifiers::CTRL, KeyCode::BTN_RIGHT); "right button with ctrl")]
+    #[test_case("super+btn_middle" => PointerCombo::new(KeyModifiers::SUPER, KeyCode::BTN_MIDDLE); "middle button")]
+    fn test_pointercombo_valid(s: &str) -> PointerCombo {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            btn: PointerCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("btn = \"{}\"", s))
+            .unwrap()
+            .btn
+    }
+
+    #[test_case(""; "empty string")]
+    #[test_case("meta+btn_left"; "unknown modifier")]
+    #[test_case("alt+btn_invalid"; "unknown button")]
+    fn test_pointercombo_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            btn: PointerCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("btn = \"{}\"", s)).unwrap_err();
+    }
+
+    #[test_case("top" => Direction::TOP; "top")]
+    #[test_case("bottom" => Direction::BOTTOM; "bottom")]
+    #[test_case("left" => Direction::LEFT; "left")]
+    #[test_case("right" => Direction::RIGHT; "right")]
+    #[test_case("top_left" => Direction::TOP_LEFT; "top left")]
+    #[test_case("bottom_left" => Direction::BOTTOM_LEFT; "bottom left")]
+    #[test_case("top_right" => Direction::TOP_RIGHT; "top right")]
+    #[test_case("bottom_right" => Direction::BOTTOM_RIGHT; "bottom right")]
+    fn test_direction_valid(s: &str) -> Direction {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            direction: Direction,
+        }
+        toml::from_str::<Wrapper>(&format!("direction = \"{}\"", s))
+            .unwrap()
+            .direction
+    }
+
+    #[test]
+    fn test_direction_invalid() {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            direction: Direction,
+        }
+        toml::from_str::<Wrapper>("direction = \"invalid\"").unwrap_err();
+    }
+
+    #[test_case("center" => WindowLocation::Center; "center")]
+    #[test_case("[100, 200]" => WindowLocation::Location(100, 200); "array")]
+    fn test_windowlocation_center_valid(s: &str) -> WindowLocation {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            location: WindowLocation,
+        }
+        toml::from_str::<Wrapper>(&format!("location = \"{}\"", s))
+            .unwrap()
+            .location
+    }
+
+    #[test_case("\"invalid\""; "invalid string")]
+    #[test_case("[1]"; "wrong length 1")]
+    #[test_case("[1, 2, 3]"; "wrong length 3")]
+    fn test_windowlocation_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            location: WindowLocation,
+        }
+        toml::from_str::<Wrapper>(&format!("location = {}", s)).unwrap_err();
+    }
+}

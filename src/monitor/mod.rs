@@ -367,6 +367,7 @@ impl WindowManagerState {
         }
     }
 
+    // TODO remove empty workspace
     pub fn change_or_create_active_workspace(&mut self, workspace_name: WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
         monitor.add_workspace(workspace_name.clone());
