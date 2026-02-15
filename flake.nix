@@ -47,6 +47,31 @@
                 pkg = codebook;
                 name = "codebook-lsp";
               }
+              {
+                pkg = uv;
+                extraOpts = [
+                  "-t"
+                  "--workdir=$(pwd)"
+                ];
+              }
+              {
+                name = "ruff";
+                bin = "uv";
+                args = [
+                  "tool"
+                  "run"
+                  "ruff"
+                ];
+              }
+              {
+                name = "ty";
+                bin = "uv";
+                args = [
+                  "tool"
+                  "run"
+                  "ty"
+                ];
+              }
             ]);
           runtimeDeps =
             with host-pkgs;
@@ -68,7 +93,6 @@
             "--pid host"
             "--uts host"
 
-            "--env=CARGO_HOME"
             "--env=COLORTERM=truecolor"
             "--env=GBM_BACKENDS_PATH"
             "--env=HOME"
@@ -82,11 +106,10 @@
             "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
 
             "--tmpfs=/tmp"
-            "--tmpfs=\"$HOME\""
 
             "--volume=/etc/fonts:/etc/fonts:ro"
-            "--volume=\"$HOME/.cache\":\"$HOME/.cache\""
-            "--volume=\"$XDG_DATA_HOME/cargo\":\"$HOME/.cargo\""
+            "--volume=home:\"$HOME\""
+            "--volume=\"$HOME/.cargo\":\"$HOME/.cargo\""
             "--volume=\"./example\":\"/data/example\""
 
             "--env=WAYLAND_DISPLAY"
@@ -117,11 +140,6 @@
           pkgs.mkShellNoCC {
             inherit (capsule-lib) packages;
             shellHook = ''
-              export XDG_DATA_HOME=''${XDG_DATA_HOME:-~/.local/share}
-              export CARGO_HOME="$XDG_DATA_HOME/cargo"
-
-              mkdir -p "$CARGO_HOME"
-
               ${capsule-lib.shellHook}
             '';
 
