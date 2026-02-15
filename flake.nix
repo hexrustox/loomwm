@@ -52,7 +52,8 @@
             with host-pkgs;
             [ nix ]
             ++ (with pkgs; [
-              gcc
+              clang
+              mold
               rustc
               rustfmt
               clippy
@@ -94,7 +95,7 @@
 
             "--device=/dev/dri"
 
-            "--cpus=4"
+            "--cpus=6"
             "--memory=8g"
           ];
           image = "alpine:latest";
