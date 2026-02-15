@@ -1,6 +1,4 @@
-def main():
-    print("Hello from assistant!")
+import torch
 
-
-if __name__ == "__main__":
-    main()
+print(torch.cuda.is_available())
+print(torch.cuda.get_device_name(0))

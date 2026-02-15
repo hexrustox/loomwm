@@ -88,6 +88,8 @@
 
               pkg-config
               alacritty
+
+              rocmPackages.rocminfo
             ]);
           extraOpts = [
             "--pid host"
@@ -117,11 +119,12 @@
             "--volume=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/runtime/$WAYLAND_DISPLAY:ro"
 
             "--device=/dev/dri"
+            "--device=/dev/kfd"
 
             "--cpus=6"
             "--memory=8g"
           ];
-          image = "alpine:latest";
+          image = "ubuntu:latest";
         };
       in
       {
