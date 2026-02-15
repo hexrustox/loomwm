@@ -41,6 +41,7 @@ impl KeyCombo {
     }
 }
 
+// TODO aggregate with mouse action
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyAction {
@@ -67,6 +68,7 @@ pub enum KeyAction {
     Execute {
         command: Vec<String>,
     },
+    // TODO next/prev workspace, last focus workspace/window
 }
 
 fn default_focus() -> bool {
@@ -181,7 +183,6 @@ impl WindowManagerState {
                         }
                         Execute { command: args } => {
                             if let Some(program) = args.first() {
-                                // TODO
                                 let _ = Command::new(program).args(args.iter().skip(1)).spawn();
                             }
                         }
