@@ -113,6 +113,7 @@
             "--volume=home:\"$HOME\""
             "--volume=\"$HOME/.cargo\":\"$HOME/.cargo\""
             "--volume=\"./example\":\"/data/example\""
+            "--volume=\"${pkgs.libdrm}/share/libdrm/amdgpu.ids\":\"/opt/amdgpu/share/libdrm/amdgpu.ids\""
 
             "--env=WAYLAND_DISPLAY"
             "--env=XDG_RUNTIME_DIR=/tmp/runtime"
