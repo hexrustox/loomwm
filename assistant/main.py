@@ -1,5 +1,4 @@
 import math
-import random
 
 import torch
 import torch.nn as nn
@@ -44,24 +43,24 @@ class PositionalEncoding(nn.Module):
 
 # 3. RANKER MODEL
 class TransformerRanker(nn.Module):
-    def __init__(self, vocab_size, d_model=64, nhead=4, num_layers=2):
+    def __init__(self, vocab_size, d_model, nhead, num_layers, dropout):
         super().__init__()
         self.d_model = d_model
         self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=0)
         self.pos_encoder = PositionalEncoding(d_model)
+        self.dropout = nn.Dropout(p=dropout)
 
         # Level 1: String Encoder
         enc_layer1 = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True
+            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
         )
-        # enable_nested_tensor=False prevents the NestedTensor prototype warning
         self.string_transformer = nn.TransformerEncoder(
             enc_layer1, num_layers=num_layers, enable_nested_tensor=False
         )
 
         # Level 2: List Interaction Encoder
         enc_layer2 = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True
+            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
         )
         self.list_transformer = nn.TransformerEncoder(
             enc_layer2, num_layers=num_layers, enable_nested_tensor=False
@@ -80,6 +79,7 @@ class TransformerRanker(nn.Module):
             # Step 1: Word Embeddings -> String Context
             feat = self.embedding(x_flat) * math.sqrt(self.d_model)
             feat = self.pos_encoder(feat)
+
             string_out = self.string_transformer(
                 feat, src_key_padding_mask=word_mask_flat
             )
@@ -128,29 +128,35 @@ def prepare_batch(data_lists, label_lists, vocab, device, max_str_len=10):
 
 # --- EXECUTION ---
 
+app_samples = [
+    ["Firefox", "VLC", "GIMP"],
+    ["Chrome", "LibreOffice", "Nautilus", "Blender"],
+    ["Firefox", "Chrome"],
+    ["VLC", "GIMP", "Thunderbird", "Audacity", "Inkscape"],
+    ["Firefox", "LibreOffice", "Audacity"],
+    ["Chrome", "VLC", "Nautilus", "Blender"],
+    ["Firefox", "GIMP", "Inkscape"],
+    ["LibreOffice", "VLC", "Thunderbird", "Audacity"],
+    ["Firefox", "Chrome", "Nautilus", "Blender"],
+    ["VLC", "Audacity", "Inkscape"],
+]
+
 train_data = []
-for _ in range(20):
-    full_sequence = list(range(1, 11))
+for ls in app_samples:
+    indices = list(range(len(ls)))
+    train_data.append((ls, indices))
 
-    # 2. Decide how many elements to remove (1 to 9)
-    # This means we will keep between 1 and 9 elements.
-    num_to_keep = 10 - random.randint(1, 9)
-
-    # 3. Randomly select the elements to keep
-    # We use sorted() to ensure they stay in the original numerical order
-    modified_list = sorted(random.sample(full_sequence, num_to_keep))
-
-    # 4. Create a list of the indexes of the modified_list
-    # In Python, indexes start at 0.
-    indices = list(range(len(modified_list)))
-    train_data.append((list(map(str, modified_list)), indices))
+# expect: ["Firefox", "Chrome", "GIMP", "Audacity"]
+test_example = ["GIMP", "Firefox", "Audacity", "Chrome"]
 
 vocab = Vocab([d[0] for d in train_data])
-model = TransformerRanker(len(vocab.stoi)).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+model = TransformerRanker(
+    len(vocab.stoi), d_model=32, nhead=4, num_layers=1, dropout=0.2
+).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
 
 model.train()
-for epoch in range(200):
+for epoch in range(100):
     optimizer.zero_grad()
     texts, targets = zip(*train_data)
     x, y, w_mask, l_mask = prepare_batch(texts, targets, vocab, device)
@@ -168,14 +174,13 @@ for epoch in range(200):
         print(f"Epoch {epoch + 1} | Loss: {loss.item():.4f}")
 
 model.eval()
-test_list = list(map(str, list(range(10, 0, -1))))
 with torch.no_grad():
     x_t, _, w_t, l_t = prepare_batch(
-        [test_list], [[0 for _ in test_list]], vocab, device
+        [test_example], [[0 for _ in test_example]], vocab, device
     )
     scores = model(x_t, w_t.view(-1, x_t.shape[-1]), l_t)
     probs = torch.softmax(scores, dim=1)
 
 print("\nResults:")
-for s, p in sorted(zip(test_list, probs[0]), key=lambda tuple: tuple[1].item()):
+for s, p in sorted(zip(test_example, probs[0]), key=lambda tuple: tuple[1].item()):
     print(f"Importance: {p.item():.4f} | String: {s}")
