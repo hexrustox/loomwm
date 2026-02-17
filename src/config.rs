@@ -1,10 +1,16 @@
 use evdev::KeyCode;
-use serde::{Deserialize, Deserializer, de};
+use serde::{
+    Deserialize, Deserializer,
+    de::{self},
+};
 use smithay::input::keyboard::xkb;
 use std::{collections::HashMap, fmt, str::FromStr};
 
 use crate::{
-    input::{KeyBindings, KeyCombo, KeyModifiers, PointerBindings, PointerCombo, ResizeLocation},
+    input::{
+        KeyBindings, KeyCombo, KeyModifiers, PointerBindings, PointerCombo, ResizeLocation,
+        WindowUnit,
+    },
     monitor::LayoutSet,
     state::WindowManagerState,
     utils::Direction,
@@ -72,6 +78,33 @@ impl Default for PointerConfig {
     }
 }
 
+impl<'de> Deserialize<'de> for Direction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = Direction;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("one of the following flags: top, bottom, left, right, top_left, bottom_left, top_right, bottom_right")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Direction::from_name(&value.to_uppercase())
+                    .ok_or(E::invalid_value(de::Unexpected::Str(value), &self))
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
 impl<'de> Deserialize<'de> for WindowLocation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -120,7 +153,7 @@ impl<'de> Deserialize<'de> for WindowLocation {
     }
 }
 
-impl<'de> Deserialize<'de> for Direction {
+impl<'de> Deserialize<'de> for WindowUnit {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -128,23 +161,99 @@ impl<'de> Deserialize<'de> for Direction {
         struct Visitor;
 
         impl<'de> de::Visitor<'de> for Visitor {
-            type Value = Direction;
+            type Value = WindowUnit;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("one of the following flags: top, bottom, left, right, top_left, bottom_left, top_right, bottom_right")
+                formatter.write_str("a size unit")
             }
 
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
-                Direction::from_name(&value.to_uppercase())
-                    .ok_or(E::invalid_value(de::Unexpected::Str(value), &self))
+                v.strip_suffix("px")
+                    .and_then(|px| px.parse().ok())
+                    .map(|px: i32| WindowUnit::Px(px))
+                    .ok_or(E::custom("invalid pixel"))
+            }
+
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(WindowUnit::Ratio(v))
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(WindowUnit::Ratio(v as f64))
+            }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(WindowUnit::Ratio(v as f64))
             }
         }
 
-        deserializer.deserialize_str(Visitor)
+        deserializer.deserialize_any(Visitor)
     }
+}
+
+fn deserialize_combo<'de, K, T, D>(
+    deserializer: D,
+    expecting: &str,
+    parse_key: impl FnMut(&str) -> Result<K, String>,
+    construct: impl FnOnce(KeyModifiers, K) -> T,
+) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct Visitor<F, G> {
+        expecting: String,
+        parse_key: F,
+        construct: G,
+    }
+
+    impl<'de, T, K, F, G> de::Visitor<'de> for Visitor<F, G>
+    where
+        F: FnMut(&str) -> Result<K, String>,
+        G: FnOnce(KeyModifiers, K) -> T,
+    {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str(&self.expecting)
+        }
+
+        fn visit_str<E>(mut self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
+
+            if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
+                return Err(E::invalid_value(de::Unexpected::Str(v), &self));
+            }
+
+            let (key_part, mod_parts) = parts.split_last().unwrap();
+
+            let modifiers = parse_modifiers(mod_parts)?;
+
+            let key = (self.parse_key)(key_part).map_err(E::custom)?;
+
+            Ok((self.construct)(modifiers, key))
+        }
+    }
+
+    deserializer.deserialize_str(Visitor {
+        expecting: expecting.to_string(),
+        parse_key,
+        construct,
+    })
 }
 
 impl<'de> Deserialize<'de> for KeyCombo {
@@ -152,43 +261,19 @@ impl<'de> Deserialize<'de> for KeyCombo {
     where
         D: Deserializer<'de>,
     {
-        struct Visitor;
-
-        impl<'de> de::Visitor<'de> for Visitor {
-            type Value = KeyCombo;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a keybinding string")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
-
-                if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
-                    return Err(E::invalid_value(de::Unexpected::Str(v), &self));
-                }
-
-                let (key_part, mod_parts) = parts.split_last().unwrap();
-
-                let modifiers = parse_modifiers(mod_parts)?;
-
-                let key = xkb::keysym_from_name(key_part, xkb::KEYSYM_CASE_INSENSITIVE);
-
+        deserialize_combo(
+            deserializer,
+            "a keybinding string",
+            |s| {
+                let key = xkb::keysym_from_name(s, xkb::KEYSYM_CASE_INSENSITIVE);
                 if key == xkb::Keysym::NoSymbol {
-                    return Err(E::invalid_value(
-                        de::Unexpected::Str(key_part),
-                        &"a valid key name",
-                    ));
+                    Err(format!("{} is not a valid key name", s))
+                } else {
+                    Ok(key)
                 }
-
-                Ok(KeyCombo::new(modifiers, key))
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
+            },
+            KeyCombo::new,
+        )
     }
 }
 
@@ -197,38 +282,15 @@ impl<'de> Deserialize<'de> for PointerCombo {
     where
         D: Deserializer<'de>,
     {
-        struct Visitor;
-
-        impl<'de> de::Visitor<'de> for Visitor {
-            type Value = PointerCombo;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a pointer binding string")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
-
-                if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
-                    return Err(E::invalid_value(de::Unexpected::Str(v), &self));
-                }
-
-                let (key_part, mod_parts) = parts.split_last().unwrap();
-
-                let modifiers = parse_modifiers(mod_parts)?;
-
-                let key = KeyCode::from_str(&key_part.to_uppercase()).map_err(|_| {
-                    E::invalid_value(de::Unexpected::Str(key_part), &"a valid key code")
-                })?;
-
-                Ok(PointerCombo::new(modifiers, key))
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
+        deserialize_combo(
+            deserializer,
+            "a pointer binding string",
+            |s| {
+                KeyCode::from_str(&s.to_uppercase())
+                    .map_err(|_| format!("{} is not a valid key code", s))
+            },
+            PointerCombo::new,
+        )
     }
 }
 
@@ -283,57 +345,6 @@ mod tests {
     use crate::utils::Direction;
     use crate::window::rule::WindowLocation;
 
-    #[test_case("a" => KeyCombo::new(KeyModifiers::empty(), Keysym::a); "no modifier")]
-    #[test_case("alt+1" => KeyCombo::new(KeyModifiers::ALT, Keysym::_1); "single modifier")]
-    #[test_case("ctrl+shift+a" => KeyCombo::new(KeyModifiers::CTRL | KeyModifiers::SHIFT, Keysym::a); "multiple modifiers")]
-    #[test_case("super+space" => KeyCombo::new(KeyModifiers::SUPER, Keysym::space); "super modifier")]
-    fn test_keycombo_valid(s: &str) -> KeyCombo {
-        #[derive(Deserialize, Debug)]
-        struct Wrapper {
-            key: KeyCombo,
-        }
-        toml::from_str::<Wrapper>(&format!("key = \"{}\"", s))
-            .unwrap()
-            .key
-    }
-
-    #[test_case(""; "empty string")]
-    #[test_case("meta+1"; "unknown modifier")]
-    #[test_case("unknownkey"; "unknown key")]
-    fn test_keycombo_invalid(s: &str) {
-        #[derive(Deserialize, Debug)]
-        struct Wrapper {
-            #[allow(unused)]
-            key: KeyCombo,
-        }
-        toml::from_str::<Wrapper>(&format!("key = \"{}\"", s)).unwrap_err();
-    }
-
-    #[test_case("alt+btn_left" => PointerCombo::new(KeyModifiers::ALT, KeyCode::BTN_LEFT); "left button")]
-    #[test_case("ctrl+btn_right" => PointerCombo::new(KeyModifiers::CTRL, KeyCode::BTN_RIGHT); "right button with ctrl")]
-    #[test_case("super+btn_middle" => PointerCombo::new(KeyModifiers::SUPER, KeyCode::BTN_MIDDLE); "middle button")]
-    fn test_pointercombo_valid(s: &str) -> PointerCombo {
-        #[derive(Deserialize, Debug)]
-        struct Wrapper {
-            btn: PointerCombo,
-        }
-        toml::from_str::<Wrapper>(&format!("btn = \"{}\"", s))
-            .unwrap()
-            .btn
-    }
-
-    #[test_case(""; "empty string")]
-    #[test_case("meta+btn_left"; "unknown modifier")]
-    #[test_case("alt+btn_invalid"; "unknown button")]
-    fn test_pointercombo_invalid(s: &str) {
-        #[derive(Deserialize, Debug)]
-        struct Wrapper {
-            #[allow(unused)]
-            btn: PointerCombo,
-        }
-        toml::from_str::<Wrapper>(&format!("btn = \"{}\"", s)).unwrap_err();
-    }
-
     #[test_case("top" => Direction::TOP; "top")]
     #[test_case("bottom" => Direction::BOTTOM; "bottom")]
     #[test_case("left" => Direction::LEFT; "left")]
@@ -362,14 +373,14 @@ mod tests {
         toml::from_str::<Wrapper>("direction = \"invalid\"").unwrap_err();
     }
 
-    #[test_case("center" => WindowLocation::Center; "center")]
+    #[test_case("\"center\"" => WindowLocation::Center; "center")]
     #[test_case("[100, 200]" => WindowLocation::Location(100, 200); "array")]
-    fn test_windowlocation_center_valid(s: &str) -> WindowLocation {
+    fn test_window_location_valid(s: &str) -> WindowLocation {
         #[derive(Deserialize)]
         struct Wrapper {
             location: WindowLocation,
         }
-        toml::from_str::<Wrapper>(&format!("location = \"{}\"", s))
+        toml::from_str::<Wrapper>(&format!("location = {}", s))
             .unwrap()
             .location
     }
@@ -377,12 +388,76 @@ mod tests {
     #[test_case("\"invalid\""; "invalid string")]
     #[test_case("[1]"; "wrong length 1")]
     #[test_case("[1, 2, 3]"; "wrong length 3")]
-    fn test_windowlocation_invalid(s: &str) {
+    fn test_window_location_invalid(s: &str) {
         #[derive(Deserialize, Debug)]
         struct Wrapper {
             #[allow(unused)]
             location: WindowLocation,
         }
         toml::from_str::<Wrapper>(&format!("location = {}", s)).unwrap_err();
+    }
+
+    #[test_case("\"10px\"" => WindowUnit::Px(10))]
+    #[test_case("1" => WindowUnit::Ratio(1.0))]
+    #[test_case("2.0" => WindowUnit::Ratio(2.0))]
+    fn test_window_unit_valid(s: &str) -> WindowUnit {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            unit: WindowUnit,
+        }
+        toml::from_str::<Wrapper>(&format!("unit = {}", s))
+            .unwrap()
+            .unit
+    }
+
+    #[test_case("a" => KeyCombo::new(KeyModifiers::empty(), Keysym::a); "no modifier")]
+    #[test_case("alt+1" => KeyCombo::new(KeyModifiers::ALT, Keysym::_1); "single modifier")]
+    #[test_case("ctrl+shift+a" => KeyCombo::new(KeyModifiers::CTRL | KeyModifiers::SHIFT, Keysym::a); "multiple modifiers")]
+    #[test_case("super+space" => KeyCombo::new(KeyModifiers::SUPER, Keysym::space); "super modifier")]
+    fn test_key_combo_valid(s: &str) -> KeyCombo {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            key: KeyCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("key = \"{}\"", s))
+            .unwrap()
+            .key
+    }
+
+    #[test_case(""; "empty string")]
+    #[test_case("meta+1"; "unknown modifier")]
+    #[test_case("unknown"; "unknown key")]
+    fn test_key_combo_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            key: KeyCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("key = \"{}\"", s)).unwrap_err();
+    }
+
+    #[test_case("alt+btn_left" => PointerCombo::new(KeyModifiers::ALT, KeyCode::BTN_LEFT); "left button")]
+    #[test_case("ctrl+btn_right" => PointerCombo::new(KeyModifiers::CTRL, KeyCode::BTN_RIGHT); "right button with ctrl")]
+    #[test_case("super+btn_middle" => PointerCombo::new(KeyModifiers::SUPER, KeyCode::BTN_MIDDLE); "middle button")]
+    fn test_pointer_combo_valid(s: &str) -> PointerCombo {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            btn: PointerCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("btn = \"{}\"", s))
+            .unwrap()
+            .btn
+    }
+
+    #[test_case(""; "empty string")]
+    #[test_case("meta+btn_left"; "unknown modifier")]
+    #[test_case("alt+btn_invalid"; "unknown button")]
+    fn test_pointer_combo_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            btn: PointerCombo,
+        }
+        toml::from_str::<Wrapper>(&format!("btn = \"{}\"", s)).unwrap_err();
     }
 }

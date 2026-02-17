@@ -24,11 +24,19 @@ mod tile;
 
 pub use tile::{LayoutSet, TileRatio, TileResizeUnit, TileTreeSearchKey, TileTreeWindow};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Hash)]
 #[serde(untagged)]
 pub enum WorkspaceName {
     Id(u8),
     // Name(String)
+}
+
+impl WorkspaceName {
+    pub fn as_id(&self) -> u8 {
+        match self {
+            Self::Id(x) => *x,
+        }
+    }
 }
 
 #[derive(Debug)]

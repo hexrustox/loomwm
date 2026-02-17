@@ -1,10 +1,7 @@
-use std::{collections::HashMap, fmt, process::Command};
+use std::{collections::HashMap, process::Command};
 
 use bitflags::bitflags;
-use serde::{
-    Deserialize, Deserializer,
-    de::{self, IntoDeserializer},
-};
+use serde::Deserialize;
 use smithay::{
     backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
     input::keyboard::{FilterResult, Keysym},
@@ -45,6 +42,8 @@ impl KeyCombo {
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyAction {
+    PrevWorkspace,
+    NextWorkspace,
     SwitchWorkspace {
         name: WorkspaceName,
     },
@@ -68,7 +67,7 @@ pub enum KeyAction {
     Execute {
         command: Vec<String>,
     },
-    // TODO next/prev workspace, last focus workspace/window
+    // TODO last focus workspace/window
 }
 
 fn default_focus() -> bool {
@@ -79,40 +78,6 @@ fn default_focus() -> bool {
 pub enum WindowUnit {
     Ratio(TileRatio),
     Px(i32),
-}
-
-impl<'de> Deserialize<'de> for WindowUnit {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct WindowUnitVisitor;
-
-        impl<'de> de::Visitor<'de> for WindowUnitVisitor {
-            type Value = WindowUnit;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a size unit")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                if let Some(px) = v.strip_suffix("px") {
-                    Ok(WindowUnit::Px(
-                        px.parse().map_err(|_| E::custom("invalid pixel"))?,
-                    ))
-                } else {
-                    Ok(WindowUnit::Ratio(TileRatio::deserialize(
-                        v.into_deserializer(),
-                    )?))
-                }
-            }
-        }
-
-        deserializer.deserialize_str(WindowUnitVisitor)
-    }
 }
 
 impl WindowManagerState {
@@ -150,7 +115,7 @@ impl WindowManagerState {
                 }
 
                 // TODO count key down
-                let key = keysym_handle.raw_syms().swap_remove(0);
+                let key = keysym_handle.modified_sym();
                 let bind = KeyCombo {
                     modifiers: data.key_modifiers,
                     key,
@@ -160,8 +125,14 @@ impl WindowManagerState {
                 if pressed && let Some(action) = data.key_config.bindings.get(&bind) {
                     use KeyAction::*;
                     match action {
+                        PrevWorkspace => {
+                            data.goto_prev_workspace();
+                        }
+                        NextWorkspace => {
+                            data.goto_next_workspace();
+                        }
                         SwitchWorkspace { name } => {
-                            data.change_or_create_active_workspace(name.clone());
+                            data.switch_or_create_active_workspace(name.clone());
                         }
                         MoveToWorkspace { name, focus } => {
                             data.move_focused_window_to_workspace(name.clone(), *focus);

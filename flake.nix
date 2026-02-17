@@ -1,6 +1,10 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.11";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
     capsule.url = "gitlab:codnixus/capsule";
   };
@@ -9,13 +13,14 @@
     {
       self,
       nixpkgs,
+      rust-overlay,
       flake-utils,
       capsule,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs { overlays = [ rust-overlay.overlays.default ]; };
         host-pkgs = import <nixpkgs> { };
         capsule-lib = capsule.lib {
           inherit pkgs;
@@ -79,9 +84,13 @@
             ++ (with pkgs; [
               clang
               mold
-              rustc
-              rustfmt
-              clippy
+              (rust-bin.stable."1.93.1".default.override {
+                extensions = [
+                  "rust-src" # for rust-analyzer
+                  "rust-analyzer"
+                ];
+              })
+
               cargo-deny
               cargo-edit
               cargo-machete
@@ -123,9 +132,6 @@
 
             "--device=/dev/dri"
             "--device=/dev/kfd"
-
-            "--cpus=6"
-            "--memory=8g"
           ];
           image = "ubuntu:latest";
         };
@@ -136,11 +142,10 @@
             lib = pkgs.lib;
             mesa = pkgs.mesa;
             mesa-drivers = [ mesa ];
-            vadrivers = [ ];
-            libvdpau = [ pkgs.libvdpau-va-gl ];
             ld = with pkgs; [
               libglvnd
               wayland
+              libxkbcommon
             ];
           in
           pkgs.mkShellNoCC {
@@ -149,18 +154,13 @@
               ${capsule-lib.shellHook}
             '';
 
-            RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
-
             LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}";
             PKG_CONFIG_PATH = "${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}";
 
             GBM_BACKENDS_PATH = "${lib.makeSearchPathOutput "lib" "lib/gbm" mesa-drivers}";
             LIBGL_DRIVERS_PATH = "${lib.makeSearchPathOutput "lib" "lib/dri" mesa-drivers}";
-            LIBVA_DRIVERS_PATH = "${lib.makeSearchPathOutput "out" "lib/dri" (mesa-drivers ++ vadrivers)}";
             __EGL_VENDOR_LIBRARY_FILENAMES = "${mesa}/share/glvnd/egl_vendor.d/50_mesa.json";
-            LD_LIBRARY_PATH = "${lib.makeLibraryPath (mesa-drivers ++ ld)}:${
-              lib.makeSearchPathOutput "lib" "lib/vdpau" libvdpau
-            }";
+            LD_LIBRARY_PATH = "${lib.makeLibraryPath (mesa-drivers ++ ld)}";
           };
       }
     );

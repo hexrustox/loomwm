@@ -27,6 +27,8 @@ slaves = { split = "horizontal", nodes = [{ repeat = 3 }] }
 default = "master"
 
 [key.bindings]
+"alt+page_up" = { action = "prev_workspace" }
+"alt+page_down" = { action = "next_workspace" }
 "alt+1" = { action = "switch_workspace", name = 1 }
 "alt+2" = { action = "switch_workspace", name = 2 }
 "alt+3" = { action = "switch_workspace", name = 3 }
