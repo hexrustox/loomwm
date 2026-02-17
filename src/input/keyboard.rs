@@ -1,10 +1,7 @@
-use std::{collections::HashMap, fmt, process::Command};
+use std::{collections::HashMap, process::Command};
 
 use bitflags::bitflags;
-use serde::{
-    Deserialize, Deserializer,
-    de::{self, IntoDeserializer},
-};
+use serde::Deserialize;
 use smithay::{
     backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
     input::keyboard::{FilterResult, Keysym},
@@ -83,40 +80,6 @@ pub enum WindowUnit {
     Px(i32),
 }
 
-impl<'de> Deserialize<'de> for WindowUnit {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct WindowUnitVisitor;
-
-        impl<'de> de::Visitor<'de> for WindowUnitVisitor {
-            type Value = WindowUnit;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a size unit")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                if let Some(px) = v.strip_suffix("px") {
-                    Ok(WindowUnit::Px(
-                        px.parse().map_err(|_| E::custom("invalid pixel"))?,
-                    ))
-                } else {
-                    Ok(WindowUnit::Ratio(TileRatio::deserialize(
-                        v.into_deserializer(),
-                    )?))
-                }
-            }
-        }
-
-        deserializer.deserialize_str(WindowUnitVisitor)
-    }
-}
-
 impl WindowManagerState {
     pub fn process_keyboard_event<B: InputBackend, T: KeyboardKeyEvent<B>>(&mut self, event: T) {
         let serial = SERIAL_COUNTER.next_serial();
@@ -152,7 +115,7 @@ impl WindowManagerState {
                 }
 
                 // TODO count key down
-                let key = keysym_handle.raw_syms().swap_remove(0);
+                let key = keysym_handle.modified_sym();
                 let bind = KeyCombo {
                     modifiers: data.key_modifiers,
                     key,
