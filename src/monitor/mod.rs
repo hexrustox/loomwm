@@ -81,21 +81,25 @@ impl Monitor {
         &self.active_workspace
     }
 
-    fn find_workspace(&self, workspace_name: &WorkspaceName) -> Option<usize> {
+    fn find_workspace_index(&self, workspace_name: &WorkspaceName) -> Option<usize> {
+        #[allow(irrefutable_let_patterns)]
+        let WorkspaceName::Id(id) = workspace_name else {
+            return None;
+        };
         self.workspaces
-            .binary_search_by_key(&workspace_name, |workspace| workspace.get_name())
+            .binary_search_by_key(id, |workspace| workspace.get_name().as_id())
             .ok()
     }
 
     pub fn get_workspace(&self, workspace_name: &WorkspaceName) -> &Workspace {
-        if let Some(index) = self.find_workspace(workspace_name) {
+        if let Some(index) = self.find_workspace_index(workspace_name) {
             return &self.workspaces[index];
         }
         unreachable!()
     }
 
     pub fn get_workspace_mut(&mut self, workspace_name: &WorkspaceName) -> &mut Workspace {
-        if let Some(index) = self.find_workspace(workspace_name) {
+        if let Some(index) = self.find_workspace_index(workspace_name) {
             return &mut self.workspaces[index];
         }
         unreachable!()
@@ -120,6 +124,21 @@ impl Monitor {
                 }
             }
         }
+    }
+
+    fn remove_workspace(&mut self, workspace_name: &WorkspaceName) -> Option<Workspace> {
+        match workspace_name {
+            WorkspaceName::Id(id) => {
+                if let Ok(index) = self.workspaces.binary_search_by_key(&id, |workspace| {
+                    let WorkspaceName::Id(id) = workspace.get_name();
+                    id
+                }) {
+                    return Some(self.workspaces.remove(index));
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -367,12 +386,44 @@ impl WindowManagerState {
         }
     }
 
-    // TODO remove empty workspace
-    pub fn change_or_create_active_workspace(&mut self, workspace_name: WorkspaceName) {
+    pub fn switch_or_create_active_workspace(&mut self, workspace_name: WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
+
+        let old_workspace_name = monitor.get_active_workspace_name().clone();
+        let old_workspace = monitor.get_workspace(&old_workspace_name);
+        // TODO improve efficiency
+        if old_workspace.windows_iter().count() == 0 {
+            monitor.remove_workspace(&old_workspace_name);
+        }
+
         monitor.add_workspace(workspace_name.clone());
         monitor.active_workspace = workspace_name.clone();
+
         self.restore_workspace_focus(&workspace_name);
+    }
+
+    fn goto_workspace_by_delta(&mut self, delta: i32) {
+        let monitor = self.monitors.get_monitor_mut();
+
+        let old_workspace_name = monitor.get_active_workspace_name();
+        let Some(index) = monitor.find_workspace_index(old_workspace_name) else {
+            return;
+        };
+
+        let len = monitor.workspaces.len() as i32;
+        let new_index = (index as i32 + delta).rem_euclid(len) as usize;
+
+        let new_workspace_name = monitor.workspaces[new_index].get_name().clone();
+        monitor.active_workspace = new_workspace_name.clone();
+        self.restore_workspace_focus(&new_workspace_name);
+    }
+
+    pub fn goto_next_workspace(&mut self) {
+        self.goto_workspace_by_delta(1);
+    }
+
+    pub fn goto_prev_workspace(&mut self) {
+        self.goto_workspace_by_delta(-1);
     }
 
     pub fn move_focused_window_to_workspace(&mut self, workspace_name: WorkspaceName, focus: bool) {

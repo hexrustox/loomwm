@@ -45,6 +45,8 @@ impl KeyCombo {
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyAction {
+    PrevWorkspace,
+    NextWorkspace,
     SwitchWorkspace {
         name: WorkspaceName,
     },
@@ -68,7 +70,7 @@ pub enum KeyAction {
     Execute {
         command: Vec<String>,
     },
-    // TODO next/prev workspace, last focus workspace/window
+    // TODO last focus workspace/window
 }
 
 fn default_focus() -> bool {
@@ -160,8 +162,14 @@ impl WindowManagerState {
                 if pressed && let Some(action) = data.key_config.bindings.get(&bind) {
                     use KeyAction::*;
                     match action {
+                        PrevWorkspace => {
+                            data.goto_prev_workspace();
+                        }
+                        NextWorkspace => {
+                            data.goto_next_workspace();
+                        }
                         SwitchWorkspace { name } => {
-                            data.change_or_create_active_workspace(name.clone());
+                            data.switch_or_create_active_workspace(name.clone());
                         }
                         MoveToWorkspace { name, focus } => {
                             data.move_focused_window_to_workspace(name.clone(), *focus);
