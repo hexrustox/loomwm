@@ -1,6 +1,10 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.11";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
     capsule.url = "gitlab:codnixus/capsule";
   };
@@ -9,13 +13,14 @@
     {
       self,
       nixpkgs,
+      rust-overlay,
       flake-utils,
       capsule,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs { overlays = [ rust-overlay.overlays.default ]; };
         host-pkgs = import <nixpkgs> { };
         capsule-lib = capsule.lib {
           inherit pkgs;
@@ -79,9 +84,13 @@
             ++ (with pkgs; [
               clang
               mold
-              rustc
-              rustfmt
-              clippy
+              (rust-bin.stable."1.93.1".default.override {
+                extensions = [
+                  "rust-src" # for rust-analyzer
+                  "rust-analyzer"
+                ];
+              })
+
               cargo-deny
               cargo-edit
               cargo-machete
@@ -144,8 +153,6 @@
             shellHook = ''
               ${capsule-lib.shellHook}
             '';
-
-            RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 
             LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}";
             PKG_CONFIG_PATH = "${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}";
