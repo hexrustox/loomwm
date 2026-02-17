@@ -40,14 +40,6 @@
               }
             ]
             ++ (with pkgs; [
-              rust-analyzer
-              {
-                pkg = cargo;
-                extraOpts = [
-                  "-t"
-                  "--workdir=$(pwd)"
-                ];
-              }
               {
                 pkg = codebook;
                 name = "codebook-lsp";
@@ -75,6 +67,16 @@
                   "tool"
                   "run"
                   "ty"
+                ];
+              }
+              {
+                name = "rust-analyzer";
+              }
+              {
+                name = "cargo";
+                extraOpts = [
+                  "-t"
+                  "--workdir=$(pwd)"
                 ];
               }
             ]);
