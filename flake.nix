@@ -141,6 +141,7 @@
             ld = with pkgs; [
               libglvnd
               wayland
+              libxkbcommon
             ];
           in
           pkgs.mkShellNoCC {
