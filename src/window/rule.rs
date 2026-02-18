@@ -61,6 +61,7 @@ impl WindowRules {
     }
 }
 
+// TODO add tests
 #[derive(Debug, Deserialize, Hash)]
 struct WindowRule {
     #[serde(default = "default_window_rule_matches")]
@@ -150,6 +151,7 @@ pub struct WindowOpeningProperties {
     pub workspace_name: Option<WorkspaceName>,
 }
 
+// TODO border
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct WindowDynamicProperties {

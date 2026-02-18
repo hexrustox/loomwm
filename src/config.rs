@@ -17,6 +17,7 @@ use crate::{
     window::rule::{WindowLocation, WindowRules},
 };
 
+// TODO run command at start up
 #[derive(Deserialize, Default)]
 #[serde(default)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
