@@ -146,8 +146,8 @@ for ls in app_samples:
     indices = list(range(len(ls)))
     train_data.append((ls, indices))
 
-# expect: ["Firefox", "Chrome", "GIMP", "Audacity"]
-test_example = ["GIMP", "Firefox", "Audacity", "Chrome"]
+# expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity"]
+test_example = ["GIMP", "Firefox", "Audacity", "Chrome", "VLC"]
 
 vocab = Vocab([d[0] for d in train_data])
 model = TransformerRanker(

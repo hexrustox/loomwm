@@ -3,6 +3,10 @@ name = "loomwm"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+resolver = "3"
+members = ["assistant"]
+
 [dependencies]
 anyhow = "1.0.100"
 bitflags = { version = "2.10.0", features = ["serde", "std"] }
