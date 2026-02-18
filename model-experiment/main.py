@@ -1,4 +1,5 @@
 import math
+import random
 
 import torch
 import torch.nn as nn
@@ -93,47 +94,6 @@ class TransformerRanker(nn.Module):
             return self.scorer(contextual_vecs).squeeze(-1)
 
 
-# 4. DATASET
-class RankingDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-
-# 5. COLLATE FUNCTION (labels generated on-the-fly)
-def collate_fn(batch, vocab, device, max_str_len=10):
-    batch_size = len(batch)
-    max_list_len = max(len(str_list) for str_list in batch)
-
-    inputs = torch.zeros((batch_size, max_list_len, max_str_len), dtype=torch.long)
-    labels = torch.zeros((batch_size, max_list_len))
-    list_mask = torch.ones((batch_size, max_list_len), dtype=torch.bool)
-    word_mask = torch.ones((batch_size, max_list_len, max_str_len), dtype=torch.bool)
-
-    for i, str_list in enumerate(batch):
-        for j, s in enumerate(str_list):
-            tokens = vocab.encode(s, max_str_len)
-            inputs[i, j] = torch.tensor(tokens)
-            labels[i, j] = j  # Label = position index
-            list_mask[i, j] = False
-            for k, tok in enumerate(tokens):
-                if tok != 0:
-                    word_mask[i, j, k] = False
-
-    return (
-        inputs.to(device),
-        labels.to(device),
-        word_mask.to(device),
-        list_mask.to(device),
-    )
-
-
-# 6. INFERENCE HELPER (no labels needed)
 def prepare_inference_batch(data_lists, vocab, device, max_str_len=10):
     batch_size = len(data_lists)
     max_list_len = max(len(ln) for ln in data_lists)
@@ -158,6 +118,77 @@ def prepare_inference_batch(data_lists, vocab, device, max_str_len=10):
     )
 
 
+def generate_training_batch(base_samples, num_unknowns_range=(0, 2)):
+    """Dynamically inject unknowns at random positions"""
+    batch = []
+    for str_list in base_samples:
+        augmented = str_list.copy()
+        num_unknowns = random.randint(*num_unknowns_range)
+
+        for _ in range(num_unknowns):
+            pos = random.randint(0, len(augmented))
+            augmented.insert(pos, "<UNK>")
+
+        batch.append(augmented)
+    return batch
+
+
+class RankingDataset(Dataset):
+    def __init__(self, base_data):
+        self.base_data = base_data
+
+    def __len__(self):
+        return len(self.base_data)
+
+    def __getitem__(self, idx):
+        return self.base_data[idx]
+
+
+def collate_fn(batch, vocab, device, max_str_len=10, inject_unknowns=True):
+    # Optionally inject unknowns during training
+    if inject_unknowns:
+        batch = generate_training_batch(batch, num_unknowns_range=(0, 2))
+
+    batch_size = len(batch)
+    max_list_len = max(len(str_list) for str_list in batch)
+
+    inputs = torch.zeros((batch_size, max_list_len, max_str_len), dtype=torch.long)
+    labels = torch.zeros((batch_size, max_list_len))
+    list_mask = torch.ones((batch_size, max_list_len), dtype=torch.bool)
+    word_mask = torch.ones((batch_size, max_list_len, max_str_len), dtype=torch.bool)
+
+    for i, str_list in enumerate(batch):
+        known_items = [(j, s) for j, s in enumerate(str_list) if s != "<UNK>"]
+        unknown_items = [(j, s) for j, s in enumerate(str_list) if s == "<UNK>"]
+
+        rank = 0
+        item_ranks = {}
+
+        for j, s in known_items:
+            item_ranks[j] = rank
+            rank += 1
+
+        for j, s in unknown_items:
+            item_ranks[j] = rank
+            rank += 1
+
+        for j, s in enumerate(str_list):
+            tokens = vocab.encode(s, max_str_len)
+            inputs[i, j] = torch.tensor(tokens)
+            labels[i, j] = item_ranks[j]
+            list_mask[i, j] = False
+            for k, tok in enumerate(tokens):
+                if tok != 0:
+                    word_mask[i, j, k] = False
+
+    return (
+        inputs.to(device),
+        labels.to(device),
+        word_mask.to(device),
+        list_mask.to(device),
+    )
+
+
 # --- EXECUTION ---
 
 app_samples = [
@@ -173,8 +204,9 @@ app_samples = [
     ["VLC", "Audacity", "Inkscape"],
 ]
 
-test_example = ["GIMP", "Firefox", "Audacity", "Chrome", "VLC"]
-# expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity"]
+test_example = ["Never Seen", "GIMP", "Firefox", "Audacity", "Chrome", "VLC"]
+# expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity", "Never Seen"]
+
 
 # Build vocab and model
 vocab = Vocab(app_samples)
@@ -183,16 +215,16 @@ model = TransformerRanker(
 ).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
 
-# Create DataLoader with custom collate_fn
+# DataLoader
 dataset = RankingDataset(app_samples)
 loader = DataLoader(
     dataset,
-    batch_size=8,  # Mini-batch size
+    batch_size=4,
     shuffle=True,
-    collate_fn=lambda batch: collate_fn(batch, vocab, device),
+    collate_fn=lambda batch: collate_fn(batch, vocab, device, inject_unknowns=True),
 )
 
-# Training loop
+# Training
 model.train()
 for epoch in range(100):
     epoch_loss = 0.0
@@ -204,7 +236,6 @@ for epoch in range(100):
         logits = model(x, w_mask, l_mask)
         logits = logits.masked_fill(l_mask, -1e9)
 
-        # ListNet Loss
         targets_soft = F.softmax(y.masked_fill(l_mask, -1e9), dim=1)
         loss = -(targets_soft * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
 
@@ -218,13 +249,13 @@ for epoch in range(100):
         avg_loss = epoch_loss / num_batches
         print(f"Epoch {epoch + 1} | Avg Loss: {avg_loss:.4f}")
 
-# Inference
+# Test with unknowns
 model.eval()
 with torch.no_grad():
     x_t, w_t, l_t = prepare_inference_batch([test_example], vocab, device)
     scores = model(x_t, w_t, l_t)
     probs = torch.softmax(scores, dim=1)
 
-print("\nResults:")
+print("\nResults")
 for s, p in sorted(zip(test_example, probs[0]), key=lambda t: t[1].item()):
-    print(f"Importance: {p.item():.4f} | String: {s}")
+    print(f"Score: {p.item():.4f} | {s}")
