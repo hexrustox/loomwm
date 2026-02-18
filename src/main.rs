@@ -53,6 +53,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let (sender, reciever) = channel::channel();
 
+    // TODO refactor
     let mut watcher = notify::recommended_watcher(move |event| {
         if let Ok(Event {
             kind: EventKind::Modify(ModifyKind::Data(..)),

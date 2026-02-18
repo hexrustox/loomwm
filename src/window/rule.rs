@@ -150,6 +150,7 @@ pub struct WindowOpeningProperties {
     pub workspace_name: Option<WorkspaceName>,
 }
 
+// TODO border
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct WindowDynamicProperties {

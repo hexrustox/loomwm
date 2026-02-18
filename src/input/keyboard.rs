@@ -24,6 +24,7 @@ bitflags! {
     }
 }
 
+// TODO multi action per key, sub key bind
 pub type KeyBindings = HashMap<KeyCombo, KeyAction>;
 
 #[derive(Debug, Hash, PartialEq, Eq)]
