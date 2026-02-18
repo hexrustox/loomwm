@@ -4,8 +4,9 @@ import torch
 import torch.nn as nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
 
-# 1. SETUP DEVICE & SILENCE PROTOTYPE WARNINGS
+# 1. SETUP DEVICE
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
@@ -50,7 +51,6 @@ class TransformerRanker(nn.Module):
         self.pos_encoder = PositionalEncoding(d_model)
         self.dropout = nn.Dropout(p=dropout)
 
-        # Level 1: String Encoder
         enc_layer1 = nn.TransformerEncoderLayer(
             d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
         )
@@ -58,7 +58,6 @@ class TransformerRanker(nn.Module):
             enc_layer1, num_layers=num_layers, enable_nested_tensor=False
         )
 
-        # Level 2: List Interaction Encoder
         enc_layer2 = nn.TransformerEncoderLayer(
             d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
         )
@@ -69,14 +68,11 @@ class TransformerRanker(nn.Module):
         self.scorer = nn.Linear(d_model, 1)
 
     def forward(self, x, word_mask, list_mask):
-        # sdpa_kernel(SDPBackend.MATH) forces the stable math implementation.
-        # This prevents experimental AMD Flash Attention kernels from triggering warnings.
         with sdpa_kernel(SDPBackend.MATH):
             batch_size, list_len, seq_len = x.shape
             x_flat = x.view(-1, seq_len)
             word_mask_flat = word_mask.view(-1, seq_len)
 
-            # Step 1: Word Embeddings -> String Context
             feat = self.embedding(x_flat) * math.sqrt(self.d_model)
             feat = self.pos_encoder(feat)
 
@@ -84,43 +80,79 @@ class TransformerRanker(nn.Module):
                 feat, src_key_padding_mask=word_mask_flat
             )
 
-            # Mean pooling to get 1 vector per string
             mask_float = (~word_mask_flat).float().unsqueeze(-1)
             string_vecs = (string_out * mask_float).sum(dim=1) / mask_float.sum(
                 dim=1
             ).clamp(min=1e-9)
 
-            # Step 2: List Context (Strings seeing other strings)
             list_input = string_vecs.view(batch_size, list_len, self.d_model)
             contextual_vecs = self.list_transformer(
                 list_input, src_key_padding_mask=list_mask
             )
 
-            # Step 3: Raw scores
             return self.scorer(contextual_vecs).squeeze(-1)
 
 
-# 4. DATA HELPER
-def prepare_batch(data_lists, label_lists, vocab, device, max_str_len=10):
-    batch_size = len(data_lists)
-    max_list_len = max(len(ln) for ln in data_lists)
+# 4. DATASET
+class RankingDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+
+# 5. COLLATE FUNCTION (labels generated on-the-fly)
+def collate_fn(batch, vocab, device, max_str_len=10):
+    batch_size = len(batch)
+    max_list_len = max(len(str_list) for str_list in batch)
+
     inputs = torch.zeros((batch_size, max_list_len, max_str_len), dtype=torch.long)
     labels = torch.zeros((batch_size, max_list_len))
     list_mask = torch.ones((batch_size, max_list_len), dtype=torch.bool)
     word_mask = torch.ones((batch_size, max_list_len, max_str_len), dtype=torch.bool)
 
-    for i, (str_list, lbl_list) in enumerate(zip(data_lists, label_lists)):
-        for j, (s, lb) in enumerate(zip(str_list, lbl_list)):
+    for i, str_list in enumerate(batch):
+        for j, s in enumerate(str_list):
             tokens = vocab.encode(s, max_str_len)
             inputs[i, j] = torch.tensor(tokens)
-            labels[i, j] = lb
+            labels[i, j] = j  # Label = position index
             list_mask[i, j] = False
             for k, tok in enumerate(tokens):
                 if tok != 0:
                     word_mask[i, j, k] = False
+
     return (
         inputs.to(device),
         labels.to(device),
+        word_mask.to(device),
+        list_mask.to(device),
+    )
+
+
+# 6. INFERENCE HELPER (no labels needed)
+def prepare_inference_batch(data_lists, vocab, device, max_str_len=10):
+    batch_size = len(data_lists)
+    max_list_len = max(len(ln) for ln in data_lists)
+
+    inputs = torch.zeros((batch_size, max_list_len, max_str_len), dtype=torch.long)
+    list_mask = torch.ones((batch_size, max_list_len), dtype=torch.bool)
+    word_mask = torch.ones((batch_size, max_list_len, max_str_len), dtype=torch.bool)
+
+    for i, str_list in enumerate(data_lists):
+        for j, s in enumerate(str_list):
+            tokens = vocab.encode(s, max_str_len)
+            inputs[i, j] = torch.tensor(tokens)
+            list_mask[i, j] = False
+            for k, tok in enumerate(tokens):
+                if tok != 0:
+                    word_mask[i, j, k] = False
+
+    return (
+        inputs.to(device),
         word_mask.to(device),
         list_mask.to(device),
     )
@@ -141,46 +173,58 @@ app_samples = [
     ["VLC", "Audacity", "Inkscape"],
 ]
 
-train_data = []
-for ls in app_samples:
-    indices = list(range(len(ls)))
-    train_data.append((ls, indices))
-
-# expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity"]
 test_example = ["GIMP", "Firefox", "Audacity", "Chrome", "VLC"]
+# expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity"]
 
-vocab = Vocab([d[0] for d in train_data])
+# Build vocab and model
+vocab = Vocab(app_samples)
 model = TransformerRanker(
     len(vocab.stoi), d_model=32, nhead=4, num_layers=1, dropout=0.2
 ).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
 
+# Create DataLoader with custom collate_fn
+dataset = RankingDataset(app_samples)
+loader = DataLoader(
+    dataset,
+    batch_size=8,  # Mini-batch size
+    shuffle=True,
+    collate_fn=lambda batch: collate_fn(batch, vocab, device),
+)
+
+# Training loop
 model.train()
 for epoch in range(100):
-    optimizer.zero_grad()
-    texts, targets = zip(*train_data)
-    x, y, w_mask, l_mask = prepare_batch(texts, targets, vocab, device)
+    epoch_loss = 0.0
+    num_batches = 0
 
-    logits = model(x, w_mask.view(-1, x.shape[-1]), l_mask)
-    logits = logits.masked_fill(l_mask, -1e9)
+    for x, y, w_mask, l_mask in loader:
+        optimizer.zero_grad()
 
-    # ListNet Loss
-    targets_soft = F.softmax(y.masked_fill(l_mask, -1e9), dim=1)
-    loss = -(targets_soft * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
+        logits = model(x, w_mask, l_mask)
+        logits = logits.masked_fill(l_mask, -1e9)
 
-    loss.backward()
-    optimizer.step()
+        # ListNet Loss
+        targets_soft = F.softmax(y.masked_fill(l_mask, -1e9), dim=1)
+        loss = -(targets_soft * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
+
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+        num_batches += 1
+
     if (epoch + 1) % 20 == 0:
-        print(f"Epoch {epoch + 1} | Loss: {loss.item():.4f}")
+        avg_loss = epoch_loss / num_batches
+        print(f"Epoch {epoch + 1} | Avg Loss: {avg_loss:.4f}")
 
+# Inference
 model.eval()
 with torch.no_grad():
-    x_t, _, w_t, l_t = prepare_batch(
-        [test_example], [[0 for _ in test_example]], vocab, device
-    )
-    scores = model(x_t, w_t.view(-1, x_t.shape[-1]), l_t)
+    x_t, w_t, l_t = prepare_inference_batch([test_example], vocab, device)
+    scores = model(x_t, w_t, l_t)
     probs = torch.softmax(scores, dim=1)
 
 print("\nResults:")
-for s, p in sorted(zip(test_example, probs[0]), key=lambda tuple: tuple[1].item()):
+for s, p in sorted(zip(test_example, probs[0]), key=lambda t: t[1].item()):
     print(f"Importance: {p.item():.4f} | String: {s}")
