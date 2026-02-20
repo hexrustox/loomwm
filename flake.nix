@@ -101,22 +101,24 @@
               alacritty
 
               rocmPackages.rocminfo
+              mesa-demos
             ]);
           extraOpts = [
             "--pid host"
             "--uts host"
 
-            "--env=COLORTERM=truecolor"
-            "--env=GBM_BACKENDS_PATH"
             "--env=HOME"
-            "--env=LD_LIBRARY_PATH"
-            "--env=LIBGL_DRIVERS_PATH"
-            "--env=LIBRARY_PATH"
-            "--env=LIBVA_DRIVERS_PATH"
-            "--env=PKG_CONFIG_PATH"
-            "--env=RUST_SRC_PATH"
+
+            "--env=COLORTERM=truecolor"
             "--env=TERM=xterm-256color"
+
+            "--env=LIBRARY_PATH"
+            "--env=PKG_CONFIG_PATH"
+
+            "--env=GBM_BACKENDS_PATH"
+            "--env=LIBGL_DRIVERS_PATH"
             "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
+            "--env=LD_LIBRARY_PATH"
 
             "--tmpfs=/tmp"
 
@@ -134,6 +136,8 @@
 
             "--device=/dev/dri"
             "--device=/dev/kfd"
+
+            "--cap-add=CAP_SYS_PTRACE"
           ];
           image = "ubuntu:latest";
         };

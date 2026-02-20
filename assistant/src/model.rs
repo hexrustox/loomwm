@@ -54,16 +54,20 @@ impl<B: Backend> PositionalEncoding<B> {
 // ─── Transformer Ranker ────────────────────────────────────────────────────────
 
 #[derive(Config, Debug)]
-pub struct TransformerRankerConfig {
+pub struct RankerModelConfig {
     pub vocab_size: usize,
+    #[config(default = 32)]
     pub d_model: usize,
+    #[config(default = 4)]
     pub n_head: usize,
+    #[config(default = 1)]
     pub num_layers: usize,
+    #[config(default = 0.2)]
     pub dropout: f64,
 }
 
 #[derive(Module, Debug)]
-pub struct TransformerRanker<B: Backend> {
+pub struct RankerModel<B: Backend> {
     d_model: usize,
     embedding: Embedding<B>,
     pos_encoder: PositionalEncoding<B>,
@@ -73,8 +77,8 @@ pub struct TransformerRanker<B: Backend> {
     scorer: Linear<B>,
 }
 
-impl TransformerRankerConfig {
-    pub fn init<B: Backend>(&self, device: &B::Device) -> TransformerRanker<B> {
+impl RankerModelConfig {
+    pub fn init<B: Backend>(&self, device: &B::Device) -> RankerModel<B> {
         let embedding = EmbeddingConfig::new(self.vocab_size, self.d_model).init(device);
         let pos_encoder = PositionalEncoding::new(self.d_model, 5000, device);
         let dropout = DropoutConfig::new(self.dropout).init();
@@ -99,7 +103,7 @@ impl TransformerRankerConfig {
 
         let scorer = LinearConfig::new(self.d_model, 1).init(device);
 
-        TransformerRanker {
+        RankerModel {
             d_model: self.d_model,
             embedding,
             pos_encoder,
@@ -111,7 +115,7 @@ impl TransformerRankerConfig {
     }
 }
 
-impl<B: Backend> TransformerRanker<B> {
+impl<B: Backend> RankerModel<B> {
     /// Forward pass.
     ///
     /// # Arguments
