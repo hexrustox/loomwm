@@ -1,4 +1,4 @@
-use assistant::{RankingDataset, train};
+use assistant::{RankingDataset, infer};
 use burn::backend::{
     Autodiff, Wgpu,
     wgpu::{
@@ -22,7 +22,7 @@ fn main() {
         init_setup::<OpenGl>(&device, Default::default());
     }
 
-    train::<MyAutodiffBackend>(
+    infer::<MyAutodiffBackend>(
         "/tmp/guide",
         RankingDataset::train(),
         RankingDataset::test(),
