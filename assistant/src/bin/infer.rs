@@ -1,6 +1,6 @@
-use assistant::{RankingDataset, infer};
+use assistant::infer;
 use burn::backend::{
-    Autodiff, Wgpu,
+    Wgpu,
     wgpu::{
         WgpuDevice,
         graphics::{AutoGraphicsApi, OpenGl},
@@ -10,7 +10,6 @@ use burn::backend::{
 
 fn main() {
     type MyBackend = Wgpu<f32, i32>;
-    type MyAutodiffBackend = Autodiff<MyBackend>;
 
     let device = WgpuDevice::default();
     if std::panic::catch_unwind(|| {
@@ -22,10 +21,5 @@ fn main() {
         init_setup::<OpenGl>(&device, Default::default());
     }
 
-    infer::<MyAutodiffBackend>(
-        "/tmp/guide",
-        RankingDataset::train(),
-        RankingDataset::test(),
-        device,
-    );
+    infer::<MyBackend>("/tmp/guide", device);
 }

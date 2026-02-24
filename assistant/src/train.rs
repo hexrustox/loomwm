@@ -1,64 +1,23 @@
-use std::collections::HashMap;
+use std::fs::create_dir_all;
 
 use burn::{
     config::Config,
     data::{dataloader::DataLoaderBuilder, dataset::Dataset},
     module::Module,
-    optim::AdamConfig,
+    optim::{AdamConfig, Optimizer},
     prelude::Backend,
     record::CompactRecorder,
     tensor::{
         activation::{log_softmax, softmax},
         backend::AutodiffBackend,
     },
-    train::{
-        InferenceStep, Learner, RegressionOutput, SupervisedTraining, TrainOutput, TrainStep,
-        metric::LossMetric,
-    },
+    train::{InferenceStep, RegressionOutput, TrainOutput, TrainStep},
 };
 
 use crate::{
-    data::{RankingBatch, RankingBatcher, RankingDataset},
+    data::{RankingBatch, RankingBatcher, RankingDataset, Vocab},
     model::{RankerModel, RankerModelConfig},
 };
-
-#[derive(Clone)]
-pub struct Vocab {
-    string_to_token: HashMap<String, usize>,
-}
-
-impl Vocab {
-    pub fn new(data: impl Iterator<Item = String>) -> Self {
-        let mut string_to_token = HashMap::new();
-        string_to_token.insert("<PAD>".to_string(), 0);
-        string_to_token.insert("<UNK>".to_string(), 1);
-
-        data.for_each(|str| {
-            for word in str.to_lowercase().split_whitespace() {
-                let len = string_to_token.len();
-                string_to_token.entry(word.to_string()).or_insert(len);
-            }
-        });
-
-        Self { string_to_token }
-    }
-
-    pub fn encode(&self, text: &str, max_len: usize) -> Vec<usize> {
-        let mut tokens: Vec<usize> = text
-            .to_lowercase()
-            .split_whitespace()
-            .take(max_len)
-            .map(|w| *self.string_to_token.get(w).unwrap_or(&1))
-            .collect();
-
-        tokens.resize(max_len, 0);
-        tokens
-    }
-
-    pub fn vocab_size(&self) -> usize {
-        self.string_to_token.len()
-    }
-}
 
 impl<B: Backend> RankerModel<B> {
     pub fn forward_regression(
@@ -118,62 +77,50 @@ pub struct TrainingConfig {
     pub learning_rate: f64,
 }
 
-fn create_artifact_dir(artifact_dir: &str) {
-    // Remove existing artifacts before to get an accurate learner summary
-    std::fs::remove_dir_all(artifact_dir).ok();
-    std::fs::create_dir_all(artifact_dir).ok();
-}
-
 pub fn train<B: AutodiffBackend>(
     artifact_dir: &str,
     training_dataset: RankingDataset,
-    testing_dataset: RankingDataset,
     device: B::Device,
 ) {
-    create_artifact_dir(artifact_dir);
+    create_dir_all(artifact_dir).unwrap();
 
     let vocab = Vocab::new(training_dataset.iter().flat_map(|item| item.app_ids));
+    std::fs::write(
+        format!("{artifact_dir}/vocab.json"),
+        serde_json::to_string(&vocab).unwrap(),
+    )
+    .unwrap();
 
     let config = TrainingConfig::new(
         RankerModelConfig::new(vocab.vocab_size()),
         AdamConfig::new(),
     );
-    config
-        .save(format!("{artifact_dir}/config.json"))
-        .expect("Config should be saved successfully");
+    config.save(format!("{artifact_dir}/config.json")).unwrap();
 
     B::seed(&device, config.seed);
 
     let batcher = RankingBatcher::new(vocab);
 
-    let dataloader_train = DataLoaderBuilder::new(batcher.clone())
+    let dataloader_train = DataLoaderBuilder::new(batcher)
         .batch_size(config.batch_size)
         .shuffle(config.seed)
         .num_workers(config.num_workers)
         .build(training_dataset);
 
-    let dataloader_test = DataLoaderBuilder::new(batcher)
-        .batch_size(config.batch_size)
-        .shuffle(config.seed)
-        .num_workers(config.num_workers)
-        .build(testing_dataset);
+    let mut model = config.model.init::<B>(&device);
+    let mut optimizer = config.optimizer.init();
 
-    let training = SupervisedTraining::new(artifact_dir, dataloader_train, dataloader_test)
-        .metric_train_numeric(LossMetric::new())
-        .metric_valid_numeric(LossMetric::new())
-        .with_file_checkpointer(CompactRecorder::new())
-        .num_epochs(config.num_epochs)
-        .summary();
+    for _ in 1..=config.num_epochs + 1 {
+        for batch in dataloader_train.iter() {
+            let item = TrainStep::step(&model, batch);
 
-    let model = config.model.init::<B>(&device);
-    let result = training.launch(Learner::new(
-        model,
-        config.optimizer.init(),
-        config.learning_rate,
-    ));
+            let grads = item.grads;
 
-    result
-        .model
+            model = optimizer.step(config.learning_rate, model, grads);
+        }
+    }
+
+    model
         .save_file(format!("{artifact_dir}/model"), &CompactRecorder::new())
-        .expect("Trained model should be saved successfully");
+        .unwrap();
 }

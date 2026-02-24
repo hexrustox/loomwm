@@ -1,11 +1,50 @@
+use std::collections::HashMap;
+
 use burn::{
     Tensor,
     data::{dataloader::batcher::Batcher, dataset::Dataset},
     prelude::Backend,
     tensor::{Bool, Float, Int, TensorData},
 };
+use serde::{Deserialize, Serialize};
 
-use crate::train::Vocab;
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Vocab {
+    string_to_token: HashMap<String, usize>,
+}
+
+impl Vocab {
+    pub fn new(data: impl Iterator<Item = String>) -> Self {
+        let mut string_to_token = HashMap::new();
+        string_to_token.insert("<PAD>".to_string(), 0);
+        string_to_token.insert("<UNK>".to_string(), 1);
+
+        data.for_each(|str| {
+            for word in str.to_lowercase().split_whitespace() {
+                let len = string_to_token.len();
+                string_to_token.entry(word.to_string()).or_insert(len);
+            }
+        });
+
+        Self { string_to_token }
+    }
+
+    pub fn encode(&self, text: &str, max_len: usize) -> Vec<usize> {
+        let mut tokens: Vec<usize> = text
+            .to_lowercase()
+            .split_whitespace()
+            .take(max_len)
+            .map(|w| *self.string_to_token.get(w).unwrap_or(&1))
+            .collect();
+
+        tokens.resize(max_len, 0);
+        tokens
+    }
+
+    pub fn vocab_size(&self) -> usize {
+        self.string_to_token.len()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct RankingItem {
@@ -178,26 +217,6 @@ impl RankingDataset {
                         "Audacity".to_string(),
                         "Inkscape".to_string(),
                     ],
-                },
-            ],
-        }
-    }
-
-    pub fn test() -> Self {
-        Self {
-            // expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity"]
-            items: vec![
-                RankingItem {
-                    app_ids: vec![
-                        "GIMP".to_string(),
-                        "Firefox".to_string(),
-                        "Audacity".to_string(),
-                        "Chrome".to_string(),
-                        "VLC".to_string(),
-                    ],
-                },
-                RankingItem {
-                    app_ids: vec!["Chrome".to_string(), "Firefox".to_string()],
                 },
             ],
         }

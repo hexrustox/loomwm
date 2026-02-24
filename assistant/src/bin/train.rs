@@ -22,10 +22,5 @@ fn main() {
         init_setup::<OpenGl>(&device, Default::default());
     }
 
-    train::<MyAutodiffBackend>(
-        "/tmp/guide",
-        RankingDataset::train(),
-        RankingDataset::test(),
-        device,
-    );
+    train::<MyAutodiffBackend>("/tmp/guide", RankingDataset::train(), device);
 }
