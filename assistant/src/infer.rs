@@ -11,11 +11,11 @@ use burn::{
 
 use crate::{
     RankingItem,
-    data::{RankingBatcher, Vocab},
+    data::{RankingBatch, RankingBatcher, Vocab},
     train::TrainingConfig,
 };
 
-pub fn infer<B: Backend>(artifact_dir: &str, device: B::Device) {
+pub fn infer<B: Backend>(artifact_dir: &str, item: RankingItem, device: B::Device) -> Vec<String> {
     let vocab = serde_json::from_str::<Vocab>(
         &read_to_string(format!("{artifact_dir}/vocab.json")).unwrap(),
     )
@@ -28,18 +28,9 @@ pub fn infer<B: Backend>(artifact_dir: &str, device: B::Device) {
     let model = config.model.init::<B>(&device).load_record(record);
 
     let batcher = RankingBatcher::new(vocab);
-    let batch: crate::data::RankingBatch<B> = batcher.batch(
-        vec![RankingItem {
-            app_ids: vec![
-                "GIMP".to_string(),
-                "Firefox".to_string(),
-                "Audacity".to_string(),
-                "Chrome".to_string(),
-                "VLC".to_string(),
-            ],
-        }],
-        &device,
-    );
+    let app_ids = item.app_ids.clone();
+    let batch: RankingBatch<B> = batcher.batch(vec![item], &device);
+
     let output = model.forward(batch.inputs, batch.word_mask, batch.list_mask);
     let output: Vec<f32> = softmax(output, 1)
         .reshape([-1])
@@ -48,28 +39,16 @@ pub fn infer<B: Backend>(artifact_dir: &str, device: B::Device) {
         .unwrap()
         .to_vec();
 
-    let mut vec = zip(
-        vec![
-            "GIMP".to_string(),
-            "Firefox".to_string(),
-            "Audacity".to_string(),
-            "Chrome".to_string(),
-            "VLC".to_string(),
-        ],
-        output,
-    )
-    .collect::<Vec<_>>();
-    vec.sort_unstable_by(|(_, a), (_, b)| {
+    let mut result = zip(app_ids, output).collect::<Vec<_>>();
+    result.sort_by(|(_, a), (_, b)| {
+        use std::cmp::Ordering::*;
         if a < b {
-            std::cmp::Ordering::Less
+            Less
         } else if a > b {
-            std::cmp::Ordering::Greater
+            Greater
         } else {
-            std::cmp::Ordering::Equal
+            Equal
         }
     });
-
-    for (i, j) in vec {
-        println!("{i} {j}");
-    }
+    result.into_iter().map(|(s, _)| s).collect()
 }
