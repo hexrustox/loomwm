@@ -1,25 +1,13 @@
-use assistant::infer;
-use burn::backend::{
-    Wgpu,
-    wgpu::{
-        WgpuDevice,
-        graphics::{AutoGraphicsApi, OpenGl},
-        init_setup,
-    },
-};
+use assistant::{get_device, infer};
+use burn::backend::{NdArray, Wgpu};
 
 fn main() {
-    type MyBackend = Wgpu<f32, i32>;
-
-    let device = WgpuDevice::default();
-    if std::panic::catch_unwind(|| {
-        init_setup::<AutoGraphicsApi>(&device, Default::default());
-    })
-    .is_err()
-    {
-        println!("Auto initialization failed, falling back to OpenGL");
-        init_setup::<OpenGl>(&device, Default::default());
+    match get_device() {
+        assistant::BackendDevice::Gpu(d) => {
+            infer::<Wgpu>("/tmp/guide", d);
+        }
+        assistant::BackendDevice::Cpu(d) => {
+            infer::<NdArray>("/tmp/guide", d);
+        }
     }
-
-    infer::<MyBackend>("/tmp/guide", device);
 }

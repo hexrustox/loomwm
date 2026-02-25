@@ -102,6 +102,7 @@
 
               rocmPackages.rocminfo
               mesa-demos
+              vulkan-tools
             ]);
           extraOpts = [
             "--pid host"
@@ -114,11 +115,11 @@
 
             "--env=LIBRARY_PATH"
             "--env=PKG_CONFIG_PATH"
-
+            "--env=LD_LIBRARY_PATH"
             "--env=GBM_BACKENDS_PATH"
             "--env=LIBGL_DRIVERS_PATH"
             "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
-            "--env=LD_LIBRARY_PATH"
+            "--env=VK_ICD_FILENAMES"
 
             "--tmpfs=/tmp"
 
@@ -162,11 +163,11 @@
 
             LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}";
             PKG_CONFIG_PATH = "${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}";
-
+            LD_LIBRARY_PATH = "${lib.makeLibraryPath (mesa-drivers ++ ld ++ [ pkgs.vulkan-loader ])}";
             GBM_BACKENDS_PATH = "${lib.makeSearchPathOutput "lib" "lib/gbm" mesa-drivers}";
             LIBGL_DRIVERS_PATH = "${lib.makeSearchPathOutput "lib" "lib/dri" mesa-drivers}";
             __EGL_VENDOR_LIBRARY_FILENAMES = "${mesa}/share/glvnd/egl_vendor.d/50_mesa.json";
-            LD_LIBRARY_PATH = "${lib.makeLibraryPath (mesa-drivers ++ ld)}";
+            VK_ICD_FILENAMES = "${mesa}/share/vulkan/icd.d";
           };
       }
     );

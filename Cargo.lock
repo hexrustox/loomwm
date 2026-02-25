@@ -185,6 +185,7 @@ dependencies = [
  "burn",
  "serde",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]

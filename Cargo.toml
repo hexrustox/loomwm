@@ -8,7 +8,7 @@ resolver = "3"
 members = ["assistant"]
 
 [dependencies]
-anyhow = "1.0.100"
+anyhow.workspace = true
 bitflags = { version = "2.10.0", features = ["serde", "std"] }
 evdev = "0.13.2"
 notify = "8.2.0"
@@ -25,6 +25,7 @@ toml = "0.9.11"
 xkbcommon = "0.9.0"
 
 [workspace.dependencies]
+anyhow = "1.0.100"
 serde = { version = "1.0.228", features = ["derive"] }
 
 [dev-dependencies]
