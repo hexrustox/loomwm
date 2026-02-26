@@ -11,7 +11,7 @@ use smithay::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Neg, rc::Rc};
 
-new_key_type! { struct TileId; }
+new_key_type! { pub struct TileId; }
 
 type TileArena<T> = SlotMap<TileId, Tile<T>>;
 
@@ -53,13 +53,6 @@ impl<T> Tile<T> {
     fn as_window_mut(&mut self) -> &mut T {
         match &mut self.kind {
             TileKind::Window(window) => window,
-            _ => unreachable!(),
-        }
-    }
-
-    fn into_layout_tiles(self) -> Vec<TileId> {
-        match self.kind {
-            TileKind::Layout { tiles, .. } => tiles,
             _ => unreachable!(),
         }
     }
@@ -193,6 +186,35 @@ impl Default for LayoutNode {
     }
 }
 
+pub enum TileInsertion<T> {
+    Id(TileId),
+    Window { window: T, ratio: Option<TileRatio> },
+}
+
+impl<T> TileInsertion<T> {
+    pub fn into_window(self) -> T {
+        match self {
+            Self::Window { window, .. } => window,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<T> From<TileId> for TileInsertion<T> {
+    fn from(value: TileId) -> Self {
+        Self::Id(value)
+    }
+}
+
+impl<T: TileTreeWindow> From<T> for TileInsertion<T> {
+    fn from(value: T) -> Self {
+        Self::Window {
+            window: value,
+            ratio: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum TileResizeUnit {
     Exact(i32),
@@ -232,13 +254,16 @@ pub trait SearchKey<'a>: Into<TileTreeSearchKey<'a>> + Copy {}
 impl<'a, T> SearchKey<'a> for T where T: Into<TileTreeSearchKey<'a>> + Copy {}
 
 impl<T: TileTreeWindow> TileTree<T> {
-    pub fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
-        let mut arena = SlotMap::with_key();
-        let layout = layouts.get(layout_name);
-
-        let new_tile = Tile {
+    fn create_layout_tile(
+        arena: &mut TileArena<T>,
+        layout: &LayoutSchema,
+        schema: String,
+        ratio: TileRatio,
+        parent: Option<TileId>,
+    ) -> TileId {
+        arena.insert(Tile {
             kind: TileKind::Layout {
-                schema: layout_name.to_string(),
+                schema,
                 schema_index: 0,
                 schema_repeat: 0,
                 split: layout.split,
@@ -246,10 +271,16 @@ impl<T: TileTreeWindow> TileTree<T> {
                 tiles: Vec::new(),
                 rect: Rectangle::new((0, 0).into(), (0, 0).into()),
             },
-            ratio: 1.0,
-            parent: None,
-        };
-        let root = arena.insert(new_tile);
+            ratio,
+            parent,
+        })
+    }
+
+    pub fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+        let mut arena = SlotMap::with_key();
+        let layout = layouts.get(layout_name);
+        let root =
+            Self::create_layout_tile(&mut arena, &layout, layout_name.to_string(), 1.0, None);
 
         Self {
             arena,
@@ -259,7 +290,9 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn insert(&mut self, window: T, ratio: Option<TileRatio>) -> Option<T> {
+    pub fn insert(&mut self, item: impl Into<TileInsertion<T>>) -> Option<TileInsertion<T>> {
+        let item = item.into();
+
         let TileKind::Layout {
             schema,
             schema_index,
@@ -267,7 +300,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             ..
         } = &self.arena[self.current_tile].kind
         else {
-            return Some(window);
+            return Some(item);
         };
         let schema = schema.clone();
 
@@ -278,7 +311,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         for i in idx..layout.nodes.len() {
             let node = &layout.nodes[i];
             if repeat < node.repeat {
-                // Update the schema index and repeat in the current layout
                 if let TileKind::Layout {
                     ref mut schema_index,
                     ref mut schema_repeat,
@@ -291,54 +323,52 @@ impl<T: TileTreeWindow> TileTree<T> {
 
                 if let Some(layout_name) = &node.layout {
                     let nested_layout = self.layouts.get(layout_name);
-                    let new_tile = Tile {
-                        kind: TileKind::Layout {
-                            schema: layout_name.clone(),
-                            schema_index: 0,
-                            schema_repeat: 0,
-                            split: nested_layout.split,
-                            orientation: nested_layout.orientation,
-                            tiles: Vec::new(),
-                            rect: Rectangle::new((0, 0).into(), (0, 0).into()),
-                        },
-                        ratio: node.ratio,
-                        parent: Some(self.current_tile),
-                    };
-                    let tile_id = self.arena.insert(new_tile);
+                    let tile_id = Self::create_layout_tile(
+                        &mut self.arena,
+                        &nested_layout,
+                        layout_name.clone(),
+                        node.ratio,
+                        Some(self.current_tile),
+                    );
 
                     self.arena[self.current_tile]
                         .as_layout_tiles_mut()
                         .push(tile_id);
 
                     self.current_tile = tile_id;
-                    return self.insert(window, ratio);
+                    return self.insert(item);
                 } else {
-                    let new_tile = Tile {
-                        kind: TileKind::Window(window),
-                        ratio: ratio.unwrap_or(node.ratio),
-                        parent: Some(self.current_tile),
-                    };
-                    let tile_id = self.arena.insert(new_tile);
+                    match item {
+                        TileInsertion::Id(id) => {
+                            self.arena[id].parent = Some(self.current_tile);
+                            self.arena[self.current_tile].as_layout_tiles_mut().push(id);
+                        }
+                        TileInsertion::Window { window, ratio } => {
+                            let new_tile = Tile {
+                                kind: TileKind::Window(window),
+                                ratio: ratio.unwrap_or(node.ratio),
+                                parent: Some(self.current_tile),
+                            };
+                            let tile_id = self.arena.insert(new_tile);
 
-                    self.arena[self.current_tile]
-                        .as_layout_tiles_mut()
-                        .push(tile_id);
+                            self.arena[self.current_tile]
+                                .as_layout_tiles_mut()
+                                .push(tile_id);
+                        }
+                    }
 
                     return None;
                 }
             }
-            // Current node is full, reset repeat for next node
+
             repeat = 0;
         }
 
-        // Current layout is full, backtrack to parent
         let Some(parent_id) = self.arena[self.current_tile].parent else {
-            return Some(window);
+            return Some(item);
         };
-
         self.current_tile = parent_id;
 
-        // Update parent's position after current node is filled
         if let TileKind::Layout {
             ref schema,
             ref mut schema_index,
@@ -347,14 +377,14 @@ impl<T: TileTreeWindow> TileTree<T> {
         } = self.arena[parent_id].kind
         {
             let parent_layout = self.layouts.get(schema);
-            // Check if current node is full, if so move to next node
+
             if *schema_repeat >= parent_layout.nodes[*schema_index].repeat {
                 *schema_repeat = 0;
                 *schema_index += 1;
             }
         }
 
-        self.insert(window, ratio)
+        self.insert(item)
     }
 
     fn find_tile_id(&self, key: TileTreeSearchKey) -> Option<TileId> {
@@ -383,92 +413,66 @@ impl<T: TileTreeWindow> TileTree<T> {
         traverse(&self.arena, self.root, key)
     }
 
-    // TODO improve efficiency
     pub fn remove<'a>(&mut self, key: impl SearchKey<'a>) -> Option<T> {
-        struct RemoveTile {
-            parent: TileId,
-            index: usize,
-        }
-
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,
             layout_id: TileId,
             key: TileTreeSearchKey<'_>,
-        ) -> Option<RemoveTile> {
-            for (index, tile_id) in arena[layout_id].as_layout_tiles().iter().enumerate() {
-                match &arena[*tile_id] {
-                    Tile {
-                        kind: TileKind::Window(window),
-                        ..
-                    } => {
+            window_ids: &mut Vec<TileId>,
+            layout_ids: &mut Vec<TileId>,
+        ) -> Option<TileId> {
+            let mut result = None;
+            for tile_id in arena[layout_id].as_layout_tiles() {
+                match &arena[*tile_id].kind {
+                    TileKind::Window(window) => {
                         if window.match_id(key) {
-                            return Some(RemoveTile {
-                                parent: layout_id,
-                                index,
-                            });
+                            result = Some(*tile_id);
+                        } else {
+                            window_ids.push(*tile_id);
                         }
                     }
-                    _ => {
-                        if let res @ Some(_) = traverse(arena, *tile_id, key) {
-                            return res;
+                    TileKind::Layout { .. } => {
+                        layout_ids.push(*tile_id);
+                        if let inner_result @ Some(_) =
+                            traverse(arena, *tile_id, key, window_ids, layout_ids)
+                        {
+                            result = inner_result;
                         }
                     }
                 }
             }
-
-            None
+            result
         }
 
-        if let Some(RemoveTile { parent, index }) = traverse(&self.arena, self.root, key.into()) {
-            let remove_id = self.arena[parent].as_layout_tiles_mut().remove(index);
-            let window = self.arena.remove(remove_id).unwrap().into_window();
+        let mut window_ids = Vec::new();
+        let mut layout_ids = Vec::new();
 
-            let mut handle_ids = Vec::new();
-            for id in self.arena[self.root].as_layout_tiles() {
-                handle_ids.push(*id);
+        if let Some(target_id) = traverse(
+            &self.arena,
+            self.root,
+            key.into(),
+            &mut window_ids,
+            &mut layout_ids,
+        ) {
+            let TileKind::Layout { ref schema, .. } = self.arena[self.root].kind else {
+                unreachable!()
+            };
+            let schema = schema.to_string();
+
+            layout_ids.push(self.root);
+            for id in layout_ids {
+                self.arena.remove(id);
             }
 
-            let mut extracted_windows = Vec::new();
-            let mut i = 0;
-            while i < handle_ids.len() {
-                let id = handle_ids[i];
-                match self.arena[id] {
-                    Tile {
-                        kind: TileKind::Window(..),
-                        ratio,
-                        ..
-                    } => {
-                        extracted_windows
-                            .push((self.arena.remove(id).unwrap().into_window(), ratio));
-                    }
-                    Tile {
-                        kind: TileKind::Layout { .. },
-                        ..
-                    } => {
-                        handle_ids.splice(
-                            i + 1..i + 1,
-                            self.arena.remove(id).unwrap().into_layout_tiles(),
-                        );
-                    }
-                }
+            let layout = self.layouts.get(&schema);
+            self.root = Self::create_layout_tile(&mut self.arena, &layout, schema, 1.0, None);
+            self.current_tile = self.root;
 
-                i += 1;
+            for id in window_ids {
+                self.insert(TileInsertion::Id(id));
             }
-
-            let root_schema =
-                if let TileKind::Layout { ref schema, .. } = self.arena[self.root].kind {
-                    schema.clone()
-                } else {
-                    String::new()
-                };
-            *self = Self::new(self.layouts.clone(), &root_schema);
-            for (window, ratio) in extracted_windows {
-                self.insert(window, Some(ratio));
-            }
-
-            return Some(window);
+            return self.arena.remove(target_id).map(|tile| tile.into_window());
         }
-
         None
     }
 
@@ -1571,7 +1575,7 @@ mod tests {
         };
         let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
         for _ in 0..tiles {
-            tree.insert(TestWindow::new(), None);
+            tree.insert(TestWindow::new());
         }
         assert_tree_eq!(tree, expected);
     }
@@ -1590,7 +1594,10 @@ mod tests {
             "root",
         );
         for i in 1..=3 {
-            tree.insert(TestWindow::new(), Some(i as f64));
+            tree.insert(TileInsertion::Window {
+                window: TestWindow::new(),
+                ratio: Some(i as f64),
+            });
         }
         let expected = tile_tree!(layout() [
             window(ratio: 1),
@@ -1611,12 +1618,12 @@ mod tests {
         let mut tree = TileTree::new(layouts, layout_name);
         for i in 0..tiles - 1 {
             assert!(
-                tree.insert(TestWindow::new(), None).is_none(),
+                tree.insert(TestWindow::new()).is_none(),
                 "Number {:?} insert failed",
                 i
             );
         }
-        tree.insert(TestWindow::new(), None).is_none()
+        tree.insert(TestWindow::new()).is_none()
     }
 
     #[test_case(
@@ -1810,15 +1817,12 @@ mod tests {
         };
         let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
         for i in 0..tiles {
-            tree.insert(
-                TestWindow {
-                    inner: Rc::new(RefCell::new(TestWindowInner {
-                        id: Some(i),
-                        ..Default::default()
-                    })),
-                },
-                None,
-            );
+            tree.insert(TestWindow {
+                inner: Rc::new(RefCell::new(TestWindowInner {
+                    id: Some(i),
+                    ..Default::default()
+                })),
+            });
         }
         assert_eq!(
             tree.remove(remove).map(|t| t.inner.borrow().id),
@@ -1833,15 +1837,12 @@ mod tests {
         let mut tree = TileTree::<TestWindow>::new(layouts, "windows");
 
         for i in 0..2 {
-            tree.insert(
-                TestWindow {
-                    inner: Rc::new(RefCell::new(TestWindowInner {
-                        id: Some(i),
-                        ..Default::default()
-                    })),
-                },
-                None,
-            );
+            tree.insert(TestWindow {
+                inner: Rc::new(RefCell::new(TestWindowInner {
+                    id: Some(i),
+                    ..Default::default()
+                })),
+            });
         }
 
         assert_eq!(tree.remove(99), None);

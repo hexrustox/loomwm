@@ -12,7 +12,10 @@ use smithay::{
 };
 
 use crate::{
-    monitor::{apply_rule_to_mapped_window, workspace::tile::TileTree},
+    monitor::{
+        apply_rule_to_mapped_window,
+        workspace::tile::{TileInsertion, TileTree},
+    },
     utils::{Direction, get_app_id_and_title},
     window::{
         MappedWindow,
@@ -83,8 +86,11 @@ impl Workspace {
         ratio: Option<TileRatio>,
     ) -> Option<MappedWindow> {
         self.insert_into_focus_queue(mapped.clone());
-        if let mapped @ Some(_) = self.tiling.insert(mapped, ratio) {
-            return mapped;
+        if let Some(insertion) = self.tiling.insert(TileInsertion::Window {
+            window: mapped,
+            ratio,
+        }) {
+            return Some(insertion.into_window());
         } else {
             self.update_tiling_window_size();
         }
