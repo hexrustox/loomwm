@@ -1347,26 +1347,9 @@ mod tests {
                 ),
             ),
             (
-                "mix windows layouts".into(),
-                schema!(
-                    nodes: [
-                        node!(win, repeat: 2),
-                        node!(ref: "windows", repeat: 2),
-                        node!(win, repeat: 2),
-                        node!(ref: "windows", repeat: 2),
-                    ]
-                ),
-            ),
-            (
                 "nested layout".into(),
                 schema!(
                     nodes: [ node!(ref: "layout") ]
-                ),
-            ),
-            (
-                "double nested layout".into(),
-                schema!(
-                    nodes: [ node!(ref: "nested layout") ]
                 ),
             ),
         ])
@@ -1437,7 +1420,7 @@ mod tests {
                 window()
             ]
         ]);
-        "single nested layout"
+        "nested layout"
     )]
     #[test_case(
         LayoutType::New(vec![
@@ -1480,24 +1463,40 @@ mod tests {
                 ]
             ]
         ]);
-        "deeply nested layouts"
+        "nested layouts"
     )]
     #[test_case(
-        LayoutType::Ref("mix windows layouts"),
-        14,
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
+                node!(win),
+                node!(ref: "sub"),
+            ])),
+            ("sub", schema!(nodes: [
+                node!(win, repeat: 3),
+            ]))
+        ]),
+        3,
         tile_tree!(layout() [
             window(),
-            window(),
             layout() [
                 window(),
                 window(),
-                window(),
             ],
-            layout() [
-                window(),
-                window(),
-                window(),
-            ],
+        ]);
+        "mixed windows and layouts"
+    )]
+    #[test_case(
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
+                node!(win, repeat: 2),
+                node!(ref: "sub", repeat: 2),
+            ])),
+            ("sub", schema!(nodes: [
+                node!(win, repeat: 3),
+            ]))
+        ]),
+        6,
+        tile_tree!(layout() [
             window(),
             window(),
             layout() [
@@ -1514,8 +1513,32 @@ mod tests {
     #[test_case(
         LayoutType::New(vec![
             ("root", schema!(nodes: [
+                node!(win),
+                node!(ref: "sub1"),
+            ])),
+            ("sub1", schema!(nodes: [
+                node!(ref: "sub2"),
+            ])),
+            ("sub2", schema!(nodes: [
+                node!(win),
+            ]))
+        ]),
+        2,
+        tile_tree!(layout() [
+            window(),
+            layout() [
+                layout() [
+                    window(),
+                ],
+            ],
+        ]);
+        "mixed windows and nested layouts"
+    )]
+    #[test_case(
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
                 node!(ref: "sub", ratio: 3),
-                node!(win, ratio: 1),
+                node!(win, ratio: 2),
             ])),
             ("sub", schema!(nodes: [
                 node!(win, repeat: 2),
@@ -1527,7 +1550,7 @@ mod tests {
                 window(),
                 window(),
             ],
-            window(ratio: 1),
+            window(ratio: 2),
         ]);
         "nested layout with ratios and repeat"
     )]
@@ -1582,7 +1605,6 @@ mod tests {
     #[test_case("windows", 3 => true; "windows within capacity accepted")]
     #[test_case("windows", 4 => false; "windows beyond capacity rejected")]
     #[test_case("layouts", 7 => false; "layouts beyond capacity rejected")]
-    #[test_case("mix windows layouts", 17 => false; "mixed layout beyond capacity rejected")]
     #[test_case("nested layout", 4 => false; "nested layout beyond capacity rejected")]
     fn test_reject_insertion(layout_name: &str, tiles: u32) -> bool {
         let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
@@ -1598,14 +1620,14 @@ mod tests {
     }
 
     #[test_case(
-        "windows",
+        LayoutType::Ref("windows"),
         1,
         0,
         tile_tree!(layout() []);
         "single window becomes empty"
     )]
     #[test_case(
-        "windows",
+        LayoutType::Ref("windows"),
         3,
         0,
         tile_tree!(layout() [
@@ -1615,7 +1637,7 @@ mod tests {
         "three windows remove first"
     )]
     #[test_case(
-        "windows",
+        LayoutType::Ref("windows"),
         3,
         1,
         tile_tree!(layout() [
@@ -1625,7 +1647,7 @@ mod tests {
         "three windows remove middle"
     )]
     #[test_case(
-        "windows",
+        LayoutType::Ref("windows"),
         3,
         2,
         tile_tree!(layout() [
@@ -1635,7 +1657,7 @@ mod tests {
         "three windows remove last"
     )]
     #[test_case(
-        "layout",
+        LayoutType::Ref("layout"),
         3,
         2,
         tile_tree!(layout() [
@@ -1647,14 +1669,14 @@ mod tests {
         "nested layout single remove one"
     )]
     #[test_case(
-        "nested layout",
+        LayoutType::Ref("nested layout"),
         1,
         0,
         tile_tree!(layout() []);
         "nested layout single becomes empty"
     )]
     #[test_case(
-        "layouts",
+        LayoutType::Ref("layouts"),
         4,
         0,
         tile_tree!(layout() [
@@ -1667,7 +1689,7 @@ mod tests {
         "multi layout remove from first"
     )]
     #[test_case(
-        "layouts",
+        LayoutType::Ref("layouts"),
         5,
         3,
         tile_tree!(layout() [
@@ -1683,7 +1705,7 @@ mod tests {
         "multi layout remove from second"
     )]
     #[test_case(
-        "layouts",
+        LayoutType::Ref("layouts"),
         4,
         3,
         tile_tree!(layout() [
@@ -1696,7 +1718,7 @@ mod tests {
         "multi layout prune empty layout"
     )]
     #[test_case(
-        "layouts",
+        LayoutType::Ref("layouts"),
         6,
         3,
         tile_tree!(layout() [
@@ -1713,7 +1735,7 @@ mod tests {
         "multi layout remove first from second"
     )]
     #[test_case(
-        "nested layout",
+        LayoutType::Ref("nested layout"),
         3,
         2,
         tile_tree!(layout() [
@@ -1724,30 +1746,69 @@ mod tests {
                 ]
             ]
         ]);
-        "deeply nested three levels"
+        "nested levels"
     )]
     #[test_case(
-        "mix windows layouts",
-        8,
-        3,
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
+                node!(win),
+                node!(ref: "sub1"),
+            ])),
+            ("sub1", schema!(nodes: [
+                node!(ref: "sub2"),
+            ])),
+            ("sub2", schema!(nodes: [
+                node!(win),
+            ]))
+        ]),
+        2,
+        0,
+        tile_tree!(layout() [
+            window(id: 1),
+        ]);
+        "mixed window and nested layout remove nested layout"
+    )]
+    #[test_case(
+        LayoutType::New(vec![
+            ("root", schema!(nodes: [
+                node!(win),
+                node!(ref: "sub1"),
+            ])),
+            ("sub1", schema!(nodes: [
+                node!(ref: "sub2"),
+            ])),
+            ("sub2", schema!(nodes: [
+                node!(win),
+            ]))
+        ]),
+        2,
+        1,
         tile_tree!(layout() [
             window(id: 0),
-            window(id: 1),
-            layout() [
-                window(id: 2),
-                window(id: 4),
-                window(id: 5),
-            ],
-            layout() [
-                window(id: 6),
-                window(id: 7),
-            ],
         ]);
-        "mixed windows and layouts"
+        "mixed windows and nested layouts remove window"
     )]
-    fn test_remove(layout_name: &str, tiles: u32, remove: u32, expected: TileTree<TestWindow>) {
-        let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
-        let mut tree = TileTree::<TestWindow>::new(layouts, layout_name);
+    fn test_remove(
+        layout_type: LayoutType,
+        tiles: u32,
+        remove: u32,
+        expected: TileTree<TestWindow>,
+    ) {
+        let (layouts, layout_name) = match layout_type {
+            LayoutType::Ref(name) => (LayoutSet((*LAYOUT_SET).clone()), name),
+            LayoutType::New(iter) => (
+                {
+                    let mut set = (*LAYOUT_SET).clone();
+                    set.extend(
+                        iter.into_iter()
+                            .map(|(name, schema)| (name.to_string(), schema)),
+                    );
+                    LayoutSet(set)
+                },
+                "root",
+            ),
+        };
+        let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
         for i in 0..tiles {
             tree.insert(
                 TestWindow {
