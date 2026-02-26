@@ -7,7 +7,7 @@ use serde::Deserialize;
 use slotmap::{SlotMap, new_key_type};
 use smithay::{
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Size},
+    utils::{Logical, Point, Rectangle, Size},
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Neg, rc::Rc};
 
@@ -24,9 +24,6 @@ where
     root: TileId,
     current_tile: TileId,
     layouts: Rc<LayoutSet>,
-    layout_name: String,
-    // TODO better structure
-    layout_trace: Vec<TileLayoutTrace>,
 }
 
 pub type TileRatio = f64;
@@ -86,11 +83,13 @@ impl<T> Tile<T> {
 enum TileKind<T> {
     Window(T),
     Layout {
+        schema: String,
+        schema_index: usize,
+        schema_repeat: usize,
         split: TileSplit,
         orientation: TileOrientation,
         tiles: Vec<TileId>,
-        location: Point<i32, Logical>,
-        size: Size<i32, Logical>,
+        rect: Rectangle<i32, Logical>,
     },
 }
 
@@ -194,23 +193,6 @@ impl Default for LayoutNode {
     }
 }
 
-#[derive(Debug, Clone)]
-struct TileLayoutTrace {
-    layout: String,
-    index: usize,
-    repeat: usize,
-}
-
-impl TileLayoutTrace {
-    fn new(layout_name: &str) -> Self {
-        Self {
-            layout: layout_name.to_string(),
-            index: 0,
-            repeat: 0,
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum TileResizeUnit {
     Exact(i32),
@@ -256,13 +238,15 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let new_tile = Tile {
             kind: TileKind::Layout {
+                schema: layout_name.to_string(),
+                schema_index: 0,
+                schema_repeat: 0,
                 split: layout.split,
                 orientation: layout.orientation,
                 tiles: Vec::new(),
-                location: (0, 0).into(),
-                size: (0, 0).into(),
+                rect: Rectangle::new((0, 0).into(), (0, 0).into()),
             },
-            ratio: TileRatio::default(),
+            ratio: 1.0,
             parent: None,
         };
         let root = arena.insert(new_tile);
@@ -272,30 +256,50 @@ impl<T: TileTreeWindow> TileTree<T> {
             root,
             current_tile: root,
             layouts,
-            layout_name: layout_name.to_string(),
-            layout_trace: vec![TileLayoutTrace::new(layout_name)],
         }
     }
 
     pub fn insert(&mut self, window: T, ratio: Option<TileRatio>) -> Option<T> {
-        let Some(trace) = self.layout_trace.last_mut() else {
+        let TileKind::Layout {
+            schema,
+            schema_index,
+            schema_repeat,
+            ..
+        } = &self.arena[self.current_tile].kind
+        else {
             return Some(window);
         };
+        let schema = schema.clone();
 
-        let layout = self.layouts.get(&trace.layout);
-        for i in trace.index..layout.nodes.len() {
-            trace.index = i;
+        let layout = self.layouts.get(&schema);
+        let idx = *schema_index;
+        let mut repeat = *schema_repeat;
+
+        for i in idx..layout.nodes.len() {
             let node = &layout.nodes[i];
-            if trace.repeat < node.repeat {
+            if repeat < node.repeat {
+                // Update the schema index and repeat in the current layout
+                if let TileKind::Layout {
+                    ref mut schema_index,
+                    ref mut schema_repeat,
+                    ..
+                } = self.arena[self.current_tile].kind
+                {
+                    *schema_index = i;
+                    *schema_repeat = repeat + 1;
+                }
+
                 if let Some(layout_name) = &node.layout {
-                    let layout = self.layouts.get(layout_name);
+                    let nested_layout = self.layouts.get(layout_name);
                     let new_tile = Tile {
                         kind: TileKind::Layout {
-                            split: layout.split,
-                            orientation: layout.orientation,
+                            schema: layout_name.clone(),
+                            schema_index: 0,
+                            schema_repeat: 0,
+                            split: nested_layout.split,
+                            orientation: nested_layout.orientation,
                             tiles: Vec::new(),
-                            location: (0, 0).into(),
-                            size: (0, 0).into(),
+                            rect: Rectangle::new((0, 0).into(), (0, 0).into()),
                         },
                         ratio: node.ratio,
                         parent: Some(self.current_tile),
@@ -307,9 +311,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                         .push(tile_id);
 
                     self.current_tile = tile_id;
-                    trace.repeat += 1;
-                    self.layout_trace.push(TileLayoutTrace::new(layout_name));
-                    self.insert(window, ratio);
+                    return self.insert(window, ratio);
                 } else {
                     let new_tile = Tile {
                         kind: TileKind::Window(window),
@@ -322,26 +324,36 @@ impl<T: TileTreeWindow> TileTree<T> {
                         .as_layout_tiles_mut()
                         .push(tile_id);
 
-                    trace.repeat += 1;
+                    return None;
                 }
-                return None;
             }
-            trace.repeat = 0;
+            // Current node is full, reset repeat for next node
+            repeat = 0;
         }
 
-        let Some(parent) = self.arena[self.current_tile].parent else {
+        // Current layout is full, backtrack to parent
+        let Some(parent_id) = self.arena[self.current_tile].parent else {
             return Some(window);
         };
-        self.current_tile = parent;
-        self.layout_trace.pop();
-        if let Some(pre_trace) = self.layout_trace.last_mut() {
-            let layout = self.layouts.get(&pre_trace.layout);
-            let node = &layout.nodes[pre_trace.index];
-            if pre_trace.repeat >= node.repeat {
-                pre_trace.repeat = 0;
-                pre_trace.index += 1;
+
+        self.current_tile = parent_id;
+
+        // Update parent's position after current node is filled
+        if let TileKind::Layout {
+            ref schema,
+            ref mut schema_index,
+            ref mut schema_repeat,
+            ..
+        } = self.arena[parent_id].kind
+        {
+            let parent_layout = self.layouts.get(schema);
+            // Check if current node is full, if so move to next node
+            if *schema_repeat >= parent_layout.nodes[*schema_index].repeat {
+                *schema_repeat = 0;
+                *schema_index += 1;
             }
-        };
+        }
+
         self.insert(window, ratio)
     }
 
@@ -443,7 +455,13 @@ impl<T: TileTreeWindow> TileTree<T> {
                 i += 1;
             }
 
-            *self = Self::new(self.layouts.clone(), &self.layout_name);
+            let root_schema =
+                if let TileKind::Layout { ref schema, .. } = self.arena[self.root].kind {
+                    schema.clone()
+                } else {
+                    String::new()
+                };
+            *self = Self::new(self.layouts.clone(), &root_schema);
             for (window, ratio) in extracted_windows {
                 self.insert(window, Some(ratio));
             }
@@ -458,7 +476,7 @@ impl<T: TileTreeWindow> TileTree<T> {
     pub fn update_tile_size(&mut self, location: Point<i32, Logical>, size: Size<i32, Logical>) {
         enum Update {
             Win(TileId, Point<i32, Logical>, Size<i32, Logical>),
-            Lay(TileId, Point<i32, Logical>, Size<i32, Logical>),
+            Lay(TileId, Rectangle<i32, Logical>),
         }
 
         fn traverse<T>(
@@ -468,7 +486,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             size: Size<i32, Logical>,
             updates: &mut Vec<Update>,
         ) {
-            updates.push(Update::Lay(id, location, size));
+            updates.push(Update::Lay(id, Rectangle::new(location, size)));
 
             let TileKind::Layout {
                 split,
@@ -525,10 +543,12 @@ impl<T: TileTreeWindow> TileTree<T> {
                     window.set_location(loc);
                     window.set_size(sz);
                 }
-                Update::Lay(id, loc, sz) => {
-                    if let TileKind::Layout { location, size, .. } = &mut self.arena[id].kind {
-                        *location = loc;
-                        *size = sz;
+                Update::Lay(id, rect) => {
+                    if let TileKind::Layout {
+                        rect: layout_rect, ..
+                    } = &mut self.arena[id].kind
+                    {
+                        *layout_rect = rect;
                     }
                 }
             }
@@ -738,12 +758,13 @@ impl<T: TileTreeWindow> TileTree<T> {
             tiles,
             split,
             orientation,
-            size,
+            rect,
             ..
         } = &parent.kind
         else {
             return;
         };
+        let size = rect.size;
 
         let offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
             1
@@ -794,7 +815,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let kind_size = |k: &TileKind<T>| match k {
             TileKind::Window(w) => w.get_size(),
-            TileKind::Layout { size, .. } => *size,
+            TileKind::Layout { rect, .. } => rect.size,
         };
 
         match unit {
@@ -993,25 +1014,28 @@ mod tests {
                     (TileKind::Window(w1), TileKind::Window(w2)) => w1 == w2,
                     (
                         TileKind::Layout {
+                            schema_index: _,
+                            schema_repeat: _,
                             split: split1,
                             orientation: orientation1,
                             tiles: tiles1,
-                            location: location1,
-                            size: size1,
+                            rect: rect1,
+                            ..
                         },
                         TileKind::Layout {
+                            schema_index: _,
+                            schema_repeat: _,
                             split: split2,
                             orientation: orientation2,
                             tiles: tiles2,
-                            location: location2,
-                            size: size2,
+                            rect: rect2,
+                            ..
                         },
                     ) => {
                         if split1 != split2
                             || orientation1 != orientation2
                             || tiles1.len() != tiles2.len()
-                            || location1 != location2
-                            || size1 != size2
+                            || rect1 != rect2
                         {
                             return false;
                         }
@@ -1081,15 +1105,23 @@ mod tests {
                     ));
                 }
                 TileKind::Layout {
+                    schema,
                     split,
                     orientation,
                     tiles,
-                    location,
-                    size,
+                    rect,
+                    ..
                 } => {
                     f.push_str(&format!(
-                        "Layout [{:?}, {:?}, loc: ({}, {}), size: ({}, {}), ratio: {}]\n",
-                        split, orientation, location.x, location.y, size.w, size.h, tile.ratio
+                        "Layout [{}: {:?}, {:?}, loc: ({}, {}), size: ({}, {}), ratio: {}]\n",
+                        schema,
+                        split,
+                        orientation,
+                        rect.loc.x,
+                        rect.loc.y,
+                        rect.size.w,
+                        rect.size.h,
+                        tile.ratio
                     ));
 
                     let new_prefix = format!(
@@ -1149,31 +1181,36 @@ mod tests {
             })
         }};
 
-        (@layout_opt $split:ident $orient:ident $loc:ident $size:ident $ratio:ident) => {};
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident) => {};
 
-        (@layout_opt $split:ident $orient:ident $loc:ident $size:ident $ratio:ident split: $s:ident $(, $($rest:tt)*)?) => {
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident split: $s:ident $(, $($rest:tt)*)?) => {
             $split = TileSplit::$s;
-            $(tile_tree!(@layout_opt $split $orient $loc $size $ratio $($rest)*);)?
+            $(tile_tree!(@layout_opt $split $orient $rect $ratio $($rest)*);)?
         };
 
-        (@layout_opt $split:ident $orient:ident $loc:ident $size:ident $ratio:ident orient: $o:ident $(, $($rest:tt)*)?) => {
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident orient: $o:ident $(, $($rest:tt)*)?) => {
             $orient = TileOrientation::$o;
-            $(tile_tree!(@layout_opt $split $orient $loc $size $ratio $($rest)*);)?
+            $(tile_tree!(@layout_opt $split $orient $rect $ratio $($rest)*);)?
         };
 
-        (@layout_opt $split:ident $orient:ident $loc:ident $size:ident $ratio:ident loc: $l:expr $(, $($rest:tt)*)?) => {
-            $loc = $l.into();
-            $(tile_tree!(@layout_opt $split $orient $loc $size $ratio $($rest)*);)?
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident rect: $r:expr $(, $($rest:tt)*)?) => {
+            $rect = $r.into();
+            $(tile_tree!(@layout_opt $split $orient $rect $ratio $($rest)*);)?
         };
 
-        (@layout_opt $split:ident $orient:ident $loc:ident $size:ident $ratio:ident size: $s:expr $(, $($rest:tt)*)?) => {
-            $size = $s.into();
-            $(tile_tree!(@layout_opt $split $orient $loc $size $ratio $($rest)*);)?
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident loc: $l:expr $(, $($rest:tt)*)?) => {
+            $rect.loc = $l.into();
+            $(tile_tree!(@layout_opt $split $orient $rect $ratio $($rest)*);)?
         };
 
-        (@layout_opt $split:ident $orient:ident $loc:ident $size:ident $ratio:ident ratio: $r:expr $(, $($rest:tt)*)?) => {
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident size: $s:expr $(, $($rest:tt)*)?) => {
+            $rect.size = $s.into();
+            $(tile_tree!(@layout_opt $split $orient $rect $ratio $($rest)*);)?
+        };
+
+        (@layout_opt $split:ident $orient:ident $rect:ident $ratio:ident ratio: $r:expr $(, $($rest:tt)*)?) => {
             $ratio = $r as f64;
-            $(tile_tree!(@layout_opt $split $orient $loc $size $ratio $($rest)*);)?
+            $(tile_tree!(@layout_opt $split $orient $rect $ratio $($rest)*);)?
         };
 
         (@node $arena:ident, $parent:expr, layout($($opts:tt)*) [ $($child_kind:ident ( $($child_args:tt)* ) $( [ $($child_inner:tt)* ] )? ),* $(,)? ]) => {{
@@ -1184,18 +1221,18 @@ mod tests {
             #[allow(unused_mut, unused_assignments)]
             let mut ratio = 1.0;
             #[allow(unused_mut, unused_assignments)]
-            let mut location = (0, 0).into();
-            #[allow(unused_mut, unused_assignments)]
-            let mut size = (0, 0).into();
-            tile_tree!(@layout_opt split orient location size ratio $($opts)*);
+            let mut rect = Rectangle::new((0, 0).into(), (0, 0).into());
+            tile_tree!(@layout_opt split orient rect ratio $($opts)*);
 
             let layout_id = $arena.insert(Tile {
                 kind: TileKind::Layout {
+                    schema: String::new(),
+                    schema_index: 0,
+                    schema_repeat: 0,
                     split,
                     orientation: orient,
                     tiles: Vec::new(),
-                    location,
-                    size,
+                    rect,
                 },
                 ratio,
                 parent: $parent,
@@ -1221,8 +1258,6 @@ mod tests {
                 root,
                 current_tile: root,
                 layouts: Rc::new(LayoutSet(HashMap::new())),
-                layout_name: "".to_string(),
-                layout_trace: Vec::new(),
             }
         }};
     }
@@ -1346,10 +1381,9 @@ mod tests {
         ($tree:ident, $expected:ident) => {
             assert!(
                 $tree == $expected,
-                "\nExpected:\n{}\nGet:\n{}\n{:?}\n",
+                "\nExpected:\n{}\nGet:\n{}\n",
                 $expected.visualize(),
-                $tree.visualize(),
-                $tree.layout_trace
+                $tree.visualize()
             )
         };
     }
