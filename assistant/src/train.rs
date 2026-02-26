@@ -8,6 +8,7 @@ use burn::{
     prelude::Backend,
     record::CompactRecorder,
     tensor::{
+        ElementConversion,
         activation::{log_softmax, softmax},
         backend::AutodiffBackend,
     },
@@ -65,15 +66,13 @@ impl<B: Backend> InferenceStep for RankerModel<B> {
 pub struct TrainingConfig {
     pub model: RankerModelConfig,
     pub optimizer: AdamConfig,
-    #[config(default = 100)]
-    pub num_epochs: usize,
     #[config(default = 4)]
     pub batch_size: usize,
     #[config(default = 4)]
     pub num_workers: usize,
     #[config(default = 42)]
     pub seed: u64,
-    #[config(default = 0.002)]
+    #[config(default = 0.001)]
     pub learning_rate: f64,
 }
 
@@ -110,14 +109,44 @@ pub fn train<B: AutodiffBackend>(
     let mut model = config.model.init::<B>(&device);
     let mut optimizer = config.optimizer.init();
 
-    for _ in 1..=config.num_epochs + 1 {
+    let mut best_loss = None;
+    let mut tolerance = 0.05;
+    let tolerance_step = 0.002;
+    let min_tolerance: f32 = 0.001;
+    let mut patience_counter = 0;
+    let max_patience = 3;
+    loop {
+        let mut loss = 0.0;
+        let mut num_batches = 0.0;
         for batch in dataloader_train.iter() {
-            let item = TrainStep::step(&model, batch);
-
-            let grads = item.grads;
-
+            let output = TrainStep::step(&model, batch);
+            let grads = output.grads;
             model = optimizer.step(config.learning_rate, model, grads);
+
+            loss += output.item.loss.into_scalar().elem::<f32>();
+            num_batches += 1.0;
         }
+
+        let avg_loss = loss / num_batches;
+
+        if let Some(loss) = best_loss {
+            if avg_loss < loss {
+                patience_counter = 0;
+                best_loss = Some(avg_loss);
+            } else if avg_loss > loss * (1.0 + tolerance) {
+                patience_counter += 1;
+            } else {
+                continue;
+            }
+        } else {
+            best_loss = Some(avg_loss);
+        }
+
+        if patience_counter >= max_patience {
+            break;
+        }
+
+        tolerance = min_tolerance.max(tolerance - tolerance_step);
     }
 
     model

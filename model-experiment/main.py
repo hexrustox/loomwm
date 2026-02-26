@@ -7,12 +7,11 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
-# 1. SETUP DEVICE
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 
-# 2. VOCABULARY & POSITIONAL ENCODING
 class Vocab:
     def __init__(self, data):
         self.stoi = {"<PAD>": 0, "<UNK>": 1}
@@ -43,7 +42,6 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:, : x.size(1)]
 
 
-# 3. RANKER MODEL
 class TransformerRanker(nn.Module):
     def __init__(self, vocab_size, d_model, nhead, num_layers, dropout):
         super().__init__()
@@ -146,7 +144,7 @@ class RankingDataset(Dataset):
 
 
 def collate_fn(batch, vocab, device, max_str_len=10, inject_unknowns=True):
-    # Optionally inject unknowns during training
+
     if inject_unknowns:
         batch = generate_training_batch(batch, num_unknowns_range=(0, 2))
 
@@ -159,24 +157,10 @@ def collate_fn(batch, vocab, device, max_str_len=10, inject_unknowns=True):
     word_mask = torch.ones((batch_size, max_list_len, max_str_len), dtype=torch.bool)
 
     for i, str_list in enumerate(batch):
-        known_items = [(j, s) for j, s in enumerate(str_list) if s != "<UNK>"]
-        unknown_items = [(j, s) for j, s in enumerate(str_list) if s == "<UNK>"]
-
-        rank = 0
-        item_ranks = {}
-
-        for j, s in known_items:
-            item_ranks[j] = rank
-            rank += 1
-
-        for j, s in unknown_items:
-            item_ranks[j] = rank
-            rank += 1
-
         for j, s in enumerate(str_list):
             tokens = vocab.encode(s, max_str_len)
             inputs[i, j] = torch.tensor(tokens)
-            labels[i, j] = item_ranks[j]
+            labels[i, j] = j
             list_mask[i, j] = False
             for k, tok in enumerate(tokens):
                 if tok != 0:
@@ -189,8 +173,6 @@ def collate_fn(batch, vocab, device, max_str_len=10, inject_unknowns=True):
         list_mask.to(device),
     )
 
-
-# --- EXECUTION ---
 
 app_samples = [
     ["Firefox", "VLC", "GIMP"],
@@ -205,18 +187,16 @@ app_samples = [
     ["VLC", "Audacity", "Inkscape"],
 ]
 
-test_example = ["Never Seen", "GIMP", "Firefox", "Audacity", "Chrome", "VLC"]
-# expect: ["Firefox", "Chrome", "VLC", "GIMP", "Audacity", "Never Seen"]
+test_example = ["GIMP", "Firefox", "Audacity", "Chrome", "VLC"]
 
 
-# Build vocab and model
 vocab = Vocab(app_samples)
 model = TransformerRanker(
     len(vocab.stoi), d_model=32, nhead=4, num_layers=1, dropout=0.2
 ).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
-# DataLoader
+
 dataset = RankingDataset(app_samples)
 loader = DataLoader(
     dataset,
@@ -225,9 +205,16 @@ loader = DataLoader(
     collate_fn=lambda batch: collate_fn(batch, vocab, device, inject_unknowns=True),
 )
 
-# Training
+
 model.train()
-for epoch in range(100):
+best_loss = float("inf")
+epoch = 0
+tolerance = 0.05
+tolerance_step = 0.002
+min_tolerance = 0.001
+patience_counter = 0
+max_patience = 3
+while True:
     epoch_loss = 0.0
     num_batches = 0
 
@@ -246,11 +233,33 @@ for epoch in range(100):
         epoch_loss += loss.item()
         num_batches += 1
 
-    if (epoch + 1) % 20 == 0:
-        avg_loss = epoch_loss / num_batches
-        print(f"Epoch {epoch + 1} | Avg Loss: {avg_loss:.4f}")
+    avg_loss = epoch_loss / num_batches
+    print(
+        f"Epoch {epoch}: Loss {avg_loss:.4f} (Best: {best_loss:.4f}, Tol: {tolerance:.2%})"
+    )
 
-# Test with unknowns
+    if avg_loss < best_loss:
+        best_loss = avg_loss
+        patience_counter = 0
+    else:
+        upper_limit = best_loss * (1 + tolerance)
+
+        if avg_loss > upper_limit:
+            patience_counter += 1
+            print(
+                f"  -> Warning: Loss exceeded tolerance. Patience: {patience_counter}/{max_patience}"
+            )
+        else:
+            pass
+
+    if patience_counter >= max_patience:
+        print("Stopping: Model is no longer converging within adaptive tolerance.")
+        break
+
+    epoch += 1
+    tolerance = max(min_tolerance, tolerance - tolerance_step)
+
+
 model.eval()
 with torch.no_grad():
     x_t, w_t, l_t = prepare_inference_batch([test_example], vocab, device)
