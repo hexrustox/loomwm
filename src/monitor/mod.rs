@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use smithay::{
     backend::renderer::{
-        ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
+        ImportAll, Renderer, RendererSuper,
+        element::{surface::WaylandSurfaceRenderElement, utils::CropRenderElement},
     },
     desktop::{Window, WindowSurfaceType},
     output::Output,
@@ -646,7 +647,7 @@ impl WindowManagerState {
         &mut self,
         renderer: &mut R,
         scale: Scale<f64>,
-    ) -> Vec<WaylandSurfaceRenderElement<R>>
+    ) -> Vec<CropRenderElement<WaylandSurfaceRenderElement<R>>>
     where
         R: Renderer + ImportAll,
         <R as RendererSuper>::TextureId: Clone + 'static,

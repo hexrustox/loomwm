@@ -6,11 +6,13 @@ use std::{
 use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper,
-        element::{AsRenderElements, surface::WaylandSurfaceRenderElement},
+        element::{
+            AsRenderElements, surface::WaylandSurfaceRenderElement, utils::CropRenderElement,
+        },
     },
     desktop::Window,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Scale, Size},
+    utils::{Logical, Point, Rectangle, Scale, Size},
     wayland::{
         compositor,
         shell::xdg::{SurfaceCachedState, ToplevelSurface},
@@ -176,14 +178,26 @@ impl MappedWindow {
         &self,
         renderer: &mut R,
         scale: Scale<f64>,
-    ) -> Vec<WaylandSurfaceRenderElement<R>>
+    ) -> Vec<CropRenderElement<WaylandSurfaceRenderElement<R>>>
     where
         <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
     {
         let location = self.render_location().to_physical_precise_round(scale);
         let opacity = self.get_opacity();
         self.window()
-            .render_elements(renderer, location, scale, opacity)
+            .render_elements::<WaylandSurfaceRenderElement<R>>(renderer, location, scale, opacity)
+            .into_iter()
+            .filter_map(|elem| {
+                CropRenderElement::from_element(
+                    elem,
+                    scale,
+                    Rectangle::new(
+                        self.get_location().to_physical_precise_round(scale),
+                        self.get_size().to_physical_precise_round(scale),
+                    ),
+                )
+            })
+            .collect()
     }
 }
 
@@ -219,7 +233,6 @@ impl TileTreeWindow for MappedWindow {
         self.inner().configured_size
     }
 
-    // FIXME set render bound
     fn set_size(&mut self, size: Size<i32, Logical>) {
         self.inner().configured_size = size;
         self.toplevel().with_pending_state(|state| {
@@ -239,7 +252,7 @@ impl MappedWindow {
     pub fn update_window(&mut self) {
         if self.inner().resize_state != ResizeGrabState::Idle {
             let mut location = self.get_location();
-            let geometry = self.window().geometry();
+            let size = self.get_size();
 
             let mut new_x = None;
             let mut new_y = None;
@@ -248,10 +261,10 @@ impl MappedWindow {
                 && direction.intersects(Direction::TOP_LEFT)
             {
                 if direction.intersects(Direction::LEFT) {
-                    new_x = Some(initial_rect.loc.x + (initial_rect.size.w - geometry.size.w))
+                    new_x = Some(initial_rect.loc.x + (initial_rect.size.w - size.w))
                 };
                 if direction.intersects(Direction::TOP) {
-                    new_y = Some(initial_rect.loc.y + (initial_rect.size.h - geometry.size.h))
+                    new_y = Some(initial_rect.loc.y + (initial_rect.size.h - size.h))
                 };
             }
 

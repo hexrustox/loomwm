@@ -3,7 +3,8 @@ use std::rc::Rc;
 use serde::Deserialize;
 use smithay::{
     backend::renderer::{
-        ImportAll, Renderer, RendererSuper, element::surface::WaylandSurfaceRenderElement,
+        ImportAll, Renderer, RendererSuper,
+        element::{surface::WaylandSurfaceRenderElement, utils::CropRenderElement},
     },
     desktop::space::SpaceElement,
     output::Output,
@@ -247,7 +248,7 @@ impl Workspace {
         &mut self,
         renderer: &mut R,
         scale: Scale<f64>,
-    ) -> Vec<WaylandSurfaceRenderElement<R>>
+    ) -> Vec<CropRenderElement<WaylandSurfaceRenderElement<R>>>
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
