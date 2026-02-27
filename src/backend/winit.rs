@@ -85,9 +85,7 @@ impl Winit {
                                     None,
                                     |_, _| Some(output.clone()),
                                 );
-                                if mapped.get_dirty() {
-                                    mapped.toplevel().send_pending_configure();
-                                }
+                                mapped.toplevel().send_pending_configure();
                             });
                     }
 

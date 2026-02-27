@@ -96,8 +96,6 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
         self.mapped.toplevel().with_pending_state(|state| {
             state.states.set(xdg_toplevel::State::Resizing);
         });
-
-        self.mapped.set_dirty(true);
     }
 
     fn relative_motion(
@@ -125,7 +123,6 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
             self.mapped.toplevel().with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Resizing);
             });
-            self.mapped.set_dirty(true);
 
             self.mapped
                 .set_resize_state(ResizeGrabState::WaitingForLastCommit {

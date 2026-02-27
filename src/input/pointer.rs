@@ -142,7 +142,6 @@ impl WindowManagerState {
                         mapped.toplevel().with_pending_state(|state| {
                             state.states.set(xdg_toplevel::State::Resizing);
                         });
-                        mapped.set_dirty(true);
 
                         let direction = match self.pointer_config.resize {
                             ResizeLocation::Corner => {

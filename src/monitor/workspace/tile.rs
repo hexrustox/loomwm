@@ -847,7 +847,6 @@ impl<T: TileTreeWindow> TileTree<T> {
                 self.arena[child_id].ratio = new_tile_ratio;
                 self.arena[other_id].ratio = new_other_ratio;
             }
-            // FIXME
             TileResizeUnit::Px(px) => {
                 let ratio_offset = px as f64 * total_ratio / size_component;
                 let ratio_offset =

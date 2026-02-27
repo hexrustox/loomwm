@@ -63,7 +63,6 @@ pub struct MappedWindowInner {
     window: Window,
     location: Point<i32, Logical>,
     configured_size: Size<i32, Logical>,
-    dirty: bool,
     focus: bool,
     floating: bool,
     opacity: f32,
@@ -77,7 +76,6 @@ impl MappedWindow {
                 window,
                 location: (0, 0).into(),
                 configured_size: (0, 0).into(),
-                dirty: false,
                 focus,
                 floating,
                 opacity: 1.,
@@ -132,14 +130,6 @@ impl MappedWindow {
             size.h.clamp(min_height, max_height),
         )
             .into()
-    }
-
-    pub fn get_dirty(&self) -> bool {
-        self.inner().dirty
-    }
-
-    pub fn set_dirty(&self, dirty: bool) {
-        self.inner().dirty = dirty;
     }
 
     pub fn get_focus(&self) -> bool {
@@ -229,13 +219,12 @@ impl TileTreeWindow for MappedWindow {
         self.inner().configured_size
     }
 
-    // TODO set render bound
+    // FIXME set render bound
     fn set_size(&mut self, size: Size<i32, Logical>) {
         self.inner().configured_size = size;
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
         });
-        self.set_dirty(true);
     }
 
     fn swap(&mut self, other: &mut Self) {
