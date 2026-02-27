@@ -130,25 +130,28 @@ impl WindowManagerState {
                 if let Some(action) = data.key_config.bindings.get(&bind) {
                     if pressed {
                         let action = data.handle_action(action.clone());
+                        let is_none = data.repeat_action.is_none();
                         data.repeat_action = Some(action);
-                        // TODO
-                        let _ = data.event_loop.insert_source(
-                            Timer::from_duration(Duration::from_millis(
-                                data.key_config.repeat_delay as u64,
-                            )),
-                            |_, _, data| {
-                                let data = &mut data.compositor;
-                                // FIXME
-                                if let Some(ref action) = data.repeat_action {
-                                    data.handle_action(action.clone());
-                                    TimeoutAction::ToDuration(Duration::from_millis(
-                                        (1000 / data.key_config.repeat_rate) as u64,
-                                    ))
-                                } else {
-                                    TimeoutAction::Drop
-                                }
-                            },
-                        );
+                        if is_none {
+                            // TODO
+                            let _ = data.event_loop.insert_source(
+                                Timer::from_duration(Duration::from_millis(
+                                    data.key_config.repeat_delay as u64,
+                                )),
+                                |_, _, data| {
+                                    let data = &mut data.compositor;
+                                    // FIXME
+                                    if let Some(ref action) = data.repeat_action {
+                                        data.handle_action(action.clone());
+                                        TimeoutAction::ToDuration(Duration::from_millis(
+                                            (1000 / data.key_config.repeat_rate) as u64,
+                                        ))
+                                    } else {
+                                        TimeoutAction::Drop
+                                    }
+                                },
+                            );
+                        }
                     } else if data.repeat_action.as_ref().is_some_and(|a| a == action) {
                         data.repeat_action = None;
                     }
