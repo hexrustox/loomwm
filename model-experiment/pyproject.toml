@@ -12,4 +12,4 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/rocm7.1"
 
 [tool.uv]
-cache-dir = "./.uv_cache"
+cache-dir = "./.uv-cache"

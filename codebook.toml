@@ -1,5 +1,6 @@
 words = [
     "alacritty",
+    "batcher",
     "bbox",
     "ints",
     "keysym",
@@ -7,6 +8,8 @@ words = [
     "smithay",
     "toplevel",
     "unconstrain",
+    "vecs",
+    "wgpu",
     "winit",
     "xdg",
 ]
