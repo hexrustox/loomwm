@@ -26,6 +26,10 @@ master = { nodes = [{ ratio = 1.5 }, { layout = "slaves" }] }
 slaves = { split = "horizontal", nodes = [{ repeat = 3 }] }
 default = "master"
 
+[key]
+repeat-delay = 200
+repeat-rate = 25
+
 [key.bindings]
 "alt+page_up" = { action = "prev_workspace" }
 "alt+page_down" = { action = "next_workspace" }

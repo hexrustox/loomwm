@@ -76,7 +76,12 @@ impl WindowManagerState {
         let popups = PopupManager::default();
 
         let mut seat = seat_state.new_wl_seat(&dh, "winit");
-        seat.add_keyboard(Default::default(), 200, 25).unwrap();
+        seat.add_keyboard(
+            Default::default(),
+            config.key.repeat_delay,
+            config.key.repeat_rate,
+        )
+        .unwrap();
         seat.add_pointer();
 
         let xdg_decoration_state = XdgDecorationState::new::<Self>(&dh);

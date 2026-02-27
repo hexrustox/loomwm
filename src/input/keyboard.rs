@@ -116,7 +116,10 @@ impl WindowManagerState {
                 }
 
                 // TODO count key down
-                let key = keysym_handle.modified_sym();
+                let Some(key) = keysym_handle.raw_syms().first().cloned() else {
+                    return FilterResult::Forward;
+                };
+
                 let bind = KeyCombo {
                     modifiers: data.key_modifiers,
                     key,

@@ -54,10 +54,22 @@ pub struct LayoutConfig {
     pub default: String,
 }
 
-#[derive(Default, Deserialize)]
-#[serde(default)]
+#[derive(Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct KeyConfig {
+    pub repeat_delay: i32,
+    pub repeat_rate: i32,
     pub bindings: KeyBindings,
+}
+
+impl Default for KeyConfig {
+    fn default() -> Self {
+        Self {
+            repeat_delay: 200,
+            repeat_rate: 25,
+            bindings: KeyBindings::default(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
