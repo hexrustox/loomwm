@@ -58,20 +58,30 @@ pub struct MappedWindow {
     inner: Arc<Mutex<MappedWindowInner>>,
 }
 
+#[derive(Debug)]
+pub struct MappedWindowInner {
+    window: Window,
+    location: Point<i32, Logical>,
+    configured_size: Size<i32, Logical>,
+    dirty: bool,
+    focus: bool,
+    floating: bool,
+    opacity: f32,
+    resize_state: ResizeGrabState,
+}
+
 impl MappedWindow {
     pub fn new(window: Window, focus: bool, floating: bool) -> Self {
         Self {
             inner: Arc::new(Mutex::new(MappedWindowInner {
+                window,
                 location: (0, 0).into(),
-                data: MappedWindowData {
-                    window,
-                    configured_size: (0, 0).into(),
-                    dirty: false,
-                    focus,
-                    floating,
-                    opacity: 1.,
-                    resize_state: ResizeGrabState::default(),
-                },
+                configured_size: (0, 0).into(),
+                dirty: false,
+                focus,
+                floating,
+                opacity: 1.,
+                resize_state: ResizeGrabState::default(),
             })),
         }
     }
@@ -81,7 +91,7 @@ impl MappedWindow {
     }
 
     pub fn window(&self) -> Window {
-        self.inner().data.window.clone()
+        self.inner().window.clone()
     }
 
     pub fn toplevel(&self) -> ToplevelSurface {
@@ -125,39 +135,39 @@ impl MappedWindow {
     }
 
     pub fn get_dirty(&self) -> bool {
-        self.inner().data.dirty
+        self.inner().dirty
     }
 
     pub fn set_dirty(&self, dirty: bool) {
-        self.inner().data.dirty = dirty;
+        self.inner().dirty = dirty;
     }
 
     pub fn get_focus(&self) -> bool {
-        self.inner().data.focus
+        self.inner().focus
     }
 
     pub fn set_focus(&self, focus: bool) {
-        self.inner().data.focus = focus;
+        self.inner().focus = focus;
     }
 
     pub fn get_floating(&self) -> bool {
-        self.inner().data.floating
+        self.inner().floating
     }
 
     pub fn set_floating(&self, floating: bool) {
-        self.inner().data.floating = floating;
+        self.inner().floating = floating;
     }
 
     pub fn get_opacity(&self) -> f32 {
-        self.inner().data.opacity
+        self.inner().opacity
     }
 
     pub fn set_opacity(&self, opacity: f32) {
-        self.inner().data.opacity = opacity;
+        self.inner().opacity = opacity;
     }
 
     pub fn set_resize_state(&self, state: ResizeGrabState) {
-        self.inner().data.resize_state = state;
+        self.inner().resize_state = state;
     }
 
     pub fn center_location(&self) -> Point<i32, Logical> {
@@ -216,12 +226,12 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn get_size(&self) -> Size<i32, Logical> {
-        self.inner().data.configured_size
+        self.inner().configured_size
     }
 
     // TODO set render bound
     fn set_size(&mut self, size: Size<i32, Logical>) {
-        self.inner().data.configured_size = size;
+        self.inner().configured_size = size;
         self.toplevel().with_pending_state(|state| {
             state.size = Some(size);
         });
@@ -229,40 +239,23 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn swap(&mut self, other: &mut Self) {
-        mem::swap(&mut self.inner().data, &mut other.inner().data);
+        mem::swap(&mut self.inner().location, &mut other.inner().location);
         let temp = self.get_size();
         self.set_size(other.get_size());
         other.set_size(temp);
     }
 }
 
-#[derive(Debug)]
-pub struct MappedWindowInner {
-    location: Point<i32, Logical>,
-    data: MappedWindowData,
-}
-
-#[derive(Debug, Clone)]
-pub struct MappedWindowData {
-    window: Window,
-    configured_size: Size<i32, Logical>,
-    dirty: bool,
-    focus: bool,
-    floating: bool,
-    opacity: f32,
-    resize_state: ResizeGrabState,
-}
-
 impl MappedWindow {
     pub fn update_window(&mut self) {
-        if self.inner().data.resize_state != ResizeGrabState::Idle {
+        if self.inner().resize_state != ResizeGrabState::Idle {
             let mut location = self.get_location();
             let geometry = self.window().geometry();
 
             let mut new_x = None;
             let mut new_y = None;
 
-            if let Some((direction, initial_rect)) = self.inner().data.resize_state.commit()
+            if let Some((direction, initial_rect)) = self.inner().resize_state.commit()
                 && direction.intersects(Direction::TOP_LEFT)
             {
                 if direction.intersects(Direction::LEFT) {
