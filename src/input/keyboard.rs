@@ -1,10 +1,11 @@
-use std::{collections::HashMap, process::Command};
+use std::{collections::HashMap, process::Command, time::Duration};
 
 use bitflags::bitflags;
 use serde::Deserialize;
 use smithay::{
     backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
     input::keyboard::{FilterResult, Keysym},
+    reexports::calloop::timer::{TimeoutAction, Timer},
     utils::SERIAL_COUNTER,
 };
 
@@ -40,7 +41,7 @@ impl KeyCombo {
 }
 
 // TODO aggregate with mouse action
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyAction {
     PrevWorkspace,
@@ -68,7 +69,7 @@ pub enum KeyAction {
     Execute {
         command: Vec<String>,
     },
-    // TODO last focus workspace/window
+    // TODO focus last focused workspace/window, reset windows' ratio in layout
 }
 
 fn default_focus() -> bool {
@@ -126,41 +127,29 @@ impl WindowManagerState {
                 };
                 let pressed = event.state() == KeyState::Pressed;
 
-                if pressed && let Some(action) = data.key_config.bindings.get(&bind) {
-                    use KeyAction::*;
-                    match action {
-                        PrevWorkspace => {
-                            data.goto_prev_workspace();
-                        }
-                        NextWorkspace => {
-                            data.goto_next_workspace();
-                        }
-                        SwitchWorkspace { name } => {
-                            data.switch_or_create_active_workspace(name.clone());
-                        }
-                        MoveToWorkspace { name, focus } => {
-                            data.move_focused_window_to_workspace(name.clone(), *focus);
-                        }
-                        FocusWindow { direction } => {
-                            data.focus_tiling_window_in_direction(*direction);
-                        }
-                        SwapWindow { direction } => {
-                            data.swap_focused_tiling_window_in_direction(*direction);
-                        }
-                        ResizeWindow { direction, unit } => {
-                            data.resize_focused_tiling_window(*direction, *unit);
-                        }
-                        ToggleFloating => {
-                            data.toggle_focused_window_floating();
-                        }
-                        CloseWindow => {
-                            data.close_focused_window();
-                        }
-                        Execute { command: args } => {
-                            if let Some(program) = args.first() {
-                                let _ = Command::new(program).args(args.iter().skip(1)).spawn();
-                            }
-                        }
+                if let Some(action) = data.key_config.bindings.get(&bind) {
+                    if pressed {
+                        let action = data.handle_action(action.clone());
+                        data.repeat_action = Some(action);
+                        // TODO
+                        let _ = data.event_loop.insert_source(
+                            Timer::from_duration(Duration::from_millis(
+                                data.key_config.repeat_delay as u64,
+                            )),
+                            |_, _, data| {
+                                let data = &mut data.compositor;
+                                if let Some(ref action) = data.repeat_action {
+                                    data.handle_action(action.clone());
+                                    TimeoutAction::ToDuration(Duration::from_millis(
+                                        (1000 / data.key_config.repeat_rate) as u64,
+                                    ))
+                                } else {
+                                    TimeoutAction::Drop
+                                }
+                            },
+                        );
+                    } else if data.repeat_action.as_ref().is_some_and(|a| a == action) {
+                        data.repeat_action = None;
                     }
                     return FilterResult::Intercept(());
                 }
@@ -168,5 +157,46 @@ impl WindowManagerState {
                 FilterResult::Forward
             },
         );
+    }
+
+    pub fn handle_action(&mut self, action: KeyAction) -> KeyAction {
+        use KeyAction::*;
+        match &action {
+            PrevWorkspace => {
+                self.goto_prev_workspace();
+            }
+            NextWorkspace => {
+                self.goto_next_workspace();
+            }
+            SwitchWorkspace { name } => {
+                self.switch_or_create_active_workspace(name.clone());
+            }
+            MoveToWorkspace { name, focus } => {
+                self.move_focused_window_to_workspace(name.clone(), *focus);
+            }
+            FocusWindow { direction } => {
+                self.focus_tiling_window_in_direction(*direction);
+            }
+            SwapWindow { direction } => {
+                self.swap_focused_tiling_window_in_direction(*direction);
+            }
+            ResizeWindow { direction, unit } => {
+                self.resize_focused_tiling_window(*direction, *unit);
+            }
+            ToggleFloating => {
+                self.toggle_focused_window_floating();
+            }
+            CloseWindow => {
+                self.close_focused_window();
+            }
+            Execute { command: args } => {
+                if let Some(program) = args.first() {
+                    // TODO
+                    let _ = Command::new(program).args(args.iter().skip(1)).spawn();
+                }
+            }
+        }
+
+        action
     }
 }

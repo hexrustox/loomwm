@@ -57,8 +57,8 @@ pub struct LayoutConfig {
 #[derive(Deserialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct KeyConfig {
-    pub repeat_delay: i32,
-    pub repeat_rate: i32,
+    pub repeat_delay: u32,
+    pub repeat_rate: u32,
     pub bindings: KeyBindings,
 }
 

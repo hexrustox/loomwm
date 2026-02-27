@@ -21,7 +21,7 @@ use crate::{
     CompositorData,
     config::{Config, GeneralConfig, KeyConfig, PointerConfig},
     handlers::ClientState,
-    input::KeyModifiers,
+    input::{KeyAction, KeyModifiers},
     monitor::{LayoutSet, Monitors},
     window::{UnmappedWindow, rule::WindowRules},
 };
@@ -48,14 +48,15 @@ pub struct WindowManagerState {
     pub unmapped_windows: HashMap<WlSurface, UnmappedWindow>,
     pub monitors: Monitors,
 
-    pub key_modifiers: KeyModifiers,
-
     pub general_config: GeneralConfig,
     pub window_rules: WindowRules,
     pub layout_set: Rc<LayoutSet>,
     pub default_layout: Rc<str>,
     pub key_config: KeyConfig,
     pub pointer_config: PointerConfig,
+
+    pub key_modifiers: KeyModifiers,
+    pub repeat_action: Option<KeyAction>,
 }
 
 impl WindowManagerState {
@@ -78,8 +79,8 @@ impl WindowManagerState {
         let mut seat = seat_state.new_wl_seat(&dh, "winit");
         seat.add_keyboard(
             Default::default(),
-            config.key.repeat_delay,
-            config.key.repeat_rate,
+            config.key.repeat_delay as i32,
+            config.key.repeat_rate as i32,
         )
         .unwrap();
         seat.add_pointer();
@@ -142,14 +143,15 @@ impl WindowManagerState {
             unmapped_windows: HashMap::new(),
             monitors: Monitors::default(),
 
-            key_modifiers: KeyModifiers::empty(),
-
             general_config: config.general,
             window_rules: config.window_rules,
             layout_set: Rc::new(config.layouts.layout_set),
             default_layout: Rc::from(config.layouts.default),
             key_config: config.key,
             pointer_config: config.pointer,
+
+            key_modifiers: KeyModifiers::empty(),
+            repeat_action: None,
         }
     }
 }
