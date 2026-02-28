@@ -116,7 +116,6 @@ impl WindowManagerState {
                     return FilterResult::Intercept(());
                 }
 
-                // TODO count key down
                 let Some(key) = keysym_handle.raw_syms().first().cloned() else {
                     return FilterResult::Forward;
                 };
@@ -140,7 +139,6 @@ impl WindowManagerState {
                                 )),
                                 |_, _, data| {
                                     let data = &mut data.compositor;
-                                    // FIXME
                                     if let Some(ref action) = data.repeat_action {
                                         data.handle_action(action.clone());
                                         TimeoutAction::ToDuration(Duration::from_millis(

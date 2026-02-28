@@ -46,7 +46,7 @@ impl Vocab {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RankingItem {
     pub app_ids: Vec<String>,
 }

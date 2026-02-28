@@ -108,6 +108,10 @@ impl Workspace {
         self.floating.iter().chain(self.tiling.windows_iter())
     }
 
+    pub fn tiling_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        self.tiling.windows_iter()
+    }
+
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
             .find(|mapped| mapped.wl_surface() == *surface)

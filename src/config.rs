@@ -27,6 +27,7 @@ pub struct Config {
     pub layouts: LayoutConfig,
     pub key: KeyConfig,
     pub pointer: PointerConfig,
+    pub assistant: AssistantConfig,
 }
 
 #[derive(Deserialize)]
@@ -88,6 +89,18 @@ impl Default for PointerConfig {
             resize: ResizeLocation::default(),
             selection: 0.8,
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct AssistantConfig {
+    pub save_after: u32,
+}
+
+impl Default for AssistantConfig {
+    fn default() -> Self {
+        Self { save_after: 300 }
     }
 }
 

@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use smithay::{
     backend::renderer::{
@@ -8,6 +11,7 @@ use smithay::{
     desktop::{Window, WindowSurfaceType},
     output::Output,
     reexports::{
+        calloop::timer::{TimeoutAction, Timer},
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::protocol::wl_surface::WlSurface,
     },
@@ -27,8 +31,10 @@ use crate::{
     },
 };
 
+pub use record::LayoutRecord;
 pub use workspace::{LayoutSet, TileRatio, TileTreeSearchKey, TileTreeWindow, WorkspaceName};
 
+mod record;
 mod workspace;
 
 #[derive(Debug, Default)]
@@ -201,13 +207,18 @@ impl WindowManagerState {
             WindowState::Tile { ratio } => {
                 apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 let mapped = workspace.add_tiling_window(mapped.clone(), ratio);
-                self.handle_tiling_layout_full(mapped);
+                self.handle_tiling_layout_full(mapped.clone());
+                if mapped.is_some() {
+                    return;
+                }
             }
         }
 
         if mapped.get_focus() {
             self.focus_window(&mapped.wl_surface());
         }
+
+        self.timeout_to_save();
     }
 
     fn handle_tiling_layout_full(&mut self, mapped: Option<MappedWindow>) {
@@ -475,6 +486,8 @@ impl WindowManagerState {
         if focus {
             self.focus_window(&mapped.wl_surface());
         }
+
+        self.timeout_to_save();
     }
 
     pub fn toggle_focused_window_floating(&mut self) {
@@ -515,9 +528,11 @@ impl WindowManagerState {
             let mapped = workspace.add_tiling_window(mapped, None);
             self.handle_tiling_layout_full(mapped);
         }
+
+        self.timeout_to_save();
     }
 
-    pub fn close_focused_window(&self) {
+    pub fn close_focused_window(&mut self) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -527,6 +542,8 @@ impl WindowManagerState {
         };
 
         mapped.toplevel().send_close();
+
+        self.timeout_to_save();
     }
 
     pub fn focus_tiling_window_in_direction(&mut self, direction: Direction) {
@@ -575,6 +592,8 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.swap_tiling_window(lhs, rhs);
+
+        self.timeout_to_save();
     }
 
     pub fn swap_focused_tiling_window_in_direction(&mut self, direction: Direction) {
@@ -602,6 +621,8 @@ impl WindowManagerState {
         {
             workspace.swap_tiling_window(&mapped_lhs.wl_surface(), &mapped_rhs.wl_surface());
         }
+
+        self.timeout_to_save();
     }
 
     pub fn resize_focused_tiling_window(
@@ -656,6 +677,40 @@ impl WindowManagerState {
         monitor
             .get_workspace_mut(&monitor.get_active_workspace_name().clone())
             .render_elements(renderer, scale)
+    }
+
+    fn timeout_to_save(&mut self) {
+        let is_none = self.save_at.is_none();
+        let time = Instant::now() + Duration::from_secs(5);
+        self.save_at = Some(time);
+        if is_none {
+            // TODO
+            let _ = self
+                .event_loop
+                .insert_source(Timer::from_deadline(time), |_, _, data| {
+                    let data = &mut data.compositor;
+
+                    let Some(time) = data.save_at else {
+                        unreachable!()
+                    };
+                    if time <= Instant::now() {
+                        let mut ls = Vec::new();
+                        for w in &data.monitors.get_monitor().workspaces {
+                            let items = w.tiling_windows_iter().cloned().collect();
+                            ls.push(items);
+                        }
+                        for l in ls {
+                            data.append_layout_record(l);
+                        }
+
+                        data.save_at = None;
+                        TimeoutAction::Drop
+                    } else {
+                        data.save_at = Some(time);
+                        TimeoutAction::ToInstant(time)
+                    }
+                });
+        }
     }
 }
 

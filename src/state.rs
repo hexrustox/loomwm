@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc};
+use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, time::Instant};
 
 use smithay::{
     desktop::{PopupManager, Space, Window},
@@ -22,7 +22,7 @@ use crate::{
     config::{Config, GeneralConfig, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::{KeyAction, KeyModifiers},
-    monitor::{LayoutSet, Monitors},
+    monitor::{LayoutRecord, LayoutSet, Monitors},
     window::{UnmappedWindow, rule::WindowRules},
 };
 
@@ -57,6 +57,9 @@ pub struct WindowManagerState {
 
     pub key_modifiers: KeyModifiers,
     pub repeat_action: Option<KeyAction>,
+
+    pub save_at: Option<Instant>,
+    pub layout_record: LayoutRecord,
 }
 
 impl WindowManagerState {
@@ -152,6 +155,9 @@ impl WindowManagerState {
 
             key_modifiers: KeyModifiers::empty(),
             repeat_action: None,
+
+            save_at: None,
+            layout_record: LayoutRecord::read(),
         }
     }
 }
