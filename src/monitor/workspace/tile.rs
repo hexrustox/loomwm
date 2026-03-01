@@ -559,7 +559,8 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn windows_iter(&self) -> impl Iterator<Item = &T> + '_ {
+    pub fn windows_iter(&self) -> impl Iterator<Item = &T> + Clone + '_ {
+        #[derive(Clone)]
         struct WindowsIter<'a, T> {
             arena: &'a TileArena<T>,
             stack: Vec<TileId>,

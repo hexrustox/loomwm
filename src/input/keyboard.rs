@@ -69,6 +69,7 @@ pub enum KeyAction {
     Execute {
         command: Vec<String>,
     },
+    Assistant,
     // TODO focus last focused workspace/window, reset windows' ratio in layout
 }
 
@@ -196,6 +197,9 @@ impl WindowManagerState {
                     // TODO
                     let _ = Command::new(program).args(args.iter().skip(1)).spawn();
                 }
+            }
+            Assistant => {
+                self.assistant();
             }
         }
 

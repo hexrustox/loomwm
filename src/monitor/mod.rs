@@ -1,8 +1,11 @@
 use std::{
     rc::Rc,
+    thread::spawn,
     time::{Duration, Instant},
 };
 
+use assistant::{RankingItem, get_device, infer};
+use burn::backend::{NdArray, Wgpu};
 use smithay::{
     backend::renderer::{
         ImportAll, Renderer, RendererSuper,
@@ -681,7 +684,7 @@ impl WindowManagerState {
 
     fn timeout_to_save(&mut self) {
         let is_none = self.save_at.is_none();
-        let time = Instant::now() + Duration::from_secs(5);
+        let time = Instant::now() + Duration::from_secs(10);
         self.save_at = Some(time);
         if is_none {
             // TODO
@@ -712,6 +715,39 @@ impl WindowManagerState {
                 });
         }
     }
+
+    pub fn assistant(&mut self) {
+        let mon = self.monitors.get_monitor();
+        let w = mon.get_workspace(mon.get_active_workspace_name());
+        let iter = w.tiling_windows_iter().cloned();
+        let mut windows = iter.clone().collect::<Vec<_>>();
+        let mut app_ids = iter
+            .map(|m| {
+                let (a, _) = get_app_id_and_title(&m.wl_surface());
+                a
+            })
+            .collect::<Vec<_>>();
+        let item = RankingItem {
+            app_ids: app_ids.clone(),
+        };
+
+        spawn(move || {
+            println!("start infer");
+            let device = get_device();
+            let res = match device {
+                assistant::BackendDevice::Gpu(d) => infer::<Wgpu>("/data/model", item, d),
+                assistant::BackendDevice::Cpu(d) => infer::<NdArray>("/data/model", item, d),
+            };
+            println!("{res:?}");
+
+            let ops = get_swap_operations(&mut app_ids, &res);
+            for (a, b) in ops {
+                let mut w = windows[b].clone();
+                windows[a].swap(&mut w);
+            }
+            println!("end infer");
+        });
+    }
 }
 
 pub fn apply_rule_to_mapped_window(mapped: &MappedWindow, properties: WindowDynamicProperties) {
@@ -738,5 +774,36 @@ pub fn apply_rule_to_mapped_window(mapped: &MappedWindow, properties: WindowDyna
 
     if let Some(opacity) = properties.opacity {
         mapped.set_opacity(opacity);
+    }
+}
+
+pub fn get_swap_operations<T: PartialEq>(list: &mut [T], target: &[T]) -> Vec<(usize, usize)> {
+    let mut ops = Vec::new();
+
+    for i in 0..list.len() {
+        let j = target.iter().position(|e| *e == list[i]).unwrap();
+        if i == j {
+            continue;
+        }
+        ops.push((i, j));
+        list.swap(j, i);
+    }
+
+    ops
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(vec![])]
+    #[test_case(vec![1, 3, 2])]
+    #[test_case(vec![1, 2, 1])]
+    fn test_get_swap_operations(mut list: Vec<i32>) {
+        let mut target = list.clone();
+        target.sort();
+        get_swap_operations(&mut list, &target);
+        assert!(list.is_sorted());
     }
 }

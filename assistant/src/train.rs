@@ -81,6 +81,7 @@ pub fn train<B: AutodiffBackend>(
     training_dataset: RankingDataset,
     device: B::Device,
 ) {
+    println!("train");
     create_dir_all(artifact_dir).unwrap();
 
     let vocab = Vocab::new(training_dataset.iter().flat_map(|item| item.app_ids));
@@ -128,6 +129,7 @@ pub fn train<B: AutodiffBackend>(
         }
 
         let avg_loss = loss / num_batches;
+        println!("{avg_loss}");
 
         if let Some(loss) = best_loss {
             if avg_loss < loss {

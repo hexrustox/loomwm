@@ -98,8 +98,8 @@
               cargo-machete
 
               pkg-config
-              alacritty
 
+              weston
               rocmPackages.rocminfo
               mesa-demos
               vulkan-tools

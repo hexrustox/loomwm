@@ -62,7 +62,8 @@ repeat-rate = 25
 "alt+ctrl+l" = { action = "resize_window", direction = "right", unit = "50px" }
 "alt+space" = { action = "toggle_floating" }
 "alt+q" = { action = "close_window" }
-"alt+t" = { action = "execute", command = ["alacritty"] }
+"alt+t" = { action = "execute", command = ["weston-terminal"] }
+"alt+a" = { action = "assistant" }
 
 [pointer.bindings]
 "alt+btn_left" = "move"

@@ -1,5 +1,6 @@
 use burn::backend::{ndarray::NdArrayDevice, wgpu::WgpuDevice};
 
+#[derive(Debug)]
 pub enum BackendDevice {
     Gpu(WgpuDevice),
     Cpu(NdArrayDevice),

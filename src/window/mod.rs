@@ -241,6 +241,9 @@ impl TileTreeWindow for MappedWindow {
     }
 
     fn swap(&mut self, other: &mut Self) {
+        if self.window() == other.window() {
+            return;
+        }
         mem::swap(&mut self.inner().location, &mut other.inner().location);
         let temp = self.get_size();
         self.set_size(other.get_size());

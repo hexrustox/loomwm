@@ -1,7 +1,11 @@
-use std::fs::{create_dir_all, read_to_string};
+use std::{
+    fs::{create_dir_all, read_to_string},
+    thread::spawn,
+};
 
 use anyhow::anyhow;
-use assistant::RankingItem;
+use assistant::{RankingDataset, RankingItem, get_device, train};
+use burn::backend::{Autodiff, NdArray, Wgpu};
 use serde::{Deserialize, Serialize};
 
 use crate::{state::WindowManagerState, utils::get_app_id_and_title, window::MappedWindow};
@@ -42,6 +46,23 @@ impl WindowManagerState {
         });
         self.event_loop.insert_idle(|data| {
             data.compositor.layout_record.write();
+            let items = data.compositor.layout_record.0.clone();
+            spawn(move || {
+                println!("start train");
+
+                let device = get_device();
+                println!("{device:?}");
+                match device {
+                    assistant::BackendDevice::Gpu(d) => {
+                        train::<Autodiff<Wgpu>>("/data/model", RankingDataset::new(items), d);
+                    }
+                    assistant::BackendDevice::Cpu(d) => {
+                        train::<Autodiff<NdArray>>("/data/model", RankingDataset::new(items), d);
+                    }
+                }
+
+                println!("stop train");
+            });
         });
     }
 }
