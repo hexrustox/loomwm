@@ -74,7 +74,7 @@ class TransformerRanker(nn.Module):
 
             feat = self.embedding(x_flat) * math.sqrt(self.d_model)
             feat = self.pos_encoder(feat)
-            feat = self.dropout(self.pos_encoder(feat))
+            feat = self.dropout(feat)
 
             string_out = self.string_transformer(
                 feat, src_key_padding_mask=word_mask_flat

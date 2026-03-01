@@ -20,7 +20,7 @@ mod tests {
     const ARTIFACT_DIR: &str = "/tmp/guide";
 
     #[test]
-    fn test_train() {
+    fn test_model() {
         let items = vec![
             RankingItem {
                 app_ids: vec!["Firefox".to_string(), "VLC".to_string(), "GIMP".to_string()],
@@ -92,7 +92,9 @@ mod tests {
             },
         ];
 
-        match get_device() {
+        let d = get_device();
+
+        match d.clone() {
             BackendDevice::Gpu(d) => {
                 train::<Autodiff<Wgpu>>(ARTIFACT_DIR, RankingDataset::new(items), d);
             }
@@ -100,17 +102,14 @@ mod tests {
                 train::<Autodiff<NdArray>>(ARTIFACT_DIR, RankingDataset::new(items), d);
             }
         }
-    }
 
-    #[test]
-    fn test_infer() {
         let item = RankingItem {
             app_ids: ["Chrome", "Inkscape", "Firefox"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
         };
-        let result = match get_device() {
+        let result = match d {
             BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR, item, d),
             BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR, item, d),
         };

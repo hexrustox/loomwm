@@ -4,11 +4,11 @@ use burn::{
     config::Config,
     data::{dataloader::DataLoaderBuilder, dataset::Dataset},
     module::Module,
-    optim::{AdamConfig, Optimizer},
+    optim::{AdamConfig, Optimizer, decay::WeightDecayConfig},
     prelude::Backend,
     record::CompactRecorder,
     tensor::{
-        ElementConversion,
+        ElementConversion, Float, Tensor,
         activation::{log_softmax, softmax},
         backend::AutodiffBackend,
     },
@@ -81,7 +81,6 @@ pub fn train<B: AutodiffBackend>(
     training_dataset: RankingDataset,
     device: B::Device,
 ) {
-    println!("train");
     create_dir_all(artifact_dir).unwrap();
 
     let vocab = Vocab::new(training_dataset.iter().flat_map(|item| item.app_ids));
@@ -93,7 +92,7 @@ pub fn train<B: AutodiffBackend>(
 
     let config = TrainingConfig::new(
         RankerModelConfig::new(vocab.vocab_size()),
-        AdamConfig::new(),
+        AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(1e-4))),
     );
     config.save(format!("{artifact_dir}/config.json")).unwrap();
 
@@ -116,20 +115,27 @@ pub fn train<B: AutodiffBackend>(
     let min_tolerance: f32 = 0.001;
     let mut patience_counter = 0;
     let max_patience = 3;
+    let mut loss_sum: Option<Tensor<B, 1, Float>> = None;
     loop {
-        let mut loss = 0.0;
         let mut num_batches = 0.0;
         for batch in dataloader_train.iter() {
             let output = TrainStep::step(&model, batch);
             let grads = output.grads;
             model = optimizer.step(config.learning_rate, model, grads);
 
-            loss += output.item.loss.into_scalar().elem::<f32>();
+            let batch_loss = output.item.loss.clone();
+            loss_sum = Some(match loss_sum {
+                None => batch_loss,
+                Some(acc) => acc + batch_loss,
+            });
             num_batches += 1.0;
         }
 
-        let avg_loss = loss / num_batches;
-        println!("{avg_loss}");
+        let avg_loss = loss_sum
+            .take()
+            .map(|t| t.into_scalar().elem::<f32>())
+            .unwrap_or(0.0)
+            / num_batches as f32;
 
         if let Some(loss) = best_loss {
             if avg_loss < loss {
