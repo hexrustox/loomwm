@@ -194,7 +194,6 @@ impl WindowManagerState {
             }
             Execute { command: args } => {
                 if let Some(program) = args.first() {
-                    // TODO
                     let _ = Command::new(program).args(args.iter().skip(1)).spawn();
                 }
             }

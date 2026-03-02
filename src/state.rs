@@ -27,7 +27,7 @@ use smithay::{
 
 use crate::{
     CompositorData,
-    config::{Config, GeneralConfig, KeyConfig, PointerConfig},
+    config::{AssistantConfig, Config, GeneralConfig, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::{KeyAction, KeyModifiers},
     monitor::{LayoutRecord, LayoutSet, Monitors},
@@ -66,6 +66,7 @@ pub struct WindowManagerState {
     pub key_modifiers: KeyModifiers,
     pub repeat_action: Option<KeyAction>,
 
+    pub assistant_config: AssistantConfig,
     pub backend_device: Arc<Mutex<Option<BackendDevice>>>,
     pub save_at: Option<Instant>,
     pub layout_record: LayoutRecord,
@@ -172,6 +173,7 @@ impl WindowManagerState {
             key_modifiers: KeyModifiers::empty(),
             repeat_action: None,
 
+            assistant_config: config.assistant,
             backend_device: Arc::new(Mutex::new(None)),
             save_at: None,
             layout_record: LayoutRecord::read(),

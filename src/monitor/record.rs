@@ -40,11 +40,14 @@ impl LayoutRecord {
 
 impl WindowManagerState {
     pub fn timeout_to_save(&mut self) {
+        if !self.assistant_config.enable {
+            return;
+        }
+
         let is_none = self.save_at.is_none();
-        let time = Instant::now() + Duration::from_secs(10);
+        let time = Instant::now() + Duration::from_secs(self.assistant_config.save_layout_after);
         self.save_at = Some(time);
         if is_none {
-            // TODO
             let _ = self
                 .event_loop
                 .insert_source(Timer::from_deadline(time), |_, _, data| {

@@ -95,12 +95,16 @@ impl Default for PointerConfig {
 #[derive(Deserialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AssistantConfig {
-    pub save_after: u32,
+    pub enable: bool,
+    pub save_layout_after: u64,
 }
 
 impl Default for AssistantConfig {
     fn default() -> Self {
-        Self { save_after: 300 }
+        Self {
+            enable: true,
+            save_layout_after: 300,
+        }
     }
 }
 
