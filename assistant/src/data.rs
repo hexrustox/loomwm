@@ -46,6 +46,7 @@ impl Vocab {
     }
 }
 
+// TODO train on app title
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RankingItem {
     pub app_ids: Vec<String>,
@@ -81,13 +82,11 @@ impl<B: Backend> Batcher<B, RankingItem, RankingBatch<B>> for RankingBatcher {
 
         let max_str_len = 10;
 
-        // 1. Pre-allocate flat vectors with exact capacity
         let mut inputs_data = vec![0i32; batch_size * max_list_len * max_str_len];
         let mut labels_data = vec![0.0f32; batch_size * max_list_len];
-        let mut list_mask_data = vec![true; batch_size * max_list_len]; // Default to masked
-        let mut word_mask_data = vec![true; batch_size * max_list_len * max_str_len]; // Default to masked
+        let mut list_mask_data = vec![true; batch_size * max_list_len];
+        let mut word_mask_data = vec![true; batch_size * max_list_len * max_str_len];
 
-        // 2. Single pass iteration
         for (b, item) in items.into_iter().enumerate() {
             let list_offset = b * max_list_len;
 
@@ -95,22 +94,19 @@ impl<B: Backend> Batcher<B, RankingItem, RankingBatch<B>> for RankingBatcher {
                 let current_list_idx = list_offset + i;
                 let word_offset = current_list_idx * max_str_len;
 
-                // 3. Tokenize directly into the slice if your vocab allows,
-                // otherwise encode and copy.
                 let tokens = self.vocab.encode(&app_id, max_str_len);
 
                 for (j, &tok) in tokens.iter().enumerate() {
                     let idx = word_offset + j;
                     inputs_data[idx] = tok as i32;
-                    word_mask_data[idx] = tok == 0; // Assuming 0 is padding
+                    word_mask_data[idx] = tok == 0;
                 }
 
                 labels_data[current_list_idx] = i as f32;
-                list_mask_data[current_list_idx] = false; // Unmask valid items
+                list_mask_data[current_list_idx] = false;
             }
         }
 
-        // 4. Convert to Tensors using i32 (standard for Burn Int tensors)
         let inputs = Tensor::<B, 3, Int>::from_data(
             TensorData::new(inputs_data, [batch_size, max_list_len, max_str_len]),
             device,
@@ -137,6 +133,7 @@ impl<B: Backend> Batcher<B, RankingItem, RankingBatch<B>> for RankingBatcher {
     }
 }
 
+// TODO serde, use queue
 #[derive(Clone, Debug)]
 pub struct RankingDataset {
     items: Vec<RankingItem>,
@@ -149,6 +146,7 @@ impl RankingDataset {
 }
 
 impl Dataset<RankingItem> for RankingDataset {
+    // TODO clone pointer instead
     fn get(&self, index: usize) -> Option<RankingItem> {
         self.items.get(index).cloned()
     }

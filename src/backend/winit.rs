@@ -34,7 +34,12 @@ impl Winit {
             size: backend.window_size(),
             refresh: 60_000,
         };
-        output.change_current_state(Some(mode), Some(Transform::Flipped180), None, None);
+        output.change_current_state(
+            Some(mode),
+            Some(Transform::Flipped180),
+            Some(smithay::output::Scale::Fractional(1.0)),
+            None,
+        );
         output.set_preferred(mode);
 
         let damage_tracker = OutputDamageTracker::from_output(&output);

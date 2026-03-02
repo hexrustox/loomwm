@@ -76,6 +76,7 @@ pub struct TrainingConfig {
     pub learning_rate: f64,
 }
 
+// TODO pause training for inference, continuous learning?
 pub fn train<B: AutodiffBackend>(
     artifact_dir: &str,
     training_dataset: RankingDataset,
