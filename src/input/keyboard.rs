@@ -199,7 +199,7 @@ impl WindowManagerState {
                 }
             }
             Assistant => {
-                self.assistant();
+                self.run_assistant();
             }
         }
 

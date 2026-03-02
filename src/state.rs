@@ -1,5 +1,13 @@
-use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    ffi::OsString,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    thread::spawn,
+    time::Instant,
+};
 
+use assistant::{BackendDevice, get_device};
 use smithay::{
     desktop::{PopupManager, Space, Window},
     input::{Seat, SeatState},
@@ -58,6 +66,7 @@ pub struct WindowManagerState {
     pub key_modifiers: KeyModifiers,
     pub repeat_action: Option<KeyAction>,
 
+    pub backend_device: Arc<Mutex<Option<BackendDevice>>>,
     pub save_at: Option<Instant>,
     pub layout_record: LayoutRecord,
 }
@@ -124,6 +133,13 @@ impl WindowManagerState {
             }
         };
 
+        event_loop.insert_idle(|data| {
+            let device = data.compositor.backend_device.clone();
+            spawn(move || {
+                *device.lock().unwrap() = Some(get_device());
+            });
+        });
+
         Self {
             socket_name,
             display_handle: dh,
@@ -156,6 +172,7 @@ impl WindowManagerState {
             key_modifiers: KeyModifiers::empty(),
             repeat_action: None,
 
+            backend_device: Arc::new(Mutex::new(None)),
             save_at: None,
             layout_record: LayoutRecord::read(),
         }

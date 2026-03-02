@@ -4,6 +4,7 @@ words = [
     "bbox",
     "ints",
     "keysym",
+    "mappeds",
     "shm",
     "smithay",
     "toplevel",

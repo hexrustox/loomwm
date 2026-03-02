@@ -244,6 +244,7 @@ impl TileTreeWindow for MappedWindow {
         if self.window() == other.window() {
             return;
         }
+        // FIXME
         mem::swap(&mut self.inner().location, &mut other.inner().location);
         let temp = self.get_size();
         self.set_size(other.get_size());
