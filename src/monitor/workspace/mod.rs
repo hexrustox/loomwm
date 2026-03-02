@@ -14,7 +14,7 @@ use smithay::{
 
 use crate::{
     monitor::{
-        apply_rule_to_mapped_window,
+        action::apply_rule_to_mapped_window,
         workspace::tile::{TileInsertion, TileTree},
     },
     utils::{Direction, get_app_id_and_title},
