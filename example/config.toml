@@ -75,3 +75,7 @@ repeat-rate = 25
 [pointer]
 resize-at = "edge_or_corner"
 selection = 0.8
+
+[assistant]
+# enable = false
+save-layout-after = 10

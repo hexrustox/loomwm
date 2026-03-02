@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::{env, fs::read_to_string, path::Path};
 
 use anyhow::anyhow;
