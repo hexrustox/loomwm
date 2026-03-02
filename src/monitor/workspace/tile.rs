@@ -92,7 +92,7 @@ pub trait TileTreeWindow: Debug + Clone {
     fn set_location(&mut self, location: Point<i32, Logical>);
     fn get_size(&self) -> Size<i32, Logical>;
     fn set_size(&mut self, size: Size<i32, Logical>);
-    fn swap(&mut self, other: &mut Self);
+    fn swap_location_size(&mut self, other: &mut Self);
 }
 
 #[derive(Clone, Copy)]
@@ -742,9 +742,32 @@ impl<T: TileTreeWindow> TileTree<T> {
             return;
         }
 
+        let lhs_parent = self.arena[lhs_id].parent.unwrap();
+        let lhs_index = self.arena[lhs_parent]
+            .as_layout_tiles()
+            .iter()
+            .position(|id| *id == lhs_id)
+            .unwrap();
+
+        let rhs_parent = self.arena[rhs_id].parent.unwrap();
+        let rhs_index = self.arena[rhs_parent]
+            .as_layout_tiles()
+            .iter()
+            .position(|id| *id == rhs_id)
+            .unwrap();
+
+        let temp = self.arena[lhs_parent].as_layout_tiles()[lhs_index];
+        self.arena[lhs_parent].as_layout_tiles_mut()[lhs_index] =
+            self.arena[rhs_parent].as_layout_tiles()[rhs_index];
+        self.arena[rhs_parent].as_layout_tiles_mut()[rhs_index] = temp;
+
+        let temp = self.arena[lhs_id].ratio;
+        self.arena[lhs_id].ratio = self.arena[rhs_id].ratio;
+        self.arena[rhs_id].ratio = temp;
+
         let mut lhs_inner = self.arena[lhs_id].as_window().clone();
         let mut rhs_inner = self.arena[rhs_id].as_window().clone();
-        lhs_inner.swap(&mut rhs_inner);
+        lhs_inner.swap_location_size(&mut rhs_inner);
     }
 
     fn adjust_adjacent_ratios(
@@ -950,8 +973,7 @@ mod tests {
     #[derive(Debug, Default, PartialEq)]
     struct TestWindowInner {
         pub id: Option<u32>,
-        pub location: Point<i32, Logical>,
-        pub size: Size<i32, Logical>,
+        pub rect: Rectangle<i32, Logical>,
     }
 
     impl TestWindow {
@@ -969,25 +991,26 @@ mod tests {
         }
 
         fn get_location(&self) -> Point<i32, Logical> {
-            self.inner.borrow().location
+            self.inner.borrow().rect.loc
         }
 
         fn set_location(&mut self, location: Point<i32, Logical>) {
-            self.inner.borrow_mut().location = location;
+            self.inner.borrow_mut().rect.loc = location;
         }
 
         fn get_size(&self) -> Size<i32, Logical> {
-            self.inner.borrow().size
+            self.inner.borrow().rect.size
         }
 
         fn set_size(&mut self, size: Size<i32, Logical>) {
-            self.inner.borrow_mut().size = size;
+            self.inner.borrow_mut().rect.size = size;
         }
 
-        fn swap(&mut self, other: &mut Self) {
-            let temp = self.inner.borrow().id;
-            self.inner.borrow_mut().id = other.inner.borrow().id;
-            other.inner.borrow_mut().id = temp;
+        fn swap_location_size(&mut self, other: &mut Self) {
+            std::mem::swap(
+                &mut self.inner.borrow_mut().rect,
+                &mut other.inner.borrow_mut().rect,
+            );
         }
     }
 
@@ -1095,6 +1118,7 @@ mod tests {
 
             match &tile.kind {
                 TileKind::Window(window) => {
+                    let inner = window.inner.borrow();
                     f.push_str(&format!(
                         "Window {}[loc: ({}, {}), size: ({}, {}), ratio: {}]\n",
                         if let Some(id) = window.inner.borrow().id {
@@ -1102,10 +1126,10 @@ mod tests {
                         } else {
                             "".to_string()
                         },
-                        window.inner.borrow().location.x,
-                        window.inner.borrow().location.y,
-                        window.inner.borrow().size.w,
-                        window.inner.borrow().size.h,
+                        inner.rect.loc.x,
+                        inner.rect.loc.y,
+                        inner.rect.size.w,
+                        inner.rect.size.h,
                         tile.ratio
                     ));
                 }
@@ -1159,12 +1183,12 @@ mod tests {
         };
 
         (@window_opt $window:ident $size:ident loc: $l:expr $(, $($rest:tt)*)?) => {
-            $window.inner.borrow_mut().location = $l.into();
+            $window.inner.borrow_mut().rect.loc = $l.into();
             $(tile_tree!(@window_opt $window $size $($rest)*);)?
         };
 
         (@window_opt $window:ident $size:ident size: $s:expr $(, $($rest:tt)*)?) => {
-            $window.inner.borrow_mut().size = $s.into();
+            $window.inner.borrow_mut().rect.size = $s.into();
             $(tile_tree!(@window_opt $window $size $($rest)*);)?
         };
 
@@ -2222,9 +2246,9 @@ mod tests {
         ]),
         0,
         0,
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 0, size: (50, 100)),
+            window(id: 1, loc: (50, 0), size: (50, 100)),
         ]);
         "swap same window no change"
     )]
@@ -2235,9 +2259,9 @@ mod tests {
         ]),
         0,
         99,
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 0, size: (50, 100)),
+            window(id: 1, loc: (50, 0), size: (50, 100)),
         ]);
         "swap invalid id no change"
     )]
@@ -2248,9 +2272,9 @@ mod tests {
         ]),
         0,
         1,
-        tile_tree!(layout() [
-            window(id: 1),
-            window(id: 0),
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 1, size: (50, 100)),
+            window(id: 0, loc: (50, 0), size: (50, 100)),
         ]);
         "swap adjacent two windows"
     )]
@@ -2261,9 +2285,9 @@ mod tests {
         ]),
         0,
         1,
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 1),
-            window(id: 0),
+        tile_tree!(layout(split: Horizontal, size: (100, 100)) [
+            window(id: 1, size: (100, 50)),
+            window(id: 0, loc: (0, 50), size: (100, 50)),
         ]);
         "swap two windows horizontal split"
     )]
@@ -2275,10 +2299,10 @@ mod tests {
         ]),
         0,
         2,
-        tile_tree!(layout() [
-            window(id: 2),
-            window(id: 1),
-            window(id: 0),
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 2, loc: (0, 0), size: (34, 100)),
+            window(id: 1, loc: (34, 0), size: (33, 100)),
+            window(id: 0, loc: (67, 0), size: (33, 100)),
         ]);
         "swap first and last three windows"
     )]
@@ -2289,9 +2313,9 @@ mod tests {
         ]),
         0,
         1,
-        tile_tree!(layout() [
-            window(id: 1, ratio: 2),
-            window(id: 0, ratio: 3),
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 1, loc: (0, 0), size: (40, 100), ratio: 2),
+            window(id: 0, loc: (40, 0), size: (60, 100), ratio: 3),
         ]);
         "swap windows preserve ratios"
     )]
@@ -2307,12 +2331,12 @@ mod tests {
         ]),
         0,
         2,
-        tile_tree!(layout() [
-            window(id: 2),
-            layout() [
-                window(id: 1),
-                layout() [
-                    window(id: 0),
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 2, size: (50, 100)),
+            layout(loc: (50, 0), size: (50, 100)) [
+                window(id: 1, loc: (50, 0), size: (25, 100)),
+                layout(loc: (75, 0), size: (25, 100)) [
+                    window(id: 0, loc: (75, 0), size: (25, 100)),
                 ]
             ]
         ]);
@@ -2331,14 +2355,14 @@ mod tests {
         ]),
         1,
         2,
-        tile_tree!(layout() [
-            layout() [
-                window(id: 0),
-                window(id: 2),
+        tile_tree!(layout(size: (100, 100)) [
+            layout(size: (50, 100)) [
+                window(id: 0, size: (25, 100)),
+                window(id: 2, loc: (25, 0), size: (25, 100)),
             ],
-            layout() [
-                window(id: 1),
-                window(id: 3),
+            layout(loc: (50, 0), size: (50, 100)) [
+                window(id: 1, loc: (50, 0), size: (25, 100)),
+                window(id: 3, loc: (75, 0), size: (25, 100)),
             ],
         ]);
         "swap between sibling layouts"
@@ -2356,13 +2380,13 @@ mod tests {
         ]),
         0,
         3,
-        tile_tree!(layout() [
-            window(id: 3),
-            window(id: 1),
-            window(id: 2),
-            layout() [
-                layout() [
-                    window(id: 0)
+        tile_tree!(layout(size: (100, 100)) [
+            window(id: 3, size: (25, 100)),
+            window(id: 1, loc: (25, 0), size: (25, 100)),
+            window(id: 2, loc: (50, 0), size: (25, 100)),
+            layout(loc: (75, 0), size: (25, 100)) [
+                layout(loc: (75, 0), size: (25, 100)) [
+                    window(id: 0, loc: (75, 0), size: (25, 100))
                 ]
             ]
         ]);
@@ -2374,7 +2398,9 @@ mod tests {
         rhs: u32,
         expected: TileTree<TestWindow>,
     ) {
+        tree.update_tile_size((0, 0).into(), (100, 100).into());
         tree.swap_window(lhs, rhs);
+        tree.update_tile_size((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected)
     }
 

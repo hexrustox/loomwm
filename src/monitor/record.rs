@@ -124,7 +124,7 @@ impl WindowManagerState {
 
             for (lhs, rhs) in ops {
                 let mut mapped = windows[rhs].clone();
-                windows[lhs].swap(&mut mapped);
+                windows[lhs].swap_location_size(&mut mapped);
             }
         });
     }
