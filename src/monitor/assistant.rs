@@ -1,11 +1,14 @@
 use std::{
     fs::{create_dir_all, read_to_string},
+    sync::{Arc, Condvar, Mutex},
     thread::spawn,
     time::{Duration, Instant},
 };
 
 use anyhow::anyhow;
-use assistant::{BackendDevice, RankingDataset, RankingItem, infer, train};
+use assistant::{
+    BackendDevice as InnerBackendDevice, RankingDataset, RankingItem, get_device, infer, train,
+};
 use burn::backend::{Autodiff, NdArray, Wgpu};
 use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
@@ -14,6 +17,35 @@ use crate::{
     monitor::TileTreeWindow, state::WindowManagerState, utils::get_app_id_and_title,
     window::MappedWindow,
 };
+
+#[derive(Clone)]
+pub struct BackendDevice {
+    device: Arc<Mutex<Option<InnerBackendDevice>>>,
+    ready: Arc<Condvar>,
+}
+
+impl BackendDevice {
+    pub fn new() -> Self {
+        Self {
+            device: Arc::new(Mutex::new(None)),
+            ready: Arc::new(Condvar::new()),
+        }
+    }
+
+    pub fn init(&mut self) {
+        *self.device.lock().unwrap() = Some(get_device());
+        self.ready.notify_all();
+    }
+
+    pub fn get_device(&self) -> InnerBackendDevice {
+        let mut guard = self.device.lock().unwrap();
+        while guard.is_none() {
+            guard = self.ready.wait(guard).unwrap();
+        }
+
+        guard.as_ref().cloned().unwrap()
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct LayoutRecord(Vec<RankingItem>);
@@ -50,12 +82,9 @@ impl WindowManagerState {
         if is_none {
             let _ = self
                 .event_loop
-                .insert_source(Timer::from_deadline(time), |_, _, data| {
+                .insert_source(Timer::from_deadline(time), move |_, _, data| {
                     let data = &mut data.compositor;
 
-                    let Some(time) = data.save_at else {
-                        unreachable!()
-                    };
                     if time <= Instant::now() {
                         let mut workspace_windows = Vec::new();
                         for workspace in &data.monitors.get_monitor().workspaces {
@@ -91,11 +120,11 @@ impl WindowManagerState {
             data.compositor.layout_record.write();
             let items = data.compositor.layout_record.0.clone();
             let device = data.compositor.backend_device.clone();
-            spawn(move || match device.lock().unwrap().clone().unwrap() {
-                assistant::BackendDevice::Gpu(d) => {
+            spawn(move || match device.get_device() {
+                InnerBackendDevice::Gpu(d) => {
                     train::<Autodiff<Wgpu>>("/data/model", RankingDataset::new(items), d);
                 }
-                assistant::BackendDevice::Cpu(d) => {
+                InnerBackendDevice::Cpu(d) => {
                     train::<Autodiff<NdArray>>("/data/model", RankingDataset::new(items), d);
                 }
             });
@@ -109,8 +138,8 @@ impl WindowManagerState {
         let mut windows = iter.clone().collect::<Vec<_>>();
         let mut app_ids = iter
             .map(|mapped| {
-                let (a, _) = get_app_id_and_title(&mapped.wl_surface());
-                a
+                let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
+                app_id
             })
             .collect::<Vec<_>>();
         let item = RankingItem {
@@ -119,9 +148,9 @@ impl WindowManagerState {
         let device = self.backend_device.clone();
 
         spawn(move || {
-            let target = match device.lock().unwrap().clone().unwrap() {
-                BackendDevice::Gpu(d) => infer::<Wgpu>("/data/model", item, d),
-                BackendDevice::Cpu(d) => infer::<NdArray>("/data/model", item, d),
+            let target = match device.get_device() {
+                InnerBackendDevice::Gpu(d) => infer::<Wgpu>("/data/model", item, d),
+                InnerBackendDevice::Cpu(d) => infer::<NdArray>("/data/model", item, d),
             };
             let ops = get_swap_operations(&mut app_ids, &target);
 

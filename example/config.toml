@@ -77,5 +77,5 @@ resize-at = "edge_or_corner"
 selection = 0.8
 
 [assistant]
-enable = false
+# enable = false
 save-layout-after = 10

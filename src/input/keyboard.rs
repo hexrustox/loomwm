@@ -133,7 +133,6 @@ impl WindowManagerState {
                         let is_none = data.repeat_action.is_none();
                         data.repeat_action = Some(action);
                         if is_none {
-                            // TODO
                             let _ = data.event_loop.insert_source(
                                 Timer::from_duration(Duration::from_millis(
                                     data.key_config.repeat_delay as u64,

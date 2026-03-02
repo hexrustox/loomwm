@@ -1,13 +1,5 @@
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    rc::Rc,
-    sync::{Arc, Mutex},
-    thread::spawn,
-    time::Instant,
-};
+use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, thread::spawn, time::Instant};
 
-use assistant::{BackendDevice, get_device};
 use smithay::{
     desktop::{PopupManager, Space, Window},
     input::{Seat, SeatState},
@@ -30,7 +22,7 @@ use crate::{
     config::{AssistantConfig, Config, GeneralConfig, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::{KeyAction, KeyModifiers},
-    monitor::{LayoutRecord, LayoutSet, Monitors},
+    monitor::{BackendDevice, LayoutRecord, LayoutSet, Monitors},
     window::{UnmappedWindow, rule::WindowRules},
 };
 
@@ -67,7 +59,7 @@ pub struct WindowManagerState {
     pub repeat_action: Option<KeyAction>,
 
     pub assistant_config: AssistantConfig,
-    pub backend_device: Arc<Mutex<Option<BackendDevice>>>,
+    pub backend_device: BackendDevice,
     pub save_at: Option<Instant>,
     pub layout_record: LayoutRecord,
 }
@@ -135,9 +127,9 @@ impl WindowManagerState {
         };
 
         event_loop.insert_idle(|data| {
-            let device = data.compositor.backend_device.clone();
+            let mut device = data.compositor.backend_device.clone();
             spawn(move || {
-                *device.lock().unwrap() = Some(get_device());
+                device.init();
             });
         });
 
@@ -174,7 +166,7 @@ impl WindowManagerState {
             repeat_action: None,
 
             assistant_config: config.assistant,
-            backend_device: Arc::new(Mutex::new(None)),
+            backend_device: BackendDevice::new(),
             save_at: None,
             layout_record: LayoutRecord::read(),
         }
