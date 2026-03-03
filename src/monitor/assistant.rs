@@ -10,6 +10,7 @@ use assistant::{
     BackendDevice as InnerBackendDevice, RankingDataset, RankingItem, get_device, infer, train,
 };
 use burn::backend::{Autodiff, NdArray, Wgpu};
+use burn::data::dataloader::Dataset;
 use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 
@@ -37,7 +38,7 @@ impl BackendDevice {
         self.ready.notify_all();
     }
 
-    pub fn get_device(&self) -> InnerBackendDevice {
+    fn get_device(&self) -> InnerBackendDevice {
         let mut guard = self.device.lock().unwrap();
         while guard.is_none() {
             guard = self.ready.wait(guard).unwrap();
@@ -48,7 +49,8 @@ impl BackendDevice {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct LayoutRecord(Vec<RankingItem>);
+#[serde(transparent)]
+pub struct LayoutRecord(RankingDataset);
 
 impl LayoutRecord {
     pub fn read() -> Self {
@@ -57,7 +59,7 @@ impl LayoutRecord {
                 .map_err(|e| anyhow!("{e}"))
                 .unwrap()
         } else {
-            Self(Vec::new())
+            Self(RankingDataset::new(Vec::new()))
         }
     }
 
@@ -67,6 +69,17 @@ impl LayoutRecord {
             "/data/model/record.json",
             serde_json::to_string(self).unwrap(),
         );
+    }
+
+    fn push(&mut self, item: RankingItem, limit: usize) {
+        self.0.enqueue(item);
+        if self.0.len() > limit {
+            self.0.dequeue()
+        }
+    }
+
+    fn dataset(&self) -> RankingDataset {
+        self.0.clone()
     }
 }
 
@@ -107,25 +120,28 @@ impl WindowManagerState {
     }
 
     pub fn append_layout_record(&mut self, items: Vec<MappedWindow>) {
-        self.layout_record.0.push(RankingItem {
-            app_ids: items
-                .into_iter()
-                .map(|mapped| {
-                    let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
-                    app_id
-                })
-                .collect::<Vec<_>>(),
-        });
+        self.layout_record.push(
+            RankingItem {
+                app_ids: items
+                    .into_iter()
+                    .map(|mapped| {
+                        let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
+                        app_id
+                    })
+                    .collect::<Vec<_>>(),
+            },
+            self.assistant_config.history_length,
+        );
         self.event_loop.insert_idle(|data| {
             data.compositor.layout_record.write();
-            let items = data.compositor.layout_record.0.clone();
+            let dataset = data.compositor.layout_record.dataset();
             let device = data.compositor.backend_device.clone();
             spawn(move || match device.get_device() {
                 InnerBackendDevice::Gpu(d) => {
-                    train::<Autodiff<Wgpu>>("/data/model", RankingDataset::new(items), d);
+                    train::<Autodiff<Wgpu>>("/data/model", dataset, d);
                 }
                 InnerBackendDevice::Cpu(d) => {
-                    train::<Autodiff<NdArray>>("/data/model", RankingDataset::new(items), d);
+                    train::<Autodiff<NdArray>>("/data/model", dataset, d);
                 }
             });
         });

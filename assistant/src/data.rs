@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use burn::{
     Tensor,
@@ -71,8 +74,8 @@ impl RankingBatcher {
     }
 }
 
-impl<B: Backend> Batcher<B, RankingItem, RankingBatch<B>> for RankingBatcher {
-    fn batch(&self, items: Vec<RankingItem>, device: &B::Device) -> RankingBatch<B> {
+impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatcher {
+    fn batch(&self, items: Vec<Arc<RankingItem>>, device: &B::Device) -> RankingBatch<B> {
         let batch_size = items.len();
         let max_list_len = items
             .iter()
@@ -90,7 +93,13 @@ impl<B: Backend> Batcher<B, RankingItem, RankingBatch<B>> for RankingBatcher {
         for (b, item) in items.into_iter().enumerate() {
             let list_offset = b * max_list_len;
 
-            for (i, app_id) in item.app_ids.into_iter().take(max_list_len).enumerate() {
+            for (i, app_id) in item
+                .app_ids
+                .clone()
+                .into_iter()
+                .take(max_list_len)
+                .enumerate()
+            {
                 let current_list_idx = list_offset + i;
                 let word_offset = current_list_idx * max_str_len;
 
@@ -133,21 +142,30 @@ impl<B: Backend> Batcher<B, RankingItem, RankingBatch<B>> for RankingBatcher {
     }
 }
 
-// TODO serde, use queue
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct RankingDataset {
-    items: Vec<RankingItem>,
+    items: VecDeque<Arc<RankingItem>>,
 }
 
 impl RankingDataset {
     pub fn new(items: Vec<RankingItem>) -> Self {
-        Self { items }
+        Self {
+            items: items.into_iter().map(Arc::new).collect(),
+        }
+    }
+
+    pub fn enqueue(&mut self, item: RankingItem) {
+        self.items.push_back(Arc::new(item));
+    }
+
+    pub fn dequeue(&mut self) {
+        self.items.pop_front();
     }
 }
 
-impl Dataset<RankingItem> for RankingDataset {
-    // TODO clone pointer instead
-    fn get(&self, index: usize) -> Option<RankingItem> {
+impl Dataset<Arc<RankingItem>> for RankingDataset {
+    fn get(&self, index: usize) -> Option<Arc<RankingItem>> {
         self.items.get(index).cloned()
     }
 

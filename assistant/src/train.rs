@@ -84,7 +84,11 @@ pub fn train<B: AutodiffBackend>(
 ) {
     create_dir_all(artifact_dir).unwrap();
 
-    let vocab = Vocab::new(training_dataset.iter().flat_map(|item| item.app_ids));
+    let vocab = Vocab::new(
+        training_dataset
+            .iter()
+            .flat_map(|item| item.app_ids.clone()),
+    );
     std::fs::write(
         format!("{artifact_dir}/vocab.json"),
         serde_json::to_string(&vocab).unwrap(),

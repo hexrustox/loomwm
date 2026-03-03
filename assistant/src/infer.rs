@@ -1,4 +1,4 @@
-use std::{fs::read_to_string, iter::zip};
+use std::{fs::read_to_string, iter::zip, sync::Arc};
 
 use burn::{
     config::Config,
@@ -29,7 +29,7 @@ pub fn infer<B: Backend>(artifact_dir: &str, item: RankingItem, device: B::Devic
 
     let batcher = RankingBatcher::new(vocab);
     let app_ids = item.app_ids.clone();
-    let batch: RankingBatch<B> = batcher.batch(vec![item], &device);
+    let batch: RankingBatch<B> = batcher.batch(vec![Arc::new(item)], &device);
 
     let output = model.forward(batch.inputs, batch.word_mask, batch.list_mask);
     let output: Vec<f32> = softmax(output, 1)

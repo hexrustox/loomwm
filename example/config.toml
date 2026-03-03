@@ -79,3 +79,4 @@ selection = 0.8
 [assistant]
 # enable = false
 save-layout-after = 10
+history-length = 5

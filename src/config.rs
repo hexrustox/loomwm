@@ -97,6 +97,7 @@ impl Default for PointerConfig {
 pub struct AssistantConfig {
     pub enable: bool,
     pub save_layout_after: u64,
+    pub history_length: usize,
 }
 
 impl Default for AssistantConfig {
@@ -104,6 +105,7 @@ impl Default for AssistantConfig {
         Self {
             enable: true,
             save_layout_after: 300,
+            history_length: usize::MAX,
         }
     }
 }

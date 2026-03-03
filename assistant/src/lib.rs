@@ -92,14 +92,15 @@ mod tests {
             },
         ];
 
-        let d = get_device();
+        let device = get_device();
+        let dataset = RankingDataset::new(items);
 
-        match d.clone() {
+        match device.clone() {
             BackendDevice::Gpu(d) => {
-                train::<Autodiff<Wgpu>>(ARTIFACT_DIR, RankingDataset::new(items), d);
+                train::<Autodiff<Wgpu>>(ARTIFACT_DIR, dataset, d);
             }
             BackendDevice::Cpu(d) => {
-                train::<Autodiff<NdArray>>(ARTIFACT_DIR, RankingDataset::new(items), d);
+                train::<Autodiff<NdArray>>(ARTIFACT_DIR, dataset, d);
             }
         }
 
@@ -109,7 +110,7 @@ mod tests {
                 .map(|s| s.to_string())
                 .collect(),
         };
-        let result = match d {
+        let result = match device {
             BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR, item, d),
             BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR, item, d),
         };
