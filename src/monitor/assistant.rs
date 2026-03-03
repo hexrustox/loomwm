@@ -103,7 +103,9 @@ impl WindowManagerState {
                         for workspace in &data.monitors.get_monitor().workspaces {
                             let mappeds =
                                 workspace.tiling_windows_iter().cloned().collect::<Vec<_>>();
-                            workspace_windows.push(mappeds);
+                            if mappeds.len() > 1 {
+                                workspace_windows.push(mappeds);
+                            }
                         }
                         for items in workspace_windows {
                             data.append_layout_record(items);
@@ -119,7 +121,7 @@ impl WindowManagerState {
         }
     }
 
-    pub fn append_layout_record(&mut self, items: Vec<MappedWindow>) {
+    fn append_layout_record(&mut self, items: Vec<MappedWindow>) {
         self.layout_record.push(
             RankingItem {
                 app_ids: items
@@ -132,6 +134,7 @@ impl WindowManagerState {
             },
             self.assistant_config.history_length,
         );
+
         self.event_loop.insert_idle(|data| {
             data.compositor.layout_record.write();
             let dataset = data.compositor.layout_record.dataset();
@@ -148,10 +151,19 @@ impl WindowManagerState {
     }
 
     pub fn run_assistant(&mut self) {
+        if !self.assistant_config.enable {
+            return;
+        }
+
         let monitor = self.monitors.get_monitor();
         let workspace = monitor.get_workspace(monitor.get_active_workspace_name());
         let iter = workspace.tiling_windows_iter().cloned();
-        let mut windows = iter.clone().collect::<Vec<_>>();
+        let mut mappeds = iter.clone().collect::<Vec<_>>();
+
+        if mappeds.len() <= 1 {
+            return;
+        }
+
         let mut app_ids = iter
             .map(|mapped| {
                 let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
@@ -171,8 +183,8 @@ impl WindowManagerState {
             let ops = get_swap_operations(&mut app_ids, &target);
 
             for (lhs, rhs) in ops {
-                let mut mapped = windows[rhs].clone();
-                windows[lhs].swap_location_size(&mut mapped);
+                let mut mapped = mappeds[rhs].clone();
+                mappeds[lhs].swap_location_size(&mut mapped);
             }
         });
     }

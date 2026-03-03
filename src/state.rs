@@ -126,12 +126,14 @@ impl WindowManagerState {
             }
         };
 
-        event_loop.insert_idle(|data| {
-            let mut device = data.compositor.backend_device.clone();
-            spawn(move || {
-                device.init();
+        if config.assistant.enable {
+            event_loop.insert_idle(|data| {
+                let mut device = data.compositor.backend_device.clone();
+                spawn(move || {
+                    device.init();
+                });
             });
-        });
+        }
 
         Self {
             socket_name,
