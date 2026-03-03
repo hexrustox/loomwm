@@ -28,6 +28,7 @@ use crate::{
 
 pub mod rule;
 
+#[derive(Debug, PartialEq)]
 pub struct UnmappedWindow {
     pub window: Window,
     pub state: UnmappedWindowState,
@@ -50,6 +51,7 @@ impl UnmappedWindow {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum UnmappedWindowState {
     Configured(WindowProperties),
     NotConfigured,

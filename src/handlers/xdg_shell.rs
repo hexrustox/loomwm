@@ -17,6 +17,7 @@ use smithay::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
     },
 };
+use tracing::warn;
 
 use crate::{
     input::grabs::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
@@ -32,9 +33,17 @@ impl XdgShellHandler for WindowManagerState {
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
         let window = Window::new_wayland_window(toplevel);
-        let surface = window.toplevel().unwrap().wl_surface().clone();
-        self.unmapped_windows
-            .insert(surface, UnmappedWindow::new(window));
+        let surface = window
+            .toplevel()
+            .expect("No X11 support")
+            .wl_surface()
+            .clone();
+
+        assert_eq!(
+            self.unmapped_windows
+                .insert(surface, UnmappedWindow::new(window)),
+            None,
+        );
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {}
@@ -57,59 +66,56 @@ impl XdgShellHandler for WindowManagerState {
 
     fn move_request(&mut self, toplevel: ToplevelSurface, seat: WlSeat, serial: Serial) {
         if !self.general_config.allow_move_request {
+            warn!("client move request ignored");
             return;
         }
 
-        let seat = Seat::from_resource(&seat).unwrap();
+        let Some(seat) = Seat::from_resource(&seat) else {
+            return;
+        };
 
         let surface = toplevel.wl_surface();
 
-        if let Some(start_data) = check_grab(&seat, surface, serial) {
-            let pointer = seat.get_pointer().unwrap();
-
-            if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
-                && mapped.get_floating()
-            {
-                let grab =
-                    MoveGrab::new(start_data, mapped.clone(), mapped.get_location().to_f64());
-                pointer.set_grab(self, grab, serial, Focus::Clear);
-            }
+        if let Some(start_data) = check_grab(&seat, surface, serial)
+            && let Some(pointer) = seat.get_pointer()
+            && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
+            && mapped.get_floating()
+        {
+            let grab = MoveGrab::new(start_data, mapped.clone(), mapped.get_location().to_f64());
+            pointer.set_grab(self, grab, serial, Focus::Clear);
         }
     }
 
     fn resize_request(
         &mut self,
         toplevel: ToplevelSurface,
-        seat: smithay::reexports::wayland_server::protocol::wl_seat::WlSeat,
+        seat: WlSeat,
         serial: Serial,
-        edges: smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,
+        edges: xdg_toplevel::ResizeEdge,
     ) {
         if !self.general_config.allow_resize_request {
+            warn!("client resize request ignored");
             return;
         }
 
-        let seat = Seat::from_resource(&seat).unwrap();
+        let Some(seat) = Seat::from_resource(&seat) else {
+            return;
+        };
 
         let surface = toplevel.wl_surface();
 
-        if let Some(start_data) = check_grab(&seat, surface, serial) {
-            let pointer = seat.get_pointer().unwrap();
-
-            if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
-                && mapped.get_floating()
-            {
-                toplevel.with_pending_state(|state| {
-                    state.states.set(xdg_toplevel::State::Resizing);
-                });
-
-                let grab = FloatingResizeGrab::new(
-                    start_data,
-                    mapped.clone(),
-                    edges.into(),
-                    Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
-                );
-                pointer.set_grab(self, grab, serial, Focus::Clear);
-            }
+        if let Some(start_data) = check_grab(&seat, surface, serial)
+            && let Some(pointer) = seat.get_pointer()
+            && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
+            && mapped.get_floating()
+        {
+            let grab = FloatingResizeGrab::new(
+                start_data,
+                mapped.clone(),
+                edges.into(),
+                Rectangle::new(mapped.get_location(), mapped.get_geometry_size()),
+            );
+            pointer.set_grab(self, grab, serial, Focus::Clear);
         }
     }
 

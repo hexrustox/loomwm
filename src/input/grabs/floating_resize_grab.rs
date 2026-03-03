@@ -39,6 +39,9 @@ impl FloatingResizeGrab {
         direction: Direction,
         initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
+        mapped.toplevel().with_pending_state(|state| {
+            state.states.set(xdg_toplevel::State::Resizing);
+        });
         mapped.set_resize_state(ResizeGrabState::Resizing {
             direction,
             initial_rect,

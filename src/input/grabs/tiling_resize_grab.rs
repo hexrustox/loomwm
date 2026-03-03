@@ -1,3 +1,4 @@
+// TODO set xdg resizing state
 use crate::{state::WindowManagerState, utils::Direction};
 use smithay::{
     input::{

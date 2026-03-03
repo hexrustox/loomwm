@@ -5,7 +5,6 @@ use serde::Deserialize;
 use smithay::{
     backend::input::{ButtonState, InputBackend, PointerButtonEvent, PointerMotionAbsoluteEvent},
     input::pointer::{ButtonEvent, Focus, GrabStartData as PointerGrabStartData, MotionEvent},
-    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
     utils::{Rectangle, SERIAL_COUNTER},
 };
 
@@ -138,10 +137,6 @@ impl WindowManagerState {
                             button,
                             location,
                         };
-
-                        mapped.toplevel().with_pending_state(|state| {
-                            state.states.set(xdg_toplevel::State::Resizing);
-                        });
 
                         let direction = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
