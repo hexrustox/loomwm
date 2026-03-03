@@ -8,6 +8,7 @@ use smithay::reexports::{
     calloop::{EventLoop, channel},
     wayland_server::Display,
 };
+use tracing::level_filters::LevelFilter;
 
 use crate::{
     backend::{Backend, Winit},
@@ -31,6 +32,10 @@ pub struct CompositorData {
 }
 
 fn main() -> Result<(), anyhow::Error> {
+    tracing_subscriber::fmt()
+        .with_max_level(LevelFilter::WARN)
+        .init();
+
     let config = Config::read()?;
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WindowManagerState> = Display::new()?;

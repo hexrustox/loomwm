@@ -3742,6 +3742,8 @@ dependencies = [
  "smithay",
  "test-case",
  "toml",
+ "tracing",
+ "tracing-subscriber",
  "xkbcommon 0.9.0",
 ]
 
