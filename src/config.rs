@@ -280,11 +280,10 @@ where
         {
             let parts: Vec<&str> = v.split('+').map(|s| s.trim()).collect();
 
-            if parts.is_empty() || (parts.len() == 1 && parts[0].is_empty()) {
-                return Err(E::invalid_value(de::Unexpected::Str(v), &self));
-            }
-
-            let (key_part, mod_parts) = parts.split_last().unwrap();
+            let (key_part, mod_parts) = parts
+                .split_last()
+                .filter(|(part, _)| !part.is_empty())
+                .ok_or_else(|| E::invalid_value(de::Unexpected::Str(v), &self))?;
 
             let modifiers = parse_modifiers(mod_parts)?;
 
@@ -374,8 +373,11 @@ impl WindowManagerState {
         // TODO live reload
         // self.layout_set = Rc::new(config.layouts.layout_set);
         // self.default_layout = Rc::from(config.layouts.default);
+
+        // TODO update keyboard repeat
         self.key_config = config.key;
         self.pointer_config = config.pointer;
+        // TODO update assistant
     }
 }
 
@@ -472,6 +474,8 @@ mod tests {
     #[test_case(""; "empty string")]
     #[test_case("meta+1"; "unknown modifier")]
     #[test_case("unknown"; "unknown key")]
+    #[test_case("+"; "separator only")]
+    #[test_case("ctrl+"; "trailing separator")]
     fn test_key_combo_invalid(s: &str) {
         #[derive(Deserialize, Debug)]
         struct Wrapper {
