@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::{fs::read_to_string, iter::zip, path::PathBuf, sync::Arc};
 
 use burn::{
@@ -15,14 +16,20 @@ use crate::{
     train::TrainingConfig,
 };
 
-pub fn infer<B: Backend>(model_dir: PathBuf, item: RankingItem, device: B::Device) -> Vec<String> {
-    let vocab =
-        serde_json::from_str::<Vocab>(&read_to_string(model_dir.join("vocab.json")).unwrap())
-            .unwrap();
-    let config = TrainingConfig::load(model_dir.join("config.json")).unwrap();
+pub fn infer<B: Backend>(
+    model_dir: PathBuf,
+    item: RankingItem,
+    device: B::Device,
+) -> anyhow::Result<Vec<String>> {
+    let vocab_json = read_to_string(model_dir.join("vocab.json"))
+        .map_err(|e| anyhow!("failed to read model vocab: {e}"))?;
+    let vocab = serde_json::from_str::<Vocab>(&vocab_json)
+        .map_err(|e| anyhow!("failed to parse model vocab: {e}"))?;
+    let config = TrainingConfig::load(model_dir.join("config.json"))
+        .map_err(|e| anyhow!("failed to load model config: {e}"))?;
     let record = CompactRecorder::new()
         .load(model_dir.join("model"), &device)
-        .unwrap();
+        .map_err(|e| anyhow!("failed to load model: {e}"))?;
 
     let model = config.model.init::<B>(&device).load_record(record);
 
@@ -49,5 +56,5 @@ pub fn infer<B: Backend>(model_dir: PathBuf, item: RankingItem, device: B::Devic
             Equal
         }
     });
-    result.into_iter().map(|(s, _)| s).collect()
+    Ok(result.into_iter().map(|(s, _)| s).collect())
 }

@@ -113,7 +113,8 @@ mod tests {
         let result = match device {
             BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR.into(), item, d),
             BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR.into(), item, d),
-        };
+        }
+        .unwrap();
         assert_eq!(result[0], "Firefox");
         assert_eq!(result[1], "Chrome");
         assert_eq!(result[2], "Inkscape");

@@ -6,7 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::anyhow;
 use assistant::{
     BackendDevice as InnerBackendDevice, RankingDataset, RankingItem, get_device, infer, train,
 };
@@ -14,6 +13,7 @@ use burn::backend::{Autodiff, NdArray, Wgpu};
 use burn::data::dataloader::Dataset;
 use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+use tracing::error;
 
 use crate::{
     monitor::TileTreeWindow, path::model_dir, state::WindowManagerState,
@@ -41,11 +41,12 @@ impl BackendDevice {
 
     fn get_device(&self) -> InnerBackendDevice {
         let mut guard = self.device.lock().unwrap();
-        while guard.is_none() {
+        loop {
+            if let Some(device) = guard.as_ref().cloned() {
+                return device;
+            }
             guard = self.ready.wait(guard).unwrap();
         }
-
-        guard.as_ref().cloned().unwrap()
     }
 }
 
@@ -59,18 +60,23 @@ impl LayoutRecord {
     }
 
     pub fn read() -> Self {
-        if let Ok(str) = read_to_string(Self::path()) {
-            serde_json::from_str(&str)
-                .map_err(|e| anyhow!("{e}"))
-                .unwrap()
+        if let Some(this) = read_to_string(Self::path())
+            .ok()
+            .and_then(|content| serde_json::from_str::<Self>(&content).ok())
+        {
+            this
         } else {
             Self(RankingDataset::new(Vec::new()))
         }
     }
 
     fn write(&self) {
-        let _ = create_dir_all(Self::path().parent().unwrap());
-        let _ = std::fs::write(Self::path(), serde_json::to_string(self).unwrap());
+        if let Some(parent) = Self::path().parent() {
+            let _ = create_dir_all(parent);
+        }
+        if let Err(e) = std::fs::write(Self::path(), serde_json::to_string(self).unwrap()) {
+            error!("failed to write history: {e}");
+        }
     }
 
     fn push(&mut self, item: RankingItem, limit: usize) {
@@ -182,6 +188,11 @@ impl WindowManagerState {
                 InnerBackendDevice::Gpu(d) => infer::<Wgpu>(model_dir(), item, d),
                 InnerBackendDevice::Cpu(d) => infer::<NdArray>(model_dir(), item, d),
             };
+            let Ok(target) = target else {
+                error!("assistant failed: {}", target.unwrap_err());
+                return;
+            };
+
             let ops = get_swap_operations(&mut app_ids, &target);
 
             for (lhs, rhs) in ops {
@@ -196,7 +207,10 @@ pub fn get_swap_operations<T: PartialEq>(list: &mut [T], target: &[T]) -> Vec<(u
     let mut ops = Vec::new();
 
     for i in 0..list.len() {
-        let j = target.iter().position(|e| *e == list[i]).unwrap();
+        let j = target
+            .iter()
+            .position(|e| *e == list[i])
+            .expect("lists have different elements");
         if i == j {
             continue;
         }

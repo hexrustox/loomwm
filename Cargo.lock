@@ -182,9 +182,11 @@ dependencies = [
 name = "assistant"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "burn",
  "serde",
  "serde_json",
+ "tracing",
  "wgpu",
 ]
 
