@@ -1,4 +1,4 @@
-use std::fs::create_dir_all;
+use std::{fs::create_dir_all, path::PathBuf};
 
 use burn::{
     config::Config,
@@ -78,11 +78,11 @@ pub struct TrainingConfig {
 
 // TODO pause training for inference, continuous learning?
 pub fn train<B: AutodiffBackend>(
-    artifact_dir: &str,
+    model_dir: PathBuf,
     training_dataset: RankingDataset,
     device: B::Device,
 ) {
-    create_dir_all(artifact_dir).unwrap();
+    create_dir_all(model_dir.parent().unwrap()).unwrap();
 
     let vocab = Vocab::new(
         training_dataset
@@ -90,7 +90,7 @@ pub fn train<B: AutodiffBackend>(
             .flat_map(|item| item.app_ids.clone()),
     );
     std::fs::write(
-        format!("{artifact_dir}/vocab.json"),
+        model_dir.join("vocab.json"),
         serde_json::to_string(&vocab).unwrap(),
     )
     .unwrap();
@@ -99,7 +99,7 @@ pub fn train<B: AutodiffBackend>(
         RankerModelConfig::new(vocab.vocab_size()),
         AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(1e-4))),
     );
-    config.save(format!("{artifact_dir}/config.json")).unwrap();
+    config.save(model_dir.join("config.json")).unwrap();
 
     B::seed(&device, config.seed);
 
@@ -163,6 +163,6 @@ pub fn train<B: AutodiffBackend>(
     }
 
     model
-        .save_file(format!("{artifact_dir}/model"), &CompactRecorder::new())
+        .save_file(model_dir.join("model"), &CompactRecorder::new())
         .unwrap();
 }

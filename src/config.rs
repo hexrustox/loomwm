@@ -1,10 +1,11 @@
+use anyhow::anyhow;
 use evdev::KeyCode;
 use serde::{
     Deserialize, Deserializer,
     de::{self},
 };
 use smithay::input::keyboard::xkb;
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{collections::HashMap, fmt, fs::read_to_string, path::PathBuf, str::FromStr};
 
 use crate::{
     input::{
@@ -12,6 +13,7 @@ use crate::{
         WindowUnit,
     },
     monitor::LayoutSet,
+    path::config_dir,
     state::WindowManagerState,
     utils::Direction,
     window::rule::{WindowLocation, WindowRules},
@@ -28,6 +30,17 @@ pub struct Config {
     pub key: KeyConfig,
     pub pointer: PointerConfig,
     pub assistant: AssistantConfig,
+}
+
+impl Config {
+    pub fn path() -> PathBuf {
+        config_dir().join("config.toml")
+    }
+
+    pub fn read() -> anyhow::Result<Self> {
+        let config_path = Self::path();
+        toml::from_str(&read_to_string(&config_path)?).map_err(|e| anyhow!("{e}"))
+    }
 }
 
 #[derive(Deserialize)]

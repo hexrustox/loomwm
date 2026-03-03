@@ -1,4 +1,4 @@
-use std::{fs::read_to_string, iter::zip, sync::Arc};
+use std::{fs::read_to_string, iter::zip, path::PathBuf, sync::Arc};
 
 use burn::{
     config::Config,
@@ -15,14 +15,13 @@ use crate::{
     train::TrainingConfig,
 };
 
-pub fn infer<B: Backend>(artifact_dir: &str, item: RankingItem, device: B::Device) -> Vec<String> {
-    let vocab = serde_json::from_str::<Vocab>(
-        &read_to_string(format!("{artifact_dir}/vocab.json")).unwrap(),
-    )
-    .unwrap();
-    let config = TrainingConfig::load(format!("{artifact_dir}/config.json")).unwrap();
+pub fn infer<B: Backend>(model_dir: PathBuf, item: RankingItem, device: B::Device) -> Vec<String> {
+    let vocab =
+        serde_json::from_str::<Vocab>(&read_to_string(model_dir.join("vocab.json")).unwrap())
+            .unwrap();
+    let config = TrainingConfig::load(model_dir.join("config.json")).unwrap();
     let record = CompactRecorder::new()
-        .load(format!("{artifact_dir}/model").into(), &device)
+        .load(model_dir.join("model"), &device)
         .unwrap();
 
     let model = config.model.init::<B>(&device).load_record(record);

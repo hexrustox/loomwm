@@ -97,10 +97,10 @@ mod tests {
 
         match device.clone() {
             BackendDevice::Gpu(d) => {
-                train::<Autodiff<Wgpu>>(ARTIFACT_DIR, dataset, d);
+                train::<Autodiff<Wgpu>>(ARTIFACT_DIR.into(), dataset, d);
             }
             BackendDevice::Cpu(d) => {
-                train::<Autodiff<NdArray>>(ARTIFACT_DIR, dataset, d);
+                train::<Autodiff<NdArray>>(ARTIFACT_DIR.into(), dataset, d);
             }
         }
 
@@ -111,8 +111,8 @@ mod tests {
                 .collect(),
         };
         let result = match device {
-            BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR, item, d),
-            BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR, item, d),
+            BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR.into(), item, d),
+            BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR.into(), item, d),
         };
         assert_eq!(result[0], "Firefox");
         assert_eq!(result[1], "Chrome");

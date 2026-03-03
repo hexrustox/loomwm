@@ -129,7 +129,7 @@
 
             "--volume=home:\"$HOME\""
             "--volume=\"$HOME/.cargo\":\"$HOME/.cargo\""
-            "--volume=\"./example\":\"/data/example\""
+            "--volume=\"./example\":\"$HOME/.config/loomwm\""
 
             "--env=WAYLAND_DISPLAY"
             "--env=XDG_RUNTIME_DIR=/tmp/runtime"

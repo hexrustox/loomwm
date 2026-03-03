@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-use std::{env, fs::read_to_string, path::Path};
+use std::{env, fs::read_to_string};
 
 use anyhow::anyhow;
 use notify::{Event, EventKind, Watcher, event::ModifyKind};
@@ -11,6 +11,7 @@ use smithay::reexports::{
 
 use crate::{
     backend::{Backend, Winit},
+    config::Config,
     state::WindowManagerState,
 };
 
@@ -19,6 +20,7 @@ mod config;
 mod handlers;
 mod input;
 mod monitor;
+mod path;
 mod state;
 mod utils;
 mod window;
@@ -28,12 +30,8 @@ pub struct CompositorData {
     pub backend: Backend,
 }
 
-const CONFIG: &str = "/data/example/config.toml";
-
 fn main() -> Result<(), anyhow::Error> {
-    let config_file = read_to_string(CONFIG)?;
-    let config = toml::from_str(&config_file)?;
-
+    let config = Config::read()?;
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WindowManagerState> = Display::new()?;
     let mut backend = Backend::Winit(Winit::new(event_loop.handle()).map_err(|e| anyhow!("{e}"))?);
@@ -67,15 +65,15 @@ fn main() -> Result<(), anyhow::Error> {
     })?;
 
     watcher.watch(
-        Path::new(CONFIG).parent().unwrap(),
+        Config::path().parent().unwrap(),
         notify::RecursiveMode::NonRecursive,
     )?;
 
     event_loop
         .handle()
-        .insert_source(reciever, |event, _, data| {
+        .insert_source(reciever, move |event, _, data| {
             if let channel::Event::Msg(_) = event
-                && let Ok(file) = read_to_string(CONFIG)
+                && let Ok(file) = read_to_string(Config::path())
                 && let Ok(config) = toml::from_str(&file)
             {
                 data.compositor.update_config(config);

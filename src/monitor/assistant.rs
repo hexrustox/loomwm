@@ -1,5 +1,6 @@
 use std::{
     fs::{create_dir_all, read_to_string},
+    path::PathBuf,
     sync::{Arc, Condvar, Mutex},
     thread::spawn,
     time::{Duration, Instant},
@@ -15,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 
 use crate::{
-    monitor::TileTreeWindow, state::WindowManagerState, utils::get_app_id_and_title,
-    window::MappedWindow,
+    monitor::TileTreeWindow, path::model_dir, state::WindowManagerState,
+    utils::get_app_id_and_title, window::MappedWindow,
 };
 
 #[derive(Clone)]
@@ -53,8 +54,12 @@ impl BackendDevice {
 pub struct LayoutRecord(RankingDataset);
 
 impl LayoutRecord {
+    fn path() -> PathBuf {
+        model_dir().join("history.json")
+    }
+
     pub fn read() -> Self {
-        if let Ok(str) = read_to_string("/data/model/record.json") {
+        if let Ok(str) = read_to_string(Self::path()) {
             serde_json::from_str(&str)
                 .map_err(|e| anyhow!("{e}"))
                 .unwrap()
@@ -64,11 +69,8 @@ impl LayoutRecord {
     }
 
     fn write(&self) {
-        let _ = create_dir_all("/data/model");
-        let _ = std::fs::write(
-            "/data/model/record.json",
-            serde_json::to_string(self).unwrap(),
-        );
+        let _ = create_dir_all(Self::path().parent().unwrap());
+        let _ = std::fs::write(Self::path(), serde_json::to_string(self).unwrap());
     }
 
     fn push(&mut self, item: RankingItem, limit: usize) {
@@ -141,10 +143,10 @@ impl WindowManagerState {
             let device = data.compositor.backend_device.clone();
             spawn(move || match device.get_device() {
                 InnerBackendDevice::Gpu(d) => {
-                    train::<Autodiff<Wgpu>>("/data/model", dataset, d);
+                    train::<Autodiff<Wgpu>>(model_dir(), dataset, d);
                 }
                 InnerBackendDevice::Cpu(d) => {
-                    train::<Autodiff<NdArray>>("/data/model", dataset, d);
+                    train::<Autodiff<NdArray>>(model_dir(), dataset, d);
                 }
             });
         });
@@ -177,8 +179,8 @@ impl WindowManagerState {
 
         spawn(move || {
             let target = match device.get_device() {
-                InnerBackendDevice::Gpu(d) => infer::<Wgpu>("/data/model", item, d),
-                InnerBackendDevice::Cpu(d) => infer::<NdArray>("/data/model", item, d),
+                InnerBackendDevice::Gpu(d) => infer::<Wgpu>(model_dir(), item, d),
+                InnerBackendDevice::Cpu(d) => infer::<NdArray>(model_dir(), item, d),
             };
             let ops = get_swap_operations(&mut app_ids, &target);
 
