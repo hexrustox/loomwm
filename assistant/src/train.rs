@@ -14,6 +14,7 @@ use burn::{
     },
     train::{InferenceStep, RegressionOutput, TrainOutput, TrainStep},
 };
+use tracing::error;
 
 use crate::{
     data::{RankingBatch, RankingBatcher, RankingDataset, Vocab},
@@ -82,24 +83,17 @@ pub fn train<B: AutodiffBackend>(
     training_dataset: RankingDataset,
     device: B::Device,
 ) {
-    create_dir_all(model_dir.parent().unwrap()).unwrap();
-
     let vocab = Vocab::new(
         training_dataset
             .iter()
             .flat_map(|item| item.app_ids.clone()),
     );
-    std::fs::write(
-        model_dir.join("vocab.json"),
-        serde_json::to_string(&vocab).unwrap(),
-    )
-    .unwrap();
+    let vocab_json = serde_json::to_string(&vocab);
 
     let config = TrainingConfig::new(
         RankerModelConfig::new(vocab.vocab_size()),
         AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(1e-4))),
     );
-    config.save(model_dir.join("config.json")).unwrap();
 
     B::seed(&device, config.seed);
 
@@ -162,7 +156,21 @@ pub fn train<B: AutodiffBackend>(
         tolerance = min_tolerance.max(tolerance - tolerance_step);
     }
 
-    model
-        .save_file(model_dir.join("model"), &CompactRecorder::new())
-        .unwrap();
+    if let Some(parent) = model_dir.parent() {
+        let _ = create_dir_all(parent);
+    }
+
+    if let Err(e) =
+        vocab_json.map(|contents| std::fs::write(model_dir.join("vocab.json"), contents))
+    {
+        error!("failed to save model vocab: {e}");
+    }
+
+    if let Err(e) = config.save(model_dir.join("config.json")) {
+        error!("failed to save model config: {e}");
+    }
+
+    if let Err(e) = model.save_file(model_dir.join("model"), &CompactRecorder::new()) {
+        error!("failed to save model: {e}");
+    }
 }

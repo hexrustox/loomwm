@@ -24,11 +24,17 @@ pub use super::workspace::{TileTreeWindow, WorkspaceName};
 
 impl WindowManagerState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
-        let WindowOpeningProperties {
+        let Some(WindowOpeningProperties {
             focus,
             state,
             workspace_name,
-        } = properties.opening.unwrap();
+        }) = properties.opening
+        else {
+            #[cfg(test)]
+            panic!("Missing window opening properties");
+            #[allow(unreachable_code)]
+            return;
+        };
 
         let focus = focus.unwrap_or(true);
         let floating = matches!(state, Some(WindowState::Float { .. }));

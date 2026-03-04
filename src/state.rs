@@ -87,14 +87,15 @@ impl WindowManagerState {
             config.key.repeat_delay as i32,
             config.key.repeat_rate as i32,
         )
-        .unwrap();
+        .expect("Failed to create keyboard for seat");
         seat.add_pointer();
 
         let xdg_decoration_state = XdgDecorationState::new::<Self>(&dh);
 
         let socket_name = {
             {
-                let listening_socket = ListeningSocketSource::new_auto().unwrap();
+                let listening_socket =
+                    ListeningSocketSource::new_auto().expect("Failed to bind socket");
                 let socket_name = listening_socket.socket_name().to_os_string();
 
                 event_loop
@@ -103,9 +104,9 @@ impl WindowManagerState {
                             .compositor
                             .display_handle
                             .insert_client(client_stream, Arc::new(ClientState::default()))
-                            .unwrap();
+                            .expect("Failed to insert client");
                     })
-                    .expect("Failed to init the wayland event source.");
+                    .expect("Failed to init the wayland event source");
 
                 event_loop
                     .insert_source(
@@ -115,12 +116,12 @@ impl WindowManagerState {
                                 display
                                     .get_mut()
                                     .dispatch_clients(&mut state.compositor)
-                                    .unwrap();
+                                    .expect("Failed to dispatch requests");
                             }
                             Ok(PostAction::Continue)
                         },
                     )
-                    .unwrap();
+                    .expect("Failed to init display");
 
                 socket_name
             }
