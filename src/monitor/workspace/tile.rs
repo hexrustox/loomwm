@@ -253,6 +253,50 @@ impl Neg for TileResizeUnit {
 pub trait SearchKey<'a>: Into<TileTreeSearchKey<'a>> + Copy {}
 impl<'a, T> SearchKey<'a> for T where T: Into<TileTreeSearchKey<'a>> + Copy {}
 
+#[derive(Debug)]
+struct Rect(Rectangle<i32, Logical>);
+
+impl Rect {
+    fn new(rect: Rectangle<i32, Logical>) -> Self {
+        Self(rect)
+    }
+    fn left(&self) -> i32 {
+        self.0.loc.x
+    }
+    fn right(&self) -> i32 {
+        self.0.loc.x + self.0.size.w
+    }
+    fn top(&self) -> i32 {
+        self.0.loc.y
+    }
+    fn bottom(&self) -> i32 {
+        self.0.loc.y + self.0.size.h
+    }
+
+    fn overlaps_horizontally(&self, other: &Rect) -> bool {
+        self.left() <= other.right() && self.right() >= other.left()
+    }
+
+    fn overlaps_vertically(&self, other: &Rect) -> bool {
+        self.top() <= other.bottom() && self.bottom() >= other.top()
+    }
+
+    fn is_in_direction(&self, direction: Direction, target: &Rect) -> bool {
+        direction.contains(Direction::TOP)
+            && self.bottom() <= target.top()
+            && self.overlaps_horizontally(target)
+            || direction.contains(Direction::BOTTOM)
+                && self.top() >= target.bottom()
+                && self.overlaps_horizontally(target)
+            || direction.contains(Direction::LEFT)
+                && self.right() <= target.left()
+                && self.overlaps_vertically(target)
+            || direction.contains(Direction::RIGHT)
+                && self.left() >= target.right()
+                && self.overlaps_vertically(target)
+    }
+}
+
 impl<T: TileTreeWindow> TileTree<T> {
     fn create_layout_tile(
         arena: &mut TileArena<T>,
@@ -678,7 +722,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         lhs_inner.swap_location_size(&mut rhs_inner);
     }
 
-    fn find_ancestor_with_split(
+    fn find_parent_with_split(
         &self,
         start_id: TileId,
         current_split: TileSplit,
@@ -699,19 +743,16 @@ impl<T: TileTreeWindow> TileTree<T> {
         None
     }
 
-    pub fn find_nearest_windows_in_direction<'a>(
+    fn find_windows_in_direction(
         &self,
-        key: impl SearchKey<'a>,
+        target_id: TileId,
         direction: Direction,
+        target_rect: &Rect,
     ) -> Vec<&T> {
         #[cfg(test)]
         assert!(direction.bits().count_ones() == 1);
 
-        let Some(target_id) = self.find_tile_id(key.into()) else {
-            return Vec::new();
-        };
-
-        let Some((parent_id, child_id)) = self.find_ancestor_with_split(
+        let Some((parent_id, child_id)) = self.find_parent_with_split(
             target_id,
             if direction.intersects(Direction::LEFT | Direction::RIGHT) {
                 TileSplit::Vertical
@@ -755,56 +796,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         let other_id = tiles[other_index as usize];
 
         let mut results = Vec::new();
-
-        #[derive(Debug)]
-        struct Rect(Rectangle<i32, Logical>);
-
-        impl Rect {
-            fn new(rect: Rectangle<i32, Logical>) -> Self {
-                Self(rect)
-            }
-            fn left(&self) -> i32 {
-                self.0.loc.x
-            }
-            fn right(&self) -> i32 {
-                self.0.loc.x + self.0.size.w
-            }
-            fn top(&self) -> i32 {
-                self.0.loc.y
-            }
-            fn bottom(&self) -> i32 {
-                self.0.loc.y + self.0.size.h
-            }
-
-            fn overlaps_horizontally(&self, other: &Rect) -> bool {
-                self.left() <= other.right() && self.right() >= other.left()
-            }
-
-            fn overlaps_vertically(&self, other: &Rect) -> bool {
-                self.top() <= other.bottom() && self.bottom() >= other.top()
-            }
-
-            fn is_in_direction(&self, direction: Direction, target: &Rect) -> bool {
-                direction.contains(Direction::TOP)
-                    && self.bottom() <= target.top()
-                    && self.overlaps_horizontally(target)
-                    || direction.contains(Direction::BOTTOM)
-                        && self.top() >= target.bottom()
-                        && self.overlaps_horizontally(target)
-                    || direction.contains(Direction::LEFT)
-                        && self.right() <= target.left()
-                        && self.overlaps_vertically(target)
-                    || direction.contains(Direction::RIGHT)
-                        && self.left() >= target.right()
-                        && self.overlaps_vertically(target)
-            }
-        }
-
-        let target_window = &self.arena[target_id].as_window();
-        let target_rect = Rect::new(Rectangle::new(
-            target_window.get_location(),
-            target_window.get_size(),
-        ));
 
         fn filter_windows<'a, T: TileTreeWindow>(
             arena: &'a TileArena<T>,
@@ -897,8 +888,34 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
         }
 
-        filter_windows(&self.arena, other_id, direction, &target_rect, &mut results);
+        filter_windows(&self.arena, other_id, direction, target_rect, &mut results);
 
+        results
+    }
+
+    pub fn find_nearest_windows_in_direction<'a>(
+        &self,
+        key: impl SearchKey<'a>,
+        direction: Direction,
+    ) -> Vec<&T> {
+        let Some(target_id) = self.find_tile_id(key.into()) else {
+            return Vec::new();
+        };
+        let target_window = &self.arena[target_id].as_window();
+        let target_rect = Rect::new(Rectangle::new(
+            target_window.get_location(),
+            target_window.get_size(),
+        ));
+
+        let mut results = Vec::new();
+        if direction.intersects(Direction::TOP | Direction::BOTTOM) {
+            let direction = direction.intersection(Direction::TOP | Direction::BOTTOM);
+            results.extend(self.find_windows_in_direction(target_id, direction, &target_rect));
+        }
+        if direction.intersects(Direction::LEFT | Direction::RIGHT) {
+            let direction = direction.intersection(Direction::LEFT | Direction::RIGHT);
+            results.extend(self.find_windows_in_direction(target_id, direction, &target_rect));
+        }
         results
     }
 
@@ -945,8 +962,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let in_bounds = (0..tiles.len() as i32).contains(&other_index);
         if !in_bounds {
-            if let Some((ancestor_id, refer_id)) = self.find_ancestor_with_split(parent_id, *split)
-            {
+            if let Some((ancestor_id, refer_id)) = self.find_parent_with_split(parent_id, *split) {
                 self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
             } else if !in_loop && !matches!(unit, TileResizeUnit::Exact(..)) {
                 self.adjust_adjacent_ratios(parent_id, child_id, direction.opposite(), -unit, true);
@@ -1039,10 +1055,11 @@ impl<T: TileTreeWindow> TileTree<T> {
         let split = *split;
         let unit = unit.into();
         if direction.intersects(Direction::TOP | Direction::BOTTOM) {
+            let direction = direction.intersection(Direction::TOP | Direction::BOTTOM);
             match split {
                 TileSplit::Vertical => {
                     if let Some((parent_id, child_id)) =
-                        self.find_ancestor_with_split(window_id, TileSplit::Horizontal)
+                        self.find_parent_with_split(window_id, TileSplit::Horizontal)
                     {
                         self.adjust_adjacent_ratios(parent_id, child_id, direction, unit, false);
                     }
@@ -1053,13 +1070,14 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
         }
         if direction.intersects(Direction::LEFT | Direction::RIGHT) {
+            let direction = direction.intersection(Direction::LEFT | Direction::RIGHT);
             match split {
                 TileSplit::Vertical => {
                     self.adjust_adjacent_ratios(parent_id, window_id, direction, unit, false);
                 }
                 TileSplit::Horizontal => {
                     if let Some((parent_id, child_id)) =
-                        self.find_ancestor_with_split(window_id, TileSplit::Vertical)
+                        self.find_parent_with_split(window_id, TileSplit::Vertical)
                     {
                         self.adjust_adjacent_ratios(parent_id, child_id, direction, unit, false);
                     }
@@ -2447,26 +2465,26 @@ mod tests {
         vec![1, 3, 4];
         "navigate_deeply_nested_layout"
     )]
-    // #[test_case(
-    //     tile_tree!(layout() [
-    //         window(id: 0),
-    //         window(id: 1),
-    //     ]),
-    //     0,
-    //     Direction::TOP_LEFT,
-    //     vec![];
-    //     "composite direction no neighbor"
-    // )]
-    // #[test_case(
-    //     tile_tree!(layout() [
-    //         window(id: 0),
-    //         window(id: 1),
-    //     ]),
-    //     1,
-    //     Direction::BOTTOM_LEFT,
-    //     vec![0];
-    //     "composite direction finds window"
-    // )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        Direction::TOP_LEFT,
+        vec![];
+        "todo1"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        Direction::BOTTOM_LEFT,
+        vec![0];
+        "todo2"
+    )]
     fn test_find_nearest_windows_in_direction(
         mut tree: TileTree<TestWindow>,
         id: u32,
@@ -2752,6 +2770,72 @@ mod tests {
             window(id: 1, loc: (0, 0), size: (200, 100), ratio: 2),
         ]);
         "resize_beyond_minimum_clamped"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        Direction::TOP_LEFT,
+        10,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (90, 100), ratio: 0.9),
+            window(id: 1, loc: (90, 0), size: (110, 100), ratio: 1.1),
+        ]);
+        "resize_top_left_direction"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+            ],
+            window(id: 2),
+        ]),
+        0,
+        Direction::BOTTOM_RIGHT,
+        10,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            layout(split: Horizontal, loc: (0, 0), size: (110, 100), ratio: 1.1) [
+                window(id: 0, loc: (0, 0), size: (110, 60), ratio: 1.2),
+                window(id: 1, loc: (0, 60), size: (110, 40), ratio: 0.8),
+            ],
+            window(id: 2, loc: (110, 0), size: (90, 100), ratio: 0.9),
+        ]);
+        "resize_bottom_right_direction_horizontal_split"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(split: Horizontal) [
+                window(id: 1),
+                layout() [
+                    layout(split: Horizontal) [
+                        window(id: 2),
+                        window(id: 3),
+                    ],
+                    window(id: 4),
+                ]
+            ]
+        ]),
+        4,
+        Direction::TOP_LEFT,
+        10,
+        tile_tree!(layout(loc: (0, 0), size: (200, 100)) [
+            window(id: 0, loc: (0, 0), size: (100, 100)),
+            layout(split: Horizontal, loc: (100, 0), size: (100, 100)) [
+                window(id: 1, loc: (100, 0), size: (100, 40), ratio: 0.8),
+                layout(loc: (100, 40), size: (100, 60), ratio: 1.2) [
+                    layout(split: Horizontal, loc: (100, 40), size: (40, 60), ratio: 0.8) [
+                        window(id: 2, loc: (100, 40), size: (40, 30)),
+                        window(id: 3, loc: (100, 70), size: (40, 30)),
+                    ],
+                    window(id: 4, loc: (140, 40), size: (60, 60), ratio: 1.2),
+                ]
+            ]
+        ]);
+        "resize_deeply_nested_top_left"
     )]
     fn test_resize_tile(
         mut tree: TileTree<TestWindow>,
