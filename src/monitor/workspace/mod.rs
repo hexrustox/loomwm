@@ -86,13 +86,13 @@ impl Workspace {
         mapped: MappedWindow,
         ratio: Option<TileRatio>,
     ) -> Option<MappedWindow> {
-        self.insert_into_focus_queue(mapped.clone());
         if let Some(insertion) = self.tiling.insert(TileInsertion::Window {
-            window: mapped,
+            window: mapped.clone(),
             ratio,
         }) {
             return Some(insertion.into_window());
         } else {
+            self.insert_into_focus_queue(mapped);
             self.update_tiling_window_size();
         }
         None
@@ -123,7 +123,9 @@ impl Workspace {
         direction: Direction,
     ) -> Option<&MappedWindow> {
         // TODO do closest distance instead of last focus as well
-        let mapped_list = self.tiling.find_windows_in_direction(surface, direction);
+        let mapped_list = self
+            .tiling
+            .find_nearest_windows_in_direction(surface, direction);
         self.focus_queue
             .iter()
             .rev()
