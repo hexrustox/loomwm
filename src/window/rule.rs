@@ -3,6 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use regex::Regex;
 use serde::Deserialize;
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
+use tracing::error;
 
 use crate::monitor::{TileRatio, WorkspaceName};
 
@@ -27,6 +28,16 @@ impl WindowRules {
         for rule in &self.0 {
             if rule.is_match(&candidate) {
                 properties = properties.merge(rule.properties.clone());
+
+                // remember to update candidate base on window properties
+                #[cfg(test)]
+                if let Some(ref op) = properties.opening {
+                    let WindowOpeningProperties {
+                        focus: _,
+                        state: _,
+                        workspace_name: _,
+                    } = op;
+                }
 
                 if let Some(WindowOpeningProperties {
                     focus: Some(focus), ..
@@ -61,7 +72,6 @@ impl WindowRules {
     }
 }
 
-// TODO add tests
 #[derive(Debug, Deserialize, Hash)]
 struct WindowRule {
     #[serde(default = "default_window_rule_matches")]
@@ -76,19 +86,24 @@ fn default_window_rule_matches() -> Vec<WindowRuleMatch> {
 
 impl WindowRule {
     fn is_match(&self, candidate: &WindowRuleCandidate) -> bool {
+        fn regex_matches(str: Option<&str>, haystack: &str) -> bool {
+            if let Some(re) = str {
+                if let Ok(re) = Regex::new(re) {
+                    return re.is_match(haystack);
+                } else {
+                    error!("invalid regex: {re}");
+                }
+            }
+            true
+        }
+
         self.matches.iter().any(|target| {
-            if let Some(app_id_pattern) = &target.app_id
-                && let Ok(re) = Regex::new(app_id_pattern)
-                && !re.is_match(&candidate.app_id)
-            {
+            if !regex_matches(target.app_id.as_deref(), &candidate.app_id) {
                 return false;
-            };
-            if let Some(title_pattern) = &target.title
-                && let Ok(re) = Regex::new(title_pattern)
-                && !re.is_match(&candidate.title)
-            {
+            }
+            if !regex_matches(target.title.as_deref(), &candidate.title) {
                 return false;
-            };
+            }
             if target.focus.is_some_and(|focus| candidate.focus != focus) {
                 return false;
             }
@@ -169,33 +184,33 @@ impl std::hash::Hash for WindowDynamicProperties {
 }
 
 impl WindowProperties {
-    pub fn merge(self, rhs: Self) -> Self {
+    pub fn merge(self, other: Self) -> Self {
         Self {
-            opening: if let Some(rhs) = rhs.opening {
+            opening: if let Some(rhs) = other.opening {
                 self.opening.map(|opening| opening.override_with(rhs))
             } else {
                 self.opening
             },
-            dynamic: self.dynamic.override_with(rhs.dynamic),
+            dynamic: self.dynamic.override_with(other.dynamic),
         }
     }
 }
 
 impl WindowOpeningProperties {
-    fn override_with(self, rhs: Self) -> Self {
+    fn override_with(self, other: Self) -> Self {
         Self {
-            focus: rhs.focus.or(self.focus),
-            state: rhs.state.or(self.state),
-            workspace_name: rhs.workspace_name.or(self.workspace_name),
+            focus: other.focus.or(self.focus),
+            state: other.state.or(self.state),
+            workspace_name: other.workspace_name.or(self.workspace_name),
         }
     }
 }
 
 impl WindowDynamicProperties {
-    fn override_with(self, rhs: Self) -> Self {
+    fn override_with(self, other: Self) -> Self {
         Self {
-            decoration: rhs.decoration.or(self.decoration),
-            opacity: rhs.opacity.or(self.opacity),
+            decoration: other.decoration.or(self.decoration),
+            opacity: other.opacity.or(self.opacity),
         }
     }
 }
@@ -265,4 +280,65 @@ impl std::hash::Hash for WindowState {
 pub enum WindowLocation {
     Center,
     Location(N, N),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    impl Default for WindowRuleCandidate {
+        fn default() -> Self {
+            Self {
+                app_id: "".into(),
+                title: "".into(),
+                focus: false,
+                float: false,
+                workspace_name: WorkspaceName::Id(0),
+            }
+        }
+    }
+
+    #[test_case(vec![], WindowRuleCandidate::default() => false; "empty")]
+    #[test_case(
+        vec![WindowRuleMatch::default()],
+        WindowRuleCandidate::default() => true;
+        "default_match"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { app_id: Some("foo".into()), ..Default::default() }],
+        WindowRuleCandidate::default() => false;
+        "app_id_mismatch"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
+        WindowRuleCandidate::default() => false;
+        "focus_mismatch"
+    )]
+    fn test_match_window_rule(
+        matches: Vec<WindowRuleMatch>,
+        candidate: WindowRuleCandidate,
+    ) -> bool {
+        (WindowRule {
+            matches,
+            properties: WindowProperties::default(),
+        })
+        .is_match(&candidate)
+    }
+
+    #[test_case(
+        WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() },
+        WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() } =>
+        WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() };
+        "opening_none_merge_some"
+    )]
+    #[test_case(
+        WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() },
+        WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() } =>
+        WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() };
+        "opening_some_merge_none"
+    )]
+    fn test_merge_properties(lhs: WindowProperties, rhs: WindowProperties) -> WindowProperties {
+        lhs.merge(rhs)
+    }
 }
