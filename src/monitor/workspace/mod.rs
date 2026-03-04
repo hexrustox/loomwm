@@ -122,7 +122,6 @@ impl Workspace {
         surface: &WlSurface,
         direction: Direction,
     ) -> Option<&MappedWindow> {
-        // TODO do closest distance instead of last focus as well
         let mapped_list = self
             .tiling
             .find_nearest_windows_in_direction(surface, direction);

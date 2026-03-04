@@ -637,98 +637,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         })
     }
 
-    // TODO improve efficiency
-    pub fn find_windows_in_direction<'a>(
-        &self,
-        key: impl SearchKey<'a>,
-        direction: Direction,
-    ) -> Vec<&T> {
-        #[derive(Debug)]
-        struct Rect {
-            x: i32,
-            y: i32,
-            w: i32,
-            h: i32,
-        }
-
-        impl Rect {
-            fn new(location: Point<i32, Logical>, size: Size<i32, Logical>) -> Self {
-                Self {
-                    x: location.x,
-                    y: location.y,
-                    w: size.w,
-                    h: size.h,
-                }
-            }
-            fn left(&self) -> i32 {
-                self.x
-            }
-            fn right(&self) -> i32 {
-                self.x + self.w
-            }
-            fn top(&self) -> i32 {
-                self.y
-            }
-            fn bottom(&self) -> i32 {
-                self.y + self.h
-            }
-
-            fn overlaps_horizontally(&self, other: &Rect) -> bool {
-                self.left() <= other.right() && self.right() >= other.left()
-            }
-
-            fn overlaps_vertically(&self, other: &Rect) -> bool {
-                self.top() <= other.bottom() && self.bottom() >= other.top()
-            }
-
-            fn is_in_direction(&self, direction: Direction, target: &Rect) -> bool {
-                direction.contains(Direction::TOP)
-                    && self.bottom() <= target.top()
-                    && self.overlaps_horizontally(target)
-                    || direction.contains(Direction::BOTTOM)
-                        && self.top() >= target.bottom()
-                        && self.overlaps_horizontally(target)
-                    || direction.contains(Direction::LEFT)
-                        && self.right() <= target.left()
-                        && self.overlaps_vertically(target)
-                    || direction.contains(Direction::RIGHT)
-                        && self.left() >= target.right()
-                        && self.overlaps_vertically(target)
-            }
-        }
-
-        let Some(target_id) = self.find_tile_id(key.into()) else {
-            return Vec::new();
-        };
-        let target_tile = &self.arena[target_id];
-        let target_window = target_tile.as_window();
-
-        let target_rect = Rect::new(target_window.get_location(), target_window.get_size());
-
-        let mut candidates = Vec::new();
-
-        let mut stack = Vec::new();
-        stack.extend(self.arena[self.root].as_layout_tiles().iter().rev());
-
-        while let Some(tile_id) = stack.pop() {
-            match &self.arena[tile_id].kind {
-                TileKind::Window(window) => {
-                    if tile_id != target_id {
-                        let window_rect = Rect::new(window.get_location(), window.get_size());
-                        if window_rect.is_in_direction(direction, &target_rect) {
-                            candidates.push(window);
-                        }
-                    }
-                }
-                TileKind::Layout { tiles, .. } => {
-                    stack.extend(tiles.iter().rev());
-                }
-            }
-        }
-
-        candidates
-    }
-
     pub fn swap_window<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {
         let lhs_id = match self.find_tile_id(lhs.into()) {
             Some(id) => id,
@@ -768,6 +676,230 @@ impl<T: TileTreeWindow> TileTree<T> {
         let mut lhs_inner = self.arena[lhs_id].as_window().clone();
         let mut rhs_inner = self.arena[rhs_id].as_window().clone();
         lhs_inner.swap_location_size(&mut rhs_inner);
+    }
+
+    fn find_ancestor_with_split(
+        &self,
+        start_id: TileId,
+        current_split: TileSplit,
+    ) -> Option<(TileId, TileId)> {
+        let mut current_id = start_id;
+        let mut some_parent = self.arena[start_id].parent;
+
+        while let Some(parent) = some_parent {
+            let TileKind::Layout { split, .. } = &self.arena[parent].kind else {
+                return None;
+            };
+            if *split == current_split {
+                return Some((parent, current_id));
+            }
+            current_id = parent;
+            some_parent = self.arena[current_id].parent;
+        }
+        None
+    }
+
+    pub fn find_nearest_windows_in_direction<'a>(
+        &self,
+        key: impl SearchKey<'a>,
+        direction: Direction,
+    ) -> Vec<&T> {
+        #[cfg(test)]
+        assert!(direction.bits().count_ones() == 1);
+
+        let Some(target_id) = self.find_tile_id(key.into()) else {
+            return Vec::new();
+        };
+
+        let Some((parent_id, child_id)) = self.find_ancestor_with_split(
+            target_id,
+            if direction.intersects(Direction::LEFT | Direction::RIGHT) {
+                TileSplit::Vertical
+            } else {
+                TileSplit::Horizontal
+            },
+        ) else {
+            return Vec::new();
+        };
+
+        let parent = &self.arena[parent_id];
+        let TileKind::Layout {
+            tiles, orientation, ..
+        } = &parent.kind
+        else {
+            return Vec::new();
+        };
+
+        let offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
+            1
+        } else {
+            -1
+        } * if matches!(orientation, TileOrientation::BottomRight) {
+            1
+        } else {
+            -1
+        };
+
+        let child_index = tiles
+            .iter()
+            .position(|t| *t == child_id)
+            .expect("Cannot find tile in its parent") as i32;
+
+        let other_index = child_index + offset;
+
+        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
+        if !in_bounds {
+            return Vec::new();
+        }
+
+        let other_id = tiles[other_index as usize];
+
+        let mut results = Vec::new();
+
+        #[derive(Debug)]
+        struct Rect(Rectangle<i32, Logical>);
+
+        impl Rect {
+            fn new(rect: Rectangle<i32, Logical>) -> Self {
+                Self(rect)
+            }
+            fn left(&self) -> i32 {
+                self.0.loc.x
+            }
+            fn right(&self) -> i32 {
+                self.0.loc.x + self.0.size.w
+            }
+            fn top(&self) -> i32 {
+                self.0.loc.y
+            }
+            fn bottom(&self) -> i32 {
+                self.0.loc.y + self.0.size.h
+            }
+
+            fn overlaps_horizontally(&self, other: &Rect) -> bool {
+                self.left() <= other.right() && self.right() >= other.left()
+            }
+
+            fn overlaps_vertically(&self, other: &Rect) -> bool {
+                self.top() <= other.bottom() && self.bottom() >= other.top()
+            }
+
+            fn is_in_direction(&self, direction: Direction, target: &Rect) -> bool {
+                direction.contains(Direction::TOP)
+                    && self.bottom() <= target.top()
+                    && self.overlaps_horizontally(target)
+                    || direction.contains(Direction::BOTTOM)
+                        && self.top() >= target.bottom()
+                        && self.overlaps_horizontally(target)
+                    || direction.contains(Direction::LEFT)
+                        && self.right() <= target.left()
+                        && self.overlaps_vertically(target)
+                    || direction.contains(Direction::RIGHT)
+                        && self.left() >= target.right()
+                        && self.overlaps_vertically(target)
+            }
+        }
+
+        let target_window = &self.arena[target_id].as_window();
+        let target_rect = Rect::new(Rectangle::new(
+            target_window.get_location(),
+            target_window.get_size(),
+        ));
+
+        fn filter_windows<'a, T: TileTreeWindow>(
+            arena: &'a TileArena<T>,
+            id: TileId,
+            direction: Direction,
+            target_rect: &Rect,
+            results: &mut Vec<&'a T>,
+        ) {
+            match &arena[id].kind {
+                TileKind::Window(x) => {
+                    results.push(x);
+                }
+                TileKind::Layout {
+                    tiles,
+                    split,
+                    orientation,
+                    ..
+                } => {
+                    #[cfg(test)]
+                    assert!(!tiles.is_empty());
+
+                    let ids = if direction.intersects(Direction::LEFT | Direction::RIGHT) {
+                        match split {
+                            TileSplit::Vertical => {
+                                vec![if direction.intersects(Direction::LEFT) {
+                                    match orientation {
+                                        TileOrientation::BottomRight => tiles.last(),
+                                        TileOrientation::TopLeft => tiles.first(),
+                                    }
+                                    .unwrap()
+                                } else {
+                                    match orientation {
+                                        TileOrientation::BottomRight => tiles.first(),
+                                        TileOrientation::TopLeft => tiles.last(),
+                                    }
+                                    .unwrap()
+                                }]
+                            }
+                            TileSplit::Horizontal => tiles
+                                .iter()
+                                .filter(|id| {
+                                    let rect = match &arena[**id].kind {
+                                        TileKind::Window(window) => Rect::new(Rectangle::new(
+                                            window.get_location(),
+                                            window.get_size(),
+                                        )),
+                                        TileKind::Layout { rect, .. } => Rect::new(*rect),
+                                    };
+                                    rect.is_in_direction(direction, target_rect)
+                                })
+                                .collect(),
+                        }
+                    } else {
+                        match split {
+                            TileSplit::Horizontal => {
+                                vec![if direction.intersects(Direction::TOP) {
+                                    match orientation {
+                                        TileOrientation::BottomRight => tiles.last(),
+                                        TileOrientation::TopLeft => tiles.first(),
+                                    }
+                                    .unwrap()
+                                } else {
+                                    match orientation {
+                                        TileOrientation::BottomRight => tiles.first(),
+                                        TileOrientation::TopLeft => tiles.last(),
+                                    }
+                                    .unwrap()
+                                }]
+                            }
+                            TileSplit::Vertical => tiles
+                                .iter()
+                                .filter(|id| {
+                                    let rect = match &arena[**id].kind {
+                                        TileKind::Window(window) => Rect::new(Rectangle::new(
+                                            window.get_location(),
+                                            window.get_size(),
+                                        )),
+                                        TileKind::Layout { rect, .. } => Rect::new(*rect),
+                                    };
+                                    rect.is_in_direction(direction, target_rect)
+                                })
+                                .collect(),
+                        }
+                    };
+
+                    for id in ids {
+                        filter_windows(arena, *id, direction, target_rect, results);
+                    }
+                }
+            }
+        }
+
+        filter_windows(&self.arena, other_id, direction, &target_rect, &mut results);
+
+        results
     }
 
     fn adjust_adjacent_ratios(
@@ -888,27 +1020,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    fn find_ancestor_with_split(
-        &self,
-        start_id: TileId,
-        current_split: TileSplit,
-    ) -> Option<(TileId, TileId)> {
-        let mut refer = start_id;
-        let mut some_parent = self.arena[start_id].parent;
-
-        while let Some(parent) = some_parent {
-            let TileKind::Layout { split, .. } = &self.arena[parent].kind else {
-                return None;
-            };
-            if *split == current_split {
-                return Some((parent, refer));
-            }
-            refer = parent;
-            some_parent = self.arena[parent].parent;
-        }
-        None
-    }
-
     pub fn resize_tile<'a>(
         &mut self,
         key: impl SearchKey<'a>,
@@ -930,10 +1041,10 @@ impl<T: TileTreeWindow> TileTree<T> {
         if direction.intersects(Direction::TOP | Direction::BOTTOM) {
             match split {
                 TileSplit::Vertical => {
-                    if let Some((ancestor_id, refer_id)) =
+                    if let Some((parent_id, child_id)) =
                         self.find_ancestor_with_split(window_id, TileSplit::Horizontal)
                     {
-                        self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
+                        self.adjust_adjacent_ratios(parent_id, child_id, direction, unit, false);
                     }
                 }
                 TileSplit::Horizontal => {
@@ -947,10 +1058,10 @@ impl<T: TileTreeWindow> TileTree<T> {
                     self.adjust_adjacent_ratios(parent_id, window_id, direction, unit, false);
                 }
                 TileSplit::Horizontal => {
-                    if let Some((ancestor_id, refer_id)) =
+                    if let Some((parent_id, child_id)) =
                         self.find_ancestor_with_split(window_id, TileSplit::Vertical)
                     {
-                        self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
+                        self.adjust_adjacent_ratios(parent_id, child_id, direction, unit, false);
                     }
                 }
             }
@@ -1958,288 +2069,6 @@ mod tests {
     }
 
     #[test_case(
-        tile_tree!(layout() [window(id: 0)]),
-        0,
-        Direction::TOP,
-        vec![];
-        "single window no neighbors"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        Direction::TOP,
-        vec![];
-        "horizontal split top has no up neighbor"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        Direction::LEFT,
-        vec![];
-        "horizontal split left no meaning"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        Direction::BOTTOM,
-        vec![1];
-        "horizontal split two windows down"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        1,
-        Direction::TOP,
-        vec![0];
-        "horizontal split two windows up"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        Direction::RIGHT,
-        vec![1];
-        "vertical split two windows right"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        1,
-        Direction::LEFT,
-        vec![0];
-        "vertical split two windows left"
-    )]
-    #[test_case(
-        tile_tree!(layout(orient: TopLeft) [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        Direction::LEFT,
-        vec![1];
-        "two windows TopLeft orientation left"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-            window(id: 2),
-            window(id: 3),
-        ]),
-        1,
-        Direction::RIGHT,
-        vec![2, 3];
-        "four windows multiple in direction"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            window(id: 0),
-            window(id: 1),
-            window(id: 2),
-            window(id: 3),
-        ]),
-        1,
-        Direction::BOTTOM,
-        vec![2, 3];
-        "four horizontal skip neighbor multiple below"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            layout(split: Horizontal) [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout(split: Horizontal) [
-                window(id: 3),
-                window(id: 4),
-            ]
-        ]),
-        2,
-        Direction::RIGHT,
-        vec![4];
-        "nested columns right from left column"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            layout(split: Horizontal) [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout(split: Horizontal) [
-                window(id: 3),
-                window(id: 4),
-            ]
-        ]),
-        4,
-        Direction::LEFT,
-        vec![1, 2];
-        "nested columns left from right column"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            layout() [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout() [
-                window(id: 3),
-                window(id: 4),
-            ]
-        ]),
-        1,
-        Direction::BOTTOM,
-        vec![3, 4];
-        "nested rows down from top row"
-    )]
-    #[test_case(
-        tile_tree!(layout(split: Horizontal) [
-            layout() [
-                window(id: 0),
-                window(id: 1),
-                window(id: 2),
-            ],
-            layout() [
-                window(id: 3),
-                window(id: 4),
-            ]
-        ]),
-        3,
-        Direction::TOP,
-        vec![0, 1];
-        "nested rows up from bottom row"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            layout(split: Horizontal) [
-                window(id: 1),
-                window(id: 2),
-            ],
-        ]),
-        0,
-        Direction::RIGHT,
-        vec![1, 2];
-        "navigate into nested layout"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            layout(split: Horizontal) [
-                layout() [
-                    window(id: 0),
-                    window(id: 1),
-                ]
-            ],
-            window(id: 2),
-        ]),
-        0,
-        Direction::RIGHT,
-        vec![1, 2];
-        "navigate through multiple layout levels"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            layout(orient: TopLeft, split: Horizontal) [
-                window(id: 1),
-                window(id: 2),
-            ],
-        ]),
-        0,
-        Direction::RIGHT,
-        vec![1, 2];
-        "navigate into TopLeft nested layout"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        0,
-        Direction::TOP_LEFT,
-        vec![];
-        "composite direction no neighbor"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]),
-        1,
-        Direction::BOTTOM_LEFT,
-        vec![0];
-        "composite direction finds window"
-    )]
-    #[test_case(
-        tile_tree!(layout() [
-            layout(split: Horizontal) [
-                layout() [
-                    layout(split: Horizontal) [
-                        window(id: 0),
-                        window(id: 1),
-                    ]
-                ],
-                window(id: 2),
-            ],
-            window(id: 3),
-        ]),
-        0,
-        Direction::BOTTOM,
-        vec![1, 2];
-        "deep nesting three levels down"
-    )]
-    fn test_find_windows_in_direction(
-        mut tree: TileTree<TestWindow>,
-        id: u32,
-        direction: Direction,
-        expected: Vec<u32>,
-    ) {
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
-        println!("{}", tree.visualize());
-        assert_eq!(
-            tree.find_windows_in_direction(id, direction)
-                .iter()
-                .map(|w| w.inner.borrow().id.unwrap())
-                .collect::<Vec<_>>(),
-            expected
-        );
-    }
-
-    #[test]
-    fn test_find_windows_in_direction_nonexistent_id() {
-        let mut tree = tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
-        ]);
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
-
-        let result: Vec<u32> = tree
-            .find_windows_in_direction(99, Direction::RIGHT)
-            .iter()
-            .map(|w| w.inner.borrow().id.unwrap())
-            .collect();
-
-        assert_eq!(result, Vec::<u32>::new());
-    }
-
-    #[test_case(
         tile_tree!(layout() [
             window(id: 0),
             window(id: 1),
@@ -2402,6 +2231,274 @@ mod tests {
         tree.swap_window(lhs, rhs);
         tree.update_tile_size((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected)
+    }
+
+    #[test_case(
+        tile_tree!(layout() [window(id: 0)]),
+        0,
+        Direction::TOP,
+        vec![];
+        "single window no neighbors"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        Direction::TOP,
+        vec![];
+        "horizontal split top has no up neighbor"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        Direction::LEFT,
+        vec![];
+        "horizontal split left no meaning"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        Direction::BOTTOM,
+        vec![1];
+        "horizontal split two windows down"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        Direction::TOP,
+        vec![0];
+        "horizontal split two windows up"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        Direction::RIGHT,
+        vec![1];
+        "vertical split two windows right"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        1,
+        Direction::LEFT,
+        vec![0];
+        "vertical split two windows left"
+    )]
+    #[test_case(
+        tile_tree!(layout(orient: TopLeft) [
+            window(id: 0),
+            window(id: 1),
+        ]),
+        0,
+        Direction::LEFT,
+        vec![1];
+        "two windows TopLeft orientation left"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            window(id: 3),
+        ]),
+        1,
+        Direction::RIGHT,
+        vec![2];
+        "four windows multiple in direction"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            window(id: 0),
+            window(id: 1),
+            window(id: 2),
+            window(id: 3),
+        ]),
+        1,
+        Direction::BOTTOM,
+        vec![2];
+        "four horizontal skip neighbor multiple below"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout(split: Horizontal) [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        2,
+        Direction::RIGHT,
+        vec![4];
+        "nested columns right from left column"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            layout(split: Horizontal) [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout(split: Horizontal) [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        4,
+        Direction::LEFT,
+        vec![1, 2];
+        "nested columns left from right column"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        1,
+        Direction::BOTTOM,
+        vec![3, 4];
+        "nested rows down from top row"
+    )]
+    #[test_case(
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+                window(id: 2),
+            ],
+            layout() [
+                window(id: 3),
+                window(id: 4),
+            ]
+        ]),
+        3,
+        Direction::TOP,
+        vec![0, 1];
+        "nested rows up from bottom row"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(split: Horizontal) [
+                window(id: 1),
+                window(id: 2),
+            ],
+        ]),
+        0,
+        Direction::RIGHT,
+        vec![1, 2];
+        "navigate into nested layout"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(orient: TopLeft, split: Horizontal) [
+                window(id: 1),
+                window(id: 2),
+            ],
+        ]),
+        0,
+        Direction::RIGHT,
+        vec![1, 2];
+        "navigate into TopLeft nested layout"
+    )]
+    #[test_case(
+        tile_tree!(layout() [
+            window(id: 0),
+            layout(split: Horizontal) [
+                window(id: 1),
+                layout(orient: TopLeft) [
+                    window(id: 2),
+                    layout(split: Horizontal) [
+                            window(id: 3),
+                            window(id: 4),
+                    ]
+                ]
+            ],
+        ]),
+        0,
+        Direction::RIGHT,
+        vec![1, 3, 4];
+        "meow"
+    )]
+    // #[test_case(
+    //     tile_tree!(layout() [
+    //         window(id: 0),
+    //         window(id: 1),
+    //     ]),
+    //     0,
+    //     Direction::TOP_LEFT,
+    //     vec![];
+    //     "composite direction no neighbor"
+    // )]
+    // #[test_case(
+    //     tile_tree!(layout() [
+    //         window(id: 0),
+    //         window(id: 1),
+    //     ]),
+    //     1,
+    //     Direction::BOTTOM_LEFT,
+    //     vec![0];
+    //     "composite direction finds window"
+    // )]
+    fn test_find_windows_in_direction(
+        mut tree: TileTree<TestWindow>,
+        id: u32,
+        direction: Direction,
+        expected: Vec<u32>,
+    ) {
+        tree.update_tile_size((0, 0).into(), (100, 100).into());
+        println!("{}", tree.visualize());
+        assert_eq!(
+            tree.find_nearest_windows_in_direction(id, direction)
+                .iter()
+                .map(|w| w.inner.borrow().id.unwrap())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_find_windows_in_direction_nonexistent_id() {
+        let mut tree = tile_tree!(layout() [
+            window(id: 0),
+            window(id: 1),
+        ]);
+        tree.update_tile_size((0, 0).into(), (100, 100).into());
+
+        let result: Vec<u32> = tree
+            .find_nearest_windows_in_direction(99, Direction::RIGHT)
+            .iter()
+            .map(|w| w.inner.borrow().id.unwrap())
+            .collect();
+
+        assert_eq!(result, Vec::<u32>::new());
     }
 
     #[test_case(
