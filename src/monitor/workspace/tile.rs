@@ -70,6 +70,16 @@ impl<T> Tile<T> {
             _ => unreachable!(),
         }
     }
+
+    fn as_layout_tiles_get_index(&self, value: TileId) -> usize {
+        match &self.kind {
+            TileKind::Layout { tiles, .. } => tiles
+                .iter()
+                .position(|id| *id == value)
+                .expect("`TileId` not found"),
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -694,19 +704,15 @@ impl<T: TileTreeWindow> TileTree<T> {
             return;
         }
 
-        let lhs_parent = self.arena[lhs_id].parent.unwrap();
-        let lhs_index = self.arena[lhs_parent]
-            .as_layout_tiles()
-            .iter()
-            .position(|id| *id == lhs_id)
-            .unwrap();
+        let Some(lhs_parent) = self.arena[lhs_id].parent else {
+            return;
+        };
+        let lhs_index = self.arena[lhs_parent].as_layout_tiles_get_index(lhs_id);
 
-        let rhs_parent = self.arena[rhs_id].parent.unwrap();
-        let rhs_index = self.arena[rhs_parent]
-            .as_layout_tiles()
-            .iter()
-            .position(|id| *id == rhs_id)
-            .unwrap();
+        let Some(rhs_parent) = self.arena[rhs_id].parent else {
+            return;
+        };
+        let rhs_index = self.arena[rhs_parent].as_layout_tiles_get_index(rhs_id);
 
         let temp = self.arena[lhs_parent].as_layout_tiles()[lhs_index];
         self.arena[lhs_parent].as_layout_tiles_mut()[lhs_index] =
@@ -743,6 +749,37 @@ impl<T: TileTreeWindow> TileTree<T> {
         None
     }
 
+    fn get_neighbor_id(
+        &self,
+        parent_id: TileId,
+        child_id: TileId,
+        direction: Direction,
+    ) -> Option<TileId> {
+        let TileKind::Layout {
+            tiles, orientation, ..
+        } = &self.arena[parent_id].kind
+        else {
+            return None;
+        };
+        let offset = {
+            let dir_offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
+                1
+            } else {
+                -1
+            };
+            let orient_offset = if matches!(orientation, TileOrientation::BottomRight) {
+                1
+            } else {
+                -1
+            };
+            dir_offset * orient_offset
+        };
+        let child_index = self.arena[parent_id].as_layout_tiles_get_index(child_id) as i32;
+        let other_index = child_index + offset;
+        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
+        in_bounds.then(|| tiles[other_index as usize])
+    }
+
     fn find_windows_in_direction(
         &self,
         target_id: TileId,
@@ -763,39 +800,20 @@ impl<T: TileTreeWindow> TileTree<T> {
             return Vec::new();
         };
 
-        let parent = &self.arena[parent_id];
-        let TileKind::Layout {
-            tiles, orientation, ..
-        } = &parent.kind
-        else {
+        let Some(other_id) = self.get_neighbor_id(parent_id, child_id, direction) else {
             return Vec::new();
         };
-
-        let offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
-            1
-        } else {
-            -1
-        } * if matches!(orientation, TileOrientation::BottomRight) {
-            1
-        } else {
-            -1
-        };
-
-        let child_index = tiles
-            .iter()
-            .position(|t| *t == child_id)
-            .expect("Cannot find tile in its parent") as i32;
-
-        let other_index = child_index + offset;
-
-        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
-        if !in_bounds {
-            return Vec::new();
-        }
-
-        let other_id = tiles[other_index as usize];
 
         let mut results = Vec::new();
+
+        fn get_rect_from_tile<T: TileTreeWindow>(arena: &TileArena<T>, id: TileId) -> Rect {
+            match &arena[id].kind {
+                TileKind::Window(window) => {
+                    Rect::new(Rectangle::new(window.get_location(), window.get_size()))
+                }
+                TileKind::Layout { rect, .. } => Rect::new(*rect),
+            }
+        }
 
         fn filter_windows<'a, T: TileTreeWindow>(
             arena: &'a TileArena<T>,
@@ -837,13 +855,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                             TileSplit::Horizontal => tiles
                                 .iter()
                                 .filter(|id| {
-                                    let rect = match &arena[**id].kind {
-                                        TileKind::Window(window) => Rect::new(Rectangle::new(
-                                            window.get_location(),
-                                            window.get_size(),
-                                        )),
-                                        TileKind::Layout { rect, .. } => Rect::new(*rect),
-                                    };
+                                    let rect = get_rect_from_tile(arena, **id);
                                     rect.is_in_direction(direction, target_rect)
                                 })
                                 .collect(),
@@ -868,13 +880,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                             TileSplit::Vertical => tiles
                                 .iter()
                                 .filter(|id| {
-                                    let rect = match &arena[**id].kind {
-                                        TileKind::Window(window) => Rect::new(Rectangle::new(
-                                            window.get_location(),
-                                            window.get_size(),
-                                        )),
-                                        TileKind::Layout { rect, .. } => Rect::new(*rect),
-                                    };
+                                    let rect = get_rect_from_tile(arena, **id);
                                     rect.is_in_direction(direction, target_rect)
                                 })
                                 .collect(),
@@ -932,107 +938,82 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         let parent = &self.arena[parent_id];
         let TileKind::Layout {
-            tiles,
-            split,
-            orientation,
-            rect,
-            ..
+            tiles, split, rect, ..
         } = &parent.kind
         else {
             return;
         };
         let size = rect.size;
 
-        let offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
-            1
-        } else {
-            -1
-        } * if matches!(orientation, TileOrientation::BottomRight) {
-            1
-        } else {
-            -1
-        };
+        if let Some(other_id) = self.get_neighbor_id(parent_id, child_id, direction) {
+            let total_ratio = tiles
+                .iter()
+                .fold(0.0, |acc, id| acc + self.arena[*id].ratio);
 
-        let child_index = tiles
-            .iter()
-            .position(|t| *t == child_id)
-            .expect("Cannot find tile in its parent") as i32;
+            let size_component = match split {
+                TileSplit::Vertical => size.w,
+                TileSplit::Horizontal => size.h,
+            } as f64;
 
-        let other_index = child_index + offset;
+            let length_from_direction = |direction: Direction, s: Size<i32, Logical>| {
+                if direction.intersects(Direction::LEFT | Direction::RIGHT) {
+                    s.w
+                } else {
+                    s.h
+                }
+            };
 
-        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
-        if !in_bounds {
-            if let Some((ancestor_id, refer_id)) = self.find_parent_with_split(parent_id, *split) {
-                self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
-            } else if !in_loop && !matches!(unit, TileResizeUnit::Exact(..)) {
-                self.adjust_adjacent_ratios(parent_id, child_id, direction.opposite(), -unit, true);
+            let kind_size = |k: &TileKind<T>| match k {
+                TileKind::Window(w) => w.get_size(),
+                TileKind::Layout { rect, .. } => rect.size,
+            };
+
+            match unit {
+                TileResizeUnit::Exact(new_tile_length) => {
+                    let tile_size = kind_size(&self.arena[child_id].kind);
+                    let other_size = kind_size(&self.arena[other_id].kind);
+
+                    let tile_length = length_from_direction(direction, tile_size);
+                    let other_length = length_from_direction(direction, other_size);
+
+                    let tile_ratio = self.arena[child_id].ratio;
+                    let other_ratio = self.arena[other_id].ratio;
+
+                    let total_length = tile_length + other_length;
+                    let pair_total_ratio = tile_ratio + other_ratio;
+
+                    let new_tile_length = new_tile_length.clamp(0, total_length);
+                    let new_other_length = total_length - new_tile_length;
+
+                    let new_tile_ratio =
+                        new_tile_length as f64 / total_length as f64 * pair_total_ratio;
+                    let new_other_ratio =
+                        new_other_length as f64 / total_length as f64 * pair_total_ratio;
+
+                    self.arena[child_id].ratio = new_tile_ratio;
+                    self.arena[other_id].ratio = new_other_ratio;
+                }
+                TileResizeUnit::Px(px) => {
+                    let ratio_offset = px as f64 * total_ratio / size_component;
+                    let ratio_offset =
+                        ratio_offset.clamp(-self.arena[child_id].ratio, self.arena[other_id].ratio);
+
+                    self.arena[child_id].ratio += ratio_offset;
+                    self.arena[other_id].ratio -= ratio_offset;
+                }
+                TileResizeUnit::Ratio(r) => {
+                    let ratio_offset =
+                        r.clamp(-self.arena[child_id].ratio, self.arena[other_id].ratio);
+
+                    self.arena[child_id].ratio += ratio_offset;
+                    self.arena[other_id].ratio -= ratio_offset;
+                }
             }
-            return;
-        }
-
-        let other_id = tiles[other_index as usize];
-
-        let total_ratio = tiles
-            .iter()
-            .fold(0.0, |acc, id| acc + self.arena[*id].ratio);
-
-        let size_component = match split {
-            TileSplit::Vertical => size.w,
-            TileSplit::Horizontal => size.h,
-        } as f64;
-
-        let length_from_direction = |direction: Direction, s: Size<i32, Logical>| {
-            if direction.intersects(Direction::LEFT | Direction::RIGHT) {
-                s.w
-            } else {
-                s.h
-            }
-        };
-
-        let kind_size = |k: &TileKind<T>| match k {
-            TileKind::Window(w) => w.get_size(),
-            TileKind::Layout { rect, .. } => rect.size,
-        };
-
-        match unit {
-            TileResizeUnit::Exact(new_tile_length) => {
-                let tile_size = kind_size(&self.arena[child_id].kind);
-                let other_size = kind_size(&self.arena[other_id].kind);
-
-                let tile_length = length_from_direction(direction, tile_size);
-                let other_length = length_from_direction(direction, other_size);
-
-                let tile_ratio = self.arena[child_id].ratio;
-                let other_ratio = self.arena[other_id].ratio;
-
-                let total_length = tile_length + other_length;
-                let pair_total_ratio = tile_ratio + other_ratio;
-
-                let new_tile_length = new_tile_length.clamp(0, total_length);
-                let new_other_length = total_length - new_tile_length;
-
-                let new_tile_ratio =
-                    new_tile_length as f64 / total_length as f64 * pair_total_ratio;
-                let new_other_ratio =
-                    new_other_length as f64 / total_length as f64 * pair_total_ratio;
-
-                self.arena[child_id].ratio = new_tile_ratio;
-                self.arena[other_id].ratio = new_other_ratio;
-            }
-            TileResizeUnit::Px(px) => {
-                let ratio_offset = px as f64 * total_ratio / size_component;
-                let ratio_offset =
-                    ratio_offset.clamp(-self.arena[child_id].ratio, self.arena[other_id].ratio);
-
-                self.arena[child_id].ratio += ratio_offset;
-                self.arena[other_id].ratio -= ratio_offset;
-            }
-            TileResizeUnit::Ratio(r) => {
-                let ratio_offset = r.clamp(-self.arena[child_id].ratio, self.arena[other_id].ratio);
-
-                self.arena[child_id].ratio += ratio_offset;
-                self.arena[other_id].ratio -= ratio_offset;
-            }
+        } else if let Some((ancestor_id, refer_id)) = self.find_parent_with_split(parent_id, *split)
+        {
+            self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
+        } else if !in_loop && !matches!(unit, TileResizeUnit::Exact(..)) {
+            self.adjust_adjacent_ratios(parent_id, child_id, direction.opposite(), -unit, true);
         }
     }
 
