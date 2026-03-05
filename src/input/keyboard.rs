@@ -65,6 +65,7 @@ pub enum KeyAction {
         unit: WindowUnit,
     },
     ToggleFloating,
+    ToggleFloatingHidden,
     CloseWindow,
     Execute {
         command: Vec<String>,
@@ -187,6 +188,9 @@ impl WindowManagerState {
             }
             ToggleFloating => {
                 self.toggle_focused_window_floating();
+            }
+            ToggleFloatingHidden => {
+                self.toggle_focused_workspace_floating_window_hidden();
             }
             CloseWindow => {
                 self.close_focused_window();

@@ -52,8 +52,9 @@ pub struct Workspace {
 
     tiling: TileTree,
     floating: Vec<MappedWindow>,
-    // TODO hide floating
     focus_queue: Vec<MappedWindow>,
+
+    hide_floating: bool,
 }
 
 impl Workspace {
@@ -69,6 +70,7 @@ impl Workspace {
             tiling: TileTree::new(layouts, layout_name),
             floating: Vec::new(),
             focus_queue: Vec::new(),
+            hide_floating: false,
         }
     }
 
@@ -105,7 +107,12 @@ impl Workspace {
     }
 
     pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        self.floating.iter().chain(self.tiling.windows_iter())
+        (if self.hide_floating {
+            Box::new(std::iter::empty())
+        } else {
+            Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
+        })
+        .chain(self.tiling.windows_iter())
     }
 
     pub fn tiling_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> + Clone {
@@ -160,6 +167,11 @@ impl Workspace {
     }
 
     pub fn append_to_focus_queue(&mut self, mapped: MappedWindow) {
+        if let Some(m) = self.focus_queue.last()
+            && *m == mapped
+        {
+            return;
+        }
         if let Some(index) = self.focus_queue.iter().position(|m| *m == mapped) {
             self.focus_queue.remove(index);
         }
@@ -199,6 +211,17 @@ impl Workspace {
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
         self.remove_floating_window(surface)
             .or(self.remove_tiling_window(surface))
+    }
+
+    pub fn toggle_floating_window_hidden(&mut self) {
+        self.hide_floating = !self.hide_floating;
+        if let Some(mapped) = self
+            .focus_queue
+            .iter()
+            .rfind(|mapped| mapped.get_floating() != self.hide_floating)
+        {
+            self.append_to_focus_queue(mapped.clone());
+        }
     }
 
     pub fn apply_rule_to_windows(&mut self, window_rules: &WindowRules) {

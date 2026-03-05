@@ -337,6 +337,14 @@ impl WindowManagerState {
         self.timeout_to_save();
     }
 
+    pub fn toggle_focused_workspace_floating_window_hidden(&mut self) {
+        let monitor = self.monitors.get_monitor_mut();
+        let workspace_name = monitor.get_active_workspace_name().clone();
+        let workspace = monitor.get_workspace_mut(&workspace_name);
+        workspace.toggle_floating_window_hidden();
+        self.restore_workspace_focus(&workspace_name);
+    }
+
     pub fn close_focused_window(&mut self) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
