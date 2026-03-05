@@ -29,7 +29,7 @@ impl WindowRules {
             if rule.is_match(&candidate) {
                 properties = properties.merge(rule.properties.clone());
 
-                // remember to update candidate base on window properties
+                // REMIND
                 #[cfg(test)]
                 if let Some(ref op) = properties.opening {
                     let WindowOpeningProperties {

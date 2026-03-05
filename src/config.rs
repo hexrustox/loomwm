@@ -14,7 +14,6 @@ use crate::{
     },
     monitor::LayoutSet,
     path::config_dir,
-    state::WindowManagerState,
     utils::Direction,
     window::rule::{WindowLocation, WindowRules},
 };
@@ -39,7 +38,8 @@ impl Config {
 
     pub fn read() -> anyhow::Result<Self> {
         let config_path = Self::path();
-        toml::from_str(&read_to_string(&config_path)?).map_err(|e| anyhow!("{e}"))
+        toml::from_str(&read_to_string(&config_path)?)
+            .map_err(|e| anyhow!("{e}").context("Failed to read config file"))
     }
 }
 
@@ -360,25 +360,6 @@ where
     }
 
     Ok(modifiers)
-}
-
-impl WindowManagerState {
-    pub fn update_config(&mut self, config: Config) {
-        if self.window_rules.get_hash() != config.window_rules.get_hash() {
-            self.window_rules = config.window_rules;
-            self.apply_rule_to_mapped_windows();
-        }
-
-        self.general_config = config.general;
-        // TODO live reload
-        // self.layout_set = Rc::new(config.layouts.layout_set);
-        // self.default_layout = Rc::from(config.layouts.default);
-
-        // TODO update keyboard repeat
-        self.key_config = config.key;
-        self.pointer_config = config.pointer;
-        // TODO update assistant
-    }
 }
 
 #[cfg(test)]

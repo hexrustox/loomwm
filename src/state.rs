@@ -116,12 +116,12 @@ impl WindowManagerState {
                                 display
                                     .get_mut()
                                     .dispatch_clients(&mut state.compositor)
-                                    .expect("Failed to dispatch requests");
+                                    .expect("Failed to dispatch client requests");
                             }
                             Ok(PostAction::Continue)
                         },
                     )
-                    .expect("Failed to init display");
+                    .expect("Failed to init display event source");
 
                 socket_name
             }

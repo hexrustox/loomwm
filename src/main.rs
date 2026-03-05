@@ -1,13 +1,10 @@
 #![recursion_limit = "256"]
 
-use std::{env, fs::read_to_string};
+use std::env;
 
 use anyhow::anyhow;
-use notify::{Event, EventKind, Watcher, event::ModifyKind};
-use smithay::reexports::{
-    calloop::{EventLoop, channel},
-    wayland_server::Display,
-};
+use notify::INotifyWatcher;
+use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 use tracing::level_filters::LevelFilter;
 
 use crate::{
@@ -24,13 +21,14 @@ mod monitor;
 mod path;
 mod state;
 mod utils;
+mod watcher;
 mod window;
 
 pub struct CompositorData {
     pub compositor: WindowManagerState,
     pub backend: Backend,
+    pub watcher: Option<INotifyWatcher>,
 }
-
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt()
         .with_max_level(LevelFilter::WARN)
@@ -54,37 +52,8 @@ fn main() -> Result<(), anyhow::Error> {
     let mut data = CompositorData {
         compositor,
         backend,
+        watcher: watcher::init(&event_loop),
     };
-
-    let (sender, reciever) = channel::channel();
-
-    // TODO refactor
-    let mut watcher = notify::recommended_watcher(move |event| {
-        if let Ok(Event {
-            kind: EventKind::Modify(ModifyKind::Data(..)),
-            ..
-        }) = event
-        {
-            sender.send(()).unwrap()
-        }
-    })?;
-
-    watcher.watch(
-        Config::path().parent().unwrap(),
-        notify::RecursiveMode::NonRecursive,
-    )?;
-
-    event_loop
-        .handle()
-        .insert_source(reciever, move |event, _, data| {
-            if let channel::Event::Msg(_) = event
-                && let Ok(file) = read_to_string(Config::path())
-                && let Ok(config) = toml::from_str(&file)
-            {
-                data.compositor.update_config(config);
-            }
-        })
-        .map_err(|e| anyhow!("{e}"))?;
 
     event_loop.run(None, &mut data, |_| {})?;
 
