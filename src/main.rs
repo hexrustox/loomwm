@@ -31,7 +31,7 @@ pub struct CompositorData {
 }
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::WARN)
+        .with_max_level(LevelFilter::INFO)
         .init();
 
     let config = Config::read()?;

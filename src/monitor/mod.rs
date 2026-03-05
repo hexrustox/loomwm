@@ -13,7 +13,7 @@ use smithay::{
 
 use crate::{monitor::workspace::Workspace, state::WindowManagerState, window::MappedWindow};
 
-pub use assistant::{BackendDevice, LayoutRecord};
+pub use assistant::{BackendDevice, LayoutHistory};
 pub use workspace::{LayoutSet, TileRatio, TileTreeSearchKey, TileTreeWindow, WorkspaceName};
 
 mod action;

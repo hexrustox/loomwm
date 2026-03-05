@@ -22,7 +22,7 @@ use crate::{
     config::{AssistantConfig, Config, GeneralConfig, KeyConfig, PointerConfig},
     handlers::ClientState,
     input::{KeyAction, KeyModifiers},
-    monitor::{BackendDevice, LayoutRecord, LayoutSet, Monitors},
+    monitor::{BackendDevice, LayoutHistory, LayoutSet, Monitors},
     window::{UnmappedWindow, rule::WindowRules},
 };
 
@@ -61,7 +61,7 @@ pub struct WindowManagerState {
     pub assistant_config: AssistantConfig,
     pub backend_device: BackendDevice,
     pub save_at: Option<Instant>,
-    pub layout_record: LayoutRecord,
+    pub layout_history: LayoutHistory,
 }
 
 impl WindowManagerState {
@@ -171,7 +171,7 @@ impl WindowManagerState {
             assistant_config: config.assistant,
             backend_device: BackendDevice::new(),
             save_at: None,
-            layout_record: LayoutRecord::read(),
+            layout_history: LayoutHistory::read(),
         }
     }
 }

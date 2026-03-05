@@ -1,3 +1,5 @@
+use std::thread::spawn;
+
 use notify::{Event, EventKind, INotifyWatcher, Watcher, event::ModifyKind};
 use smithay::reexports::calloop::{EventLoop, channel};
 use tracing::error;
@@ -80,6 +82,14 @@ impl WindowManagerState {
 
         self.pointer_config = config.pointer;
 
-        // TODO update assistant
+        if config.assistant.enable && !self.backend_device.initialized() {
+            self.event_loop.insert_idle(|data| {
+                let mut device = data.compositor.backend_device.clone();
+                spawn(move || {
+                    device.init();
+                });
+            });
+        }
+        self.assistant_config = config.assistant;
     }
 }

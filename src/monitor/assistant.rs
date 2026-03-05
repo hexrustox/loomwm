@@ -13,7 +13,7 @@ use burn::backend::{Autodiff, NdArray, Wgpu};
 use burn::data::dataloader::Dataset;
 use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
     monitor::TileTreeWindow, path::model_dir, state::WindowManagerState,
@@ -35,8 +35,17 @@ impl BackendDevice {
     }
 
     pub fn init(&mut self) {
+        if self.device.lock().unwrap().is_some() {
+            return;
+        }
+
         *self.device.lock().unwrap() = Some(get_device());
         self.ready.notify_all();
+        info!("init assistant device");
+    }
+
+    pub fn initialized(&self) -> bool {
+        self.device.lock().unwrap().is_some()
     }
 
     fn get_device(&self) -> InnerBackendDevice {
@@ -52,9 +61,9 @@ impl BackendDevice {
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LayoutRecord(RankingDataset);
+pub struct LayoutHistory(RankingDataset);
 
-impl LayoutRecord {
+impl LayoutHistory {
     fn path() -> PathBuf {
         model_dir().join("history.json")
     }
@@ -116,10 +125,11 @@ impl WindowManagerState {
                             }
                         }
                         for items in workspace_windows {
-                            data.append_layout_record(items);
+                            data.append_layout_history(items);
                         }
 
                         data.save_at = None;
+                        info!("layout history saved");
                         TimeoutAction::Drop
                     } else {
                         data.save_at = Some(time);
@@ -129,8 +139,8 @@ impl WindowManagerState {
         }
     }
 
-    fn append_layout_record(&mut self, items: Vec<MappedWindow>) {
-        self.layout_record.push(
+    fn append_layout_history(&mut self, items: Vec<MappedWindow>) {
+        self.layout_history.push(
             RankingItem {
                 app_ids: items
                     .into_iter()
@@ -144,8 +154,8 @@ impl WindowManagerState {
         );
 
         self.event_loop.insert_idle(|data| {
-            data.compositor.layout_record.write();
-            let dataset = data.compositor.layout_record.dataset();
+            data.compositor.layout_history.write();
+            let dataset = data.compositor.layout_history.dataset();
             let device = data.compositor.backend_device.clone();
             spawn(move || match device.get_device() {
                 InnerBackendDevice::Gpu(d) => {
