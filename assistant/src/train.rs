@@ -163,14 +163,14 @@ pub fn train<B: AutodiffBackend>(
     if let Err(e) =
         vocab_json.map(|contents| std::fs::write(model_dir.join("vocab.json"), contents))
     {
-        error!("failed to save model vocab: {e}");
+        error!("Failed to save model vocab: {e}");
     }
 
     if let Err(e) = config.save(model_dir.join("config.json")) {
-        error!("failed to save model config: {e}");
+        error!("Failed to save model config: {e}");
     }
 
     if let Err(e) = model.save_file(model_dir.join("model"), &CompactRecorder::new()) {
-        error!("failed to save model: {e}");
+        error!("Failed to save model: {e}");
     }
 }

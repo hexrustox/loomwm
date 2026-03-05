@@ -18,17 +18,17 @@ pub fn init(event_loop: &EventLoop<CompositorData>) -> Option<INotifyWatcher> {
             sender.send(()).unwrap()
         }
     }) else {
-        error!("failed to init config watcher");
+        error!("Failed to init config watcher");
         return None;
     };
 
     if let Some(parent) = Config::path().parent() {
         if let Err(e) = watcher.watch(parent, notify::RecursiveMode::NonRecursive) {
-            error!("failed to watch path {parent:?}: {e}");
+            error!("Failed to watch path {parent:?}: {e}");
             return None;
         }
     } else {
-        error!("config file cannot be at root");
+        error!("Config file cannot be at root");
     }
 
     event_loop

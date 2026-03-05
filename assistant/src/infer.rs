@@ -22,14 +22,14 @@ pub fn infer<B: Backend>(
     device: B::Device,
 ) -> anyhow::Result<Vec<String>> {
     let vocab_json = read_to_string(model_dir.join("vocab.json"))
-        .map_err(|e| anyhow!("failed to read model vocab: {e}"))?;
+        .map_err(|e| anyhow!("Failed to read model vocab: {e}"))?;
     let vocab = serde_json::from_str::<Vocab>(&vocab_json)
-        .map_err(|e| anyhow!("failed to parse model vocab: {e}"))?;
+        .map_err(|e| anyhow!("Failed to parse model vocab: {e}"))?;
     let config = TrainingConfig::load(model_dir.join("config.json"))
-        .map_err(|e| anyhow!("failed to load model config: {e}"))?;
+        .map_err(|e| anyhow!("Failed to load model config: {e}"))?;
     let record = CompactRecorder::new()
         .load(model_dir.join("model"), &device)
-        .map_err(|e| anyhow!("failed to load model: {e}"))?;
+        .map_err(|e| anyhow!("Failed to load model: {e}"))?;
 
     let model = config.model.init::<B>(&device).load_record(record);
 

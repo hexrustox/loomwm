@@ -41,7 +41,7 @@ impl BackendDevice {
 
         *self.device.lock().unwrap() = Some(get_device());
         self.ready.notify_all();
-        info!("init assistant device");
+        info!("Init assistant device");
     }
 
     pub fn initialized(&self) -> bool {
@@ -84,7 +84,7 @@ impl LayoutHistory {
             let _ = create_dir_all(parent);
         }
         if let Err(e) = std::fs::write(Self::path(), serde_json::to_string(self).unwrap()) {
-            error!("failed to write history: {e}");
+            error!("Failed to write history: {e}");
         }
     }
 
@@ -129,7 +129,6 @@ impl WindowManagerState {
                         }
 
                         data.save_at = None;
-                        info!("layout history saved");
                         TimeoutAction::Drop
                     } else {
                         data.save_at = Some(time);
@@ -155,6 +154,7 @@ impl WindowManagerState {
 
         self.event_loop.insert_idle(|data| {
             data.compositor.layout_history.write();
+            info!("Layout history saved");
             let dataset = data.compositor.layout_history.dataset();
             let device = data.compositor.backend_device.clone();
             spawn(move || match device.get_device() {
@@ -199,7 +199,7 @@ impl WindowManagerState {
                 InnerBackendDevice::Cpu(d) => infer::<NdArray>(model_dir(), item, d),
             };
             let Ok(target) = target else {
-                error!("assistant failed: {}", target.unwrap_err());
+                error!("Assistant failed: {}", target.unwrap_err());
                 return;
             };
 

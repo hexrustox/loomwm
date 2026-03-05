@@ -66,7 +66,7 @@ impl XdgShellHandler for WindowManagerState {
 
     fn move_request(&mut self, toplevel: ToplevelSurface, seat: WlSeat, serial: Serial) {
         if !self.general_config.allow_move_request {
-            warn!("client move request ignored");
+            warn!("Client move request ignored");
             return;
         }
 
@@ -94,7 +94,7 @@ impl XdgShellHandler for WindowManagerState {
         edges: xdg_toplevel::ResizeEdge,
     ) {
         if !self.general_config.allow_resize_request {
-            warn!("client resize request ignored");
+            warn!("Client resize request ignored");
             return;
         }
 

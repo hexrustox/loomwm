@@ -91,7 +91,7 @@ impl WindowRule {
                 if let Ok(re) = Regex::new(re) {
                     return re.is_match(haystack);
                 } else {
-                    error!("invalid regex: {re}");
+                    error!("Invalid regex: {re}");
                 }
             }
             true
