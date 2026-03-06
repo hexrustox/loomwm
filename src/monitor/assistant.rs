@@ -39,13 +39,13 @@ impl BackendDevice {
             return;
         }
 
-        *self.device.lock().unwrap() = Some(get_device());
-        self.ready.notify_all();
-        info!("Init assistant device");
-    }
-
-    pub fn initialized(&self) -> bool {
-        self.device.lock().unwrap().is_some()
+        let device = self.device.clone();
+        let ready = self.ready.clone();
+        spawn(move || {
+            *device.lock().unwrap() = Some(get_device());
+            ready.notify_all();
+            info!("Init assistant device");
+        });
     }
 
     fn get_device(&self) -> InnerBackendDevice {

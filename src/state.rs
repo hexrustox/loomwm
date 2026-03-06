@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, thread::spawn, time::Instant};
+use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, time::Instant};
 
 use smithay::{
     desktop::{PopupManager, Space, Window},
@@ -129,10 +129,7 @@ impl WindowManagerState {
 
         if config.assistant.enable {
             event_loop.insert_idle(|data| {
-                let mut device = data.compositor.backend_device.clone();
-                spawn(move || {
-                    device.init();
-                });
+                data.compositor.backend_device.init();
             });
         }
 
