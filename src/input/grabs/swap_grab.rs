@@ -13,14 +13,20 @@ pub struct SwapGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     mapped: MappedWindow,
     last_mapped: Option<(MappedWindow, f32)>,
+    hidden: bool,
 }
 
 impl SwapGrab {
-    pub fn new(start_data: PointerGrabStartData<WindowManagerState>, mapped: MappedWindow) -> Self {
+    pub fn new(
+        start_data: PointerGrabStartData<WindowManagerState>,
+        mapped: MappedWindow,
+        hidden: bool,
+    ) -> Self {
         Self {
             start_data,
             mapped,
             last_mapped: None,
+            hidden,
         }
     }
 }
@@ -79,11 +85,12 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
     ) {
         handle.button(data, event);
 
-        if !handle.current_pressed().contains(&self.start_data.button)
-            && let Some((mapped, opacity)) = self.last_mapped.as_ref()
-        {
-            mapped.set_opacity(*opacity);
-            data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
+        if !handle.current_pressed().contains(&self.start_data.button) {
+            if let Some((mapped, opacity)) = self.last_mapped.as_ref() {
+                mapped.set_opacity(*opacity);
+                data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
+            }
+            data.set_focused_workspace_floating_window_hidden(Some(self.hidden));
             handle.unset_grab(self, data, event.serial, event.time, true);
         }
     }

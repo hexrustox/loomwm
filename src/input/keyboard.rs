@@ -190,7 +190,7 @@ impl WindowManagerState {
                 self.toggle_focused_window_floating();
             }
             ToggleFloatingHidden => {
-                self.toggle_focused_workspace_floating_window_hidden();
+                self.set_focused_workspace_floating_window_hidden(None);
             }
             CloseWindow => {
                 self.close_focused_window();

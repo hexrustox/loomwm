@@ -120,7 +120,9 @@ impl WindowManagerState {
                                 );
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             } else {
-                                let grab = SwapGrab::new(start_data, mapped.clone());
+                                let hidden = self.get_focused_workspace_floating_window_hidden();
+                                self.set_focused_workspace_floating_window_hidden(Some(true));
+                                let grab = SwapGrab::new(start_data, mapped.clone(), hidden);
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             }
                         }

@@ -213,8 +213,7 @@ impl Workspace {
             .or(self.remove_tiling_window(surface))
     }
 
-    pub fn toggle_floating_window_hidden(&mut self) {
-        self.hide_floating = !self.hide_floating;
+    fn restore_focus_after_window_hidden(&mut self) {
         if let Some(mapped) = self
             .focus_queue
             .iter()
@@ -222,6 +221,19 @@ impl Workspace {
         {
             self.append_to_focus_queue(mapped.clone());
         }
+    }
+
+    pub fn get_floating_window_hidden(&self) -> bool {
+        self.hide_floating
+    }
+
+    pub fn set_floating_window_hidden(&mut self, value: Option<bool>) {
+        if let Some(v) = value {
+            self.hide_floating = v;
+        } else {
+            self.hide_floating = !self.hide_floating;
+        }
+        self.restore_focus_after_window_hidden();
     }
 
     pub fn apply_rule_to_windows(&mut self, window_rules: &WindowRules) {

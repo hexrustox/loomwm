@@ -337,11 +337,18 @@ impl WindowManagerState {
         self.timeout_to_save();
     }
 
-    pub fn toggle_focused_workspace_floating_window_hidden(&mut self) {
+    pub fn get_focused_workspace_floating_window_hidden(&self) -> bool {
+        let monitor = self.monitors.get_monitor();
+        let workspace_name = monitor.get_active_workspace_name().clone();
+        let workspace = monitor.get_workspace(&workspace_name);
+        workspace.get_floating_window_hidden()
+    }
+
+    pub fn set_focused_workspace_floating_window_hidden(&mut self, value: Option<bool>) {
         let monitor = self.monitors.get_monitor_mut();
         let workspace_name = monitor.get_active_workspace_name().clone();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.toggle_floating_window_hidden();
+        workspace.set_floating_window_hidden(value);
         self.restore_workspace_focus(&workspace_name);
     }
 
