@@ -295,7 +295,7 @@ impl WindowManagerState {
         self.timeout_to_save();
     }
 
-    pub fn toggle_focused_window_floating(&mut self) {
+    pub fn toggle_focused_window_floating(&mut self, value: Option<bool>) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -309,7 +309,7 @@ impl WindowManagerState {
             return;
         };
 
-        mapped.set_floating(!mapped.get_floating());
+        mapped.set_floating(value.unwrap_or(!mapped.get_floating()));
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
@@ -344,12 +344,18 @@ impl WindowManagerState {
         workspace.get_floating_window_hidden()
     }
 
-    pub fn set_focused_workspace_floating_window_hidden(&mut self, value: Option<bool>) {
+    pub fn set_focused_workspace_floating_window_hidden(
+        &mut self,
+        value: Option<bool>,
+        focus: Option<bool>,
+    ) {
         let monitor = self.monitors.get_monitor_mut();
         let workspace_name = monitor.get_active_workspace_name().clone();
         let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.set_floating_window_hidden(value);
-        self.restore_workspace_focus(&workspace_name);
+        if focus.unwrap_or(true) || workspace.get_floating_window_hidden() {
+            self.restore_workspace_focus(&workspace_name);
+        }
     }
 
     pub fn close_focused_window(&mut self) {

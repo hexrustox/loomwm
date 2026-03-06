@@ -64,8 +64,13 @@ pub enum KeyAction {
         direction: Direction,
         unit: WindowUnit,
     },
-    ToggleFloating,
-    ToggleFloatingHidden,
+    ToggleFloating {
+        value: Option<bool>,
+    },
+    ToggleFloatingHidden {
+        value: Option<bool>,
+        focus: Option<bool>,
+    },
     CloseWindow,
     Execute {
         command: Vec<String>,
@@ -186,11 +191,11 @@ impl WindowManagerState {
             ResizeWindow { direction, unit } => {
                 self.resize_focused_tiling_window(*direction, *unit);
             }
-            ToggleFloating => {
-                self.toggle_focused_window_floating();
+            ToggleFloating { value } => {
+                self.toggle_focused_window_floating(*value);
             }
-            ToggleFloatingHidden => {
-                self.set_focused_workspace_floating_window_hidden(None);
+            ToggleFloatingHidden { value, focus } => {
+                self.set_focused_workspace_floating_window_hidden(*value, *focus);
             }
             CloseWindow => {
                 self.close_focused_window();

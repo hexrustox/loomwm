@@ -228,11 +228,7 @@ impl Workspace {
     }
 
     pub fn set_floating_window_hidden(&mut self, value: Option<bool>) {
-        if let Some(v) = value {
-            self.hide_floating = v;
-        } else {
-            self.hide_floating = !self.hide_floating;
-        }
+        self.hide_floating = value.unwrap_or(!self.hide_floating);
         self.restore_focus_after_window_hidden();
     }
 
