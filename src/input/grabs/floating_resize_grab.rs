@@ -93,9 +93,13 @@ impl PointerGrab<WindowManagerState> for FloatingResizeGrab {
             new_height = (self.initial_rect.size.h as f64 + delta.y) as i32;
         }
 
-        self.last_size = Size::from((new_width, new_height));
+        let new_size = self.mapped.clamp_size(Size::from((new_width, new_height)));
+        if new_size == self.last_size {
+            return;
+        }
+        self.last_size = new_size;
 
-        self.mapped.set_size(self.mapped.clamp_size(self.last_size));
+        self.mapped.set_size(self.last_size);
         self.mapped.toplevel().with_pending_state(|state| {
             state.states.set(xdg_toplevel::State::Resizing);
         });

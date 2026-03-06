@@ -18,6 +18,7 @@ pub struct TilingResizeGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     direction: Direction,
     initial_size: Size<i32, Logical>,
+    last_size: Size<i32, Logical>,
 }
 
 impl TilingResizeGrab {
@@ -30,6 +31,7 @@ impl TilingResizeGrab {
             start_data,
             direction,
             initial_size,
+            last_size: initial_size,
         }
     }
 }
@@ -61,11 +63,14 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
 
             let new_width = (self.initial_size.w as f64 + adjusted_x) as i32;
 
-            data.resize_focused_tiling_window(
-                self.direction
-                    .intersection(Direction::LEFT | Direction::RIGHT),
-                new_width,
-            );
+            if new_width != self.last_size.w {
+                data.resize_focused_tiling_window(
+                    self.direction
+                        .intersection(Direction::LEFT | Direction::RIGHT),
+                    new_width,
+                );
+                self.last_size.w = new_width;
+            }
         }
 
         if self
@@ -80,11 +85,14 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
 
             let new_height = (self.initial_size.h as f64 + adjusted_y) as i32;
 
-            data.resize_focused_tiling_window(
-                self.direction
-                    .intersection(Direction::TOP | Direction::BOTTOM),
-                new_height,
-            );
+            if new_height != self.last_size.h {
+                data.resize_focused_tiling_window(
+                    self.direction
+                        .intersection(Direction::TOP | Direction::BOTTOM),
+                    new_height,
+                );
+                self.last_size.h = new_height;
+            }
         }
     }
 
