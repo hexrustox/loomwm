@@ -692,36 +692,35 @@ impl<T: TileTreeWindow> TileTree<T> {
     }
 
     pub fn swap_window<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {
-        let lhs_id = match self.find_tile_id(lhs.into()) {
-            Some(id) => id,
-            None => return,
+        let Some(lhs_id) = self.find_tile_id(lhs.into()) else {
+            return;
         };
-        let rhs_id = match self.find_tile_id(rhs.into()) {
-            Some(id) => id,
-            None => return,
+        let Some(rhs_id) = self.find_tile_id(rhs.into()) else {
+            return;
         };
         if lhs_id == rhs_id {
             return;
         }
 
-        let Some(lhs_parent) = self.arena[lhs_id].parent else {
+        let (Some(lhs_parent), Some(rhs_parent)) =
+            (self.arena[lhs_id].parent, self.arena[rhs_id].parent)
+        else {
             return;
         };
         let lhs_index = self.arena[lhs_parent].as_layout_tiles_get_index(lhs_id);
-
-        let Some(rhs_parent) = self.arena[rhs_id].parent else {
-            return;
-        };
         let rhs_index = self.arena[rhs_parent].as_layout_tiles_get_index(rhs_id);
 
-        let temp = self.arena[lhs_parent].as_layout_tiles()[lhs_index];
-        self.arena[lhs_parent].as_layout_tiles_mut()[lhs_index] =
-            self.arena[rhs_parent].as_layout_tiles()[rhs_index];
-        self.arena[rhs_parent].as_layout_tiles_mut()[rhs_index] = temp;
-
-        let temp = self.arena[lhs_id].ratio;
-        self.arena[lhs_id].ratio = self.arena[rhs_id].ratio;
-        self.arena[rhs_id].ratio = temp;
+        unsafe {
+            std::ptr::swap(
+                &mut self.arena[lhs_parent].as_layout_tiles_mut()[lhs_index],
+                &mut self.arena[rhs_parent].as_layout_tiles_mut()[rhs_index],
+            );
+            std::ptr::swap(
+                &mut self.arena[lhs_id].parent,
+                &mut self.arena[rhs_id].parent,
+            );
+            std::ptr::swap(&mut self.arena[lhs_id].ratio, &mut self.arena[rhs_id].ratio);
+        }
 
         let mut lhs_inner = self.arena[lhs_id].as_window().clone();
         let mut rhs_inner = self.arena[rhs_id].as_window().clone();
@@ -2227,9 +2226,12 @@ mod tests {
         expected: TileTree<TestWindow>,
     ) {
         tree.update_tile_size((0, 0).into(), (100, 100).into());
+        let clone = tree.clone();
         tree.swap_window(lhs, rhs);
         tree.update_tile_size((0, 0).into(), (100, 100).into());
-        assert_tree_eq!(tree, expected)
+        assert_tree_eq!(tree, expected);
+        tree.swap_window(lhs, rhs);
+        assert_tree_eq!(tree, clone);
     }
 
     #[test_case(
