@@ -8,7 +8,6 @@ use smithay::{
     utils::{Rectangle, SERIAL_COUNTER},
 };
 
-use crate::input::KeyModifiers;
 use crate::input::grabs::floating_resize_grab::FloatingResizeGrab;
 use crate::input::grabs::move_grab::MoveGrab;
 use crate::input::grabs::swap_grab::SwapGrab;
@@ -16,6 +15,11 @@ use crate::input::grabs::tiling_resize_grab::TilingResizeGrab;
 use crate::monitor::{FoundMappedWindow, TileTreeWindow};
 use crate::state::WindowManagerState;
 use crate::utils::Direction;
+use crate::{
+    input::KeyModifiers,
+    utils::{apply_rule_to_mapped_window, get_app_id_and_title},
+    window::rule::WindowRuleCandidate,
+};
 
 pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
 
@@ -101,8 +105,11 @@ impl WindowManagerState {
             use PointerActions::*;
             match action {
                 Move => {
-                    if let Some(FoundMappedWindow { mapped, .. }) =
-                        self.find_mapped_window_under(pointer.current_location())
+                    if let Some(FoundMappedWindow {
+                        mapped,
+                        workspace_name,
+                        ..
+                    }) = self.find_mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
                         {
@@ -127,7 +134,28 @@ impl WindowManagerState {
                                         Some(false),
                                     );
                                 }
-                                let grab = SwapGrab::new(start_data, mapped.clone(), hidden);
+
+                                let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
+                                let properties = self.window_rules.get_properties(
+                                    WindowRuleCandidate {
+                                        app_id,
+                                        title,
+                                        focus: mapped.get_focus(),
+                                        float: mapped.get_floating(),
+                                        is_swap_source: true,
+                                        is_swap_target: false,
+                                        workspace_name: workspace_name.clone(),
+                                    },
+                                    false,
+                                );
+                                apply_rule_to_mapped_window(&mapped, properties.dynamic);
+
+                                let grab = SwapGrab::new(
+                                    start_data,
+                                    mapped.clone(),
+                                    workspace_name,
+                                    hidden,
+                                );
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                             }
                         }

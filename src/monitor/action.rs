@@ -1,21 +1,17 @@
 use smithay::{
-    desktop::Window,
-    reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::protocol::wl_surface::WlSurface,
-    },
+    desktop::Window, reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::SERIAL_COUNTER,
 };
 
 use crate::{
     monitor::{FoundMappedWindow, workspace::TileResizeUnit},
     state::WindowManagerState,
-    utils::{Direction, get_app_id_and_title},
+    utils::{Direction, apply_rule_to_mapped_window, get_app_id_and_title},
     window::{
         MappedWindow,
         rule::{
-            WindowDynamicProperties, WindowLocation, WindowOpeningProperties, WindowProperties,
-            WindowRuleCandidate, WindowState,
+            WindowLocation, WindowOpeningProperties, WindowProperties, WindowRuleCandidate,
+            WindowState,
         },
     },
 };
@@ -105,6 +101,8 @@ impl WindowManagerState {
             title,
             focus: true,
             float: true,
+            is_swap_source: false,
+            is_swap_target: false,
             workspace_name: self
                 .monitors
                 .get_monitor()
@@ -149,6 +147,8 @@ impl WindowManagerState {
                         title,
                         focus: mapped.get_focus(),
                         float: mapped.get_floating(),
+                        is_swap_source: false,
+                        is_swap_target: false,
                         workspace_name,
                     },
                     false,
@@ -175,6 +175,8 @@ impl WindowManagerState {
                 title,
                 focus: mapped.get_focus(),
                 float: mapped.get_floating(),
+                is_swap_source: false,
+                is_swap_target: false,
                 workspace_name: workspace_name.clone(),
             },
             false,
@@ -275,6 +277,8 @@ impl WindowManagerState {
                 title,
                 focus,
                 float: mapped.get_floating(),
+                is_swap_source: false,
+                is_swap_target: false,
                 workspace_name: workspace_name.clone(),
             },
             false,
@@ -321,6 +325,8 @@ impl WindowManagerState {
                 title,
                 focus: true,
                 float: mapped.get_floating(),
+                is_swap_source: false,
+                is_swap_target: false,
                 workspace_name: workspace_name.clone(),
             },
             false,
@@ -474,34 +480,5 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.resize_tiling_window(&surface, direction, unit);
-    }
-}
-
-pub fn apply_rule_to_mapped_window(mapped: &MappedWindow, properties: WindowDynamicProperties) {
-    if mapped.get_floating() {
-        mapped.toplevel().with_pending_state(|state| {
-            use xdg_toplevel::State::*;
-            state.states.unset(TiledTop);
-            state.states.unset(TiledBottom);
-            state.states.unset(TiledLeft);
-            state.states.unset(TiledRight);
-        });
-    } else {
-        mapped.toplevel().with_pending_state(|state| {
-            use xdg_toplevel::State::*;
-            state.states.set(TiledTop);
-            state.states.set(TiledBottom);
-            state.states.set(TiledLeft);
-            state.states.set(TiledRight);
-        });
-    }
-    mapped.toplevel().with_pending_state(|state| {
-        state.decoration_mode = properties.decoration.map(|d| d.into());
-    });
-
-    mapped.set_border(properties.border);
-
-    if let Some(opacity) = properties.opacity {
-        mapped.set_opacity(opacity);
     }
 }

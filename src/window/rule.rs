@@ -97,28 +97,44 @@ impl WindowRule {
             true
         }
 
-        self.matches.iter().any(|target| {
-            if !regex_matches(target.app_id.as_deref(), &candidate.app_id) {
-                return false;
-            }
-            if !regex_matches(target.title.as_deref(), &candidate.title) {
-                return false;
-            }
-            if target.focus.is_some_and(|focus| candidate.focus != focus) {
-                return false;
-            }
-            if target.float.is_some_and(|float| candidate.float != float) {
-                return false;
-            }
-            if target
-                .workspace_name
-                .as_ref()
-                .is_some_and(|workspace_name| candidate.workspace_name != *workspace_name)
+        self.matches.iter().any(|rule| {
+            // REMIND
+            #[cfg(test)]
             {
-                return false;
+                let WindowRuleMatch {
+                    app_id: _,
+                    title: _,
+                    focus: _,
+                    float: _,
+                    is_swap_source: _,
+                    is_swap_target: _,
+                    workspace_name: _,
+                } = rule;
+                let WindowRuleCandidate {
+                    app_id: _,
+                    title: _,
+                    focus: _,
+                    float: _,
+                    is_swap_source: _,
+                    is_swap_target: _,
+                    workspace_name: _,
+                } = candidate;
             }
 
-            true
+            regex_matches(rule.app_id.as_deref(), &candidate.app_id)
+                && regex_matches(rule.title.as_deref(), &candidate.title)
+                && rule.focus.is_none_or(|v| candidate.focus == v)
+                && rule.float.is_none_or(|v| candidate.float == v)
+                && rule
+                    .is_swap_source
+                    .is_none_or(|v| candidate.is_swap_source == v)
+                && rule
+                    .is_swap_target
+                    .is_none_or(|v| candidate.is_swap_target == v)
+                && rule
+                    .workspace_name
+                    .as_ref()
+                    .is_none_or(|v| candidate.workspace_name == *v)
         })
     }
 }
@@ -133,6 +149,8 @@ pub struct WindowRuleMatch {
     focus: Option<bool>,
     #[serde(rename = "is-floating")]
     float: Option<bool>,
+    is_swap_source: Option<bool>,
+    is_swap_target: Option<bool>,
     #[serde(rename = "in-workspace")]
     workspace_name: Option<WorkspaceName>,
 }
@@ -143,6 +161,8 @@ pub struct WindowRuleCandidate {
     pub title: String,
     pub focus: bool,
     pub float: bool,
+    pub is_swap_source: bool,
+    pub is_swap_target: bool,
     pub workspace_name: WorkspaceName,
 }
 
@@ -334,6 +354,8 @@ mod tests {
                 title: "".into(),
                 focus: false,
                 float: false,
+                is_swap_source: false,
+                is_swap_target: false,
                 workspace_name: WorkspaceName::Id(0),
             }
         }
@@ -354,6 +376,11 @@ mod tests {
         vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
         WindowRuleCandidate::default() => false;
         "focus_mismatch"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { float: Some(true), ..Default::default() }, WindowRuleMatch::default()],
+        WindowRuleCandidate::default() => true;
+        "first_rule_mismatch"
     )]
     fn test_match_window_rule(
         matches: Vec<WindowRuleMatch>,

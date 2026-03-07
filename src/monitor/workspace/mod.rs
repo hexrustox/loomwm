@@ -10,12 +10,9 @@ use smithay::{
 };
 
 use crate::{
-    monitor::{
-        action::apply_rule_to_mapped_window,
-        workspace::tile::{TileInsertion, TileTree},
-    },
+    monitor::workspace::tile::{TileInsertion, TileTree},
     utils::{
-        Direction, get_app_id_and_title,
+        Direction, apply_rule_to_mapped_window, get_app_id_and_title,
         types::{RenderElements, Renderer},
     },
     window::{
@@ -246,6 +243,8 @@ impl Workspace {
                     title,
                     focus: mapped.get_focus(),
                     float: mapped.get_floating(),
+                    is_swap_source: false,
+                    is_swap_target: false,
                     workspace_name: workspace_name.clone(),
                 },
                 false,

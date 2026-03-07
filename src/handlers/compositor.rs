@@ -70,6 +70,8 @@ impl CompositorHandler for WindowManagerState {
                         title,
                         focus: true,
                         float: false,
+                        is_swap_source: false,
+                        is_swap_target: false,
                         workspace_name: self
                             .monitors
                             .get_monitor()

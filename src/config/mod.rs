@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use serde::Deserialize;
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf};
+use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
     input::{KeyBindings, PointerBindings, ResizeLocation},
@@ -78,23 +78,12 @@ impl Default for KeyConfig {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PointerConfig {
     pub bindings: PointerBindings,
     #[serde(rename = "resize-at")]
     pub resize: ResizeLocation,
-    pub selection: f32,
-}
-
-impl Default for PointerConfig {
-    fn default() -> Self {
-        Self {
-            bindings: HashMap::default(),
-            resize: ResizeLocation::default(),
-            selection: 0.8,
-        }
-    }
 }
 
 #[derive(Deserialize)]

@@ -250,7 +250,7 @@ impl MappedWindow {
                                     color.r() as f32 / 255.,
                                     color.g() as f32 / 255.,
                                     color.b() as f32 / 255.,
-                                    0.,
+                                    1.,
                                 ],
                             ),
                             self.get_location().to_physical_precise_round(scale),
