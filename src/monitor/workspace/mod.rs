@@ -6,7 +6,7 @@ use smithay::{
     desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Scale, Size},
+    utils::{Logical, Point, Size},
 };
 
 use crate::{
@@ -95,12 +95,12 @@ impl Workspace {
             return Some(insertion.into_window());
         } else {
             self.insert_into_focus_queue(mapped);
-            self.update_tiling_window_size();
+            self.update_tiling_windows_size();
         }
         None
     }
 
-    fn update_tiling_window_size(&mut self) {
+    pub fn update_tiling_windows_size(&mut self) {
         let output = &self.output;
         self.tiling
             .update_tile_size(output.current_location(), self.get_output_size());
@@ -149,7 +149,7 @@ impl Workspace {
         unit: impl Into<TileResizeUnit>,
     ) {
         self.tiling.resize_tile(surface, direction, unit);
-        self.update_tiling_window_size();
+        self.update_tiling_windows_size();
     }
 
     pub fn raise_floating_window(&mut self, surface: &WlSurface) {
@@ -271,6 +271,17 @@ impl Workspace {
         })
     }
 
+    pub fn refresh(&self) {
+        self.windows_iter().for_each(|mapped| {
+            mapped.window().refresh();
+            mapped.toplevel().send_pending_configure();
+        });
+    }
+
+    pub fn get_output(&self) -> Output {
+        self.output.clone()
+    }
+
     pub fn get_output_size(&self) -> Size<i32, Logical> {
         let output = &self.output;
         output
@@ -280,14 +291,11 @@ impl Workspace {
             .to_logical(output.current_scale().integer_scale())
     }
 
-    pub fn render_elements<R: Renderer>(
-        &mut self,
-        renderer: &mut R,
-        scale: Scale<f64>,
-    ) -> Vec<RenderElements<R>>
+    pub fn render_elements<R: Renderer>(&mut self, renderer: &mut R) -> Vec<RenderElements<R>>
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
+        let scale = self.output.current_scale().fractional_scale().into();
         self.windows_iter()
             .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()

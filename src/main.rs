@@ -55,7 +55,14 @@ fn main() -> Result<(), anyhow::Error> {
         watcher: watcher::init(&event_loop),
     };
 
-    event_loop.run(None, &mut data, |_| {})?;
+    event_loop.run(None, &mut data, |data| {
+        data.compositor.refresh();
+
+        data.backend.render(&mut data.compositor);
+        data.compositor.send_frame_to_windows();
+
+        data.compositor.display_handle.flush_clients().unwrap();
+    })?;
 
     Ok(())
 }

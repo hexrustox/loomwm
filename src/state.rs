@@ -171,4 +171,12 @@ impl WindowManagerState {
             layout_history: LayoutHistory::read(),
         }
     }
+
+    pub fn refresh(&mut self) {
+        self.popups.cleanup();
+
+        self.refresh_windows();
+
+        self.space.refresh();
+    }
 }

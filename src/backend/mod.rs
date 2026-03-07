@@ -9,15 +9,21 @@ pub enum Backend {
 }
 
 impl Backend {
-    pub fn winit(&mut self) -> Option<&mut Winit> {
+    pub fn winit(&mut self) -> &mut Winit {
         match self {
-            Self::Winit(winit) => Some(winit),
+            Self::Winit(x) => x,
         }
     }
 
-    pub fn init(&mut self, compositor: &mut WindowManagerState) {
+    pub fn init(&mut self, data: &mut WindowManagerState) {
         match self {
-            Self::Winit(winit) => winit.init(compositor),
+            Self::Winit(winit) => winit.init(data),
+        }
+    }
+
+    pub fn render(&mut self, data: &mut WindowManagerState) {
+        match self {
+            Self::Winit(winit) => winit.render(data),
         }
     }
 }

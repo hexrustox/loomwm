@@ -8,7 +8,7 @@ use smithay::{
     utils::Transform,
 };
 
-use crate::{CompositorData, state::WindowManagerState, utils::get_monotonic_time};
+use crate::{CompositorData, state::WindowManagerState};
 
 pub struct Winit {
     output: Output,
@@ -48,62 +48,20 @@ impl Winit {
             use WinitEvent::*;
             match event {
                 Resized { size, .. } => {
-                    data.backend.winit().unwrap().output.change_current_state(
+                    data.backend.winit().output.change_current_state(
                         Some(Mode { size, refresh: 60 }),
                         None,
                         None,
                         None,
                     );
+                    data.compositor.update_workspaces_tiling_windows_size();
                 }
                 Input(event) => data.compositor.process_input_event(event),
-                Redraw => {
-                    // TODO redraw queue
-                    let winit = &mut data.backend.winit().unwrap();
-                    let output = &winit.output;
-                    let backend = &mut winit.backend;
-
-                    let result = {
-                        let (renderer, mut framebuffer) = backend.bind().unwrap();
-
-                        let scale = output.current_scale().fractional_scale().into();
-                        let elements = data.compositor.render_elements(renderer, scale);
-
-                        winit.damage_tracker.render_output(
-                            renderer,
-                            &mut framebuffer,
-                            0,
-                            &elements,
-                            [0.0, 0.0, 0.0, 1.0],
-                        )
-                    };
-
-                    if let Ok(render_output) = result {
-                        backend
-                            .submit(render_output.damage.map(|damage| &**damage))
-                            .unwrap();
-                        data.compositor
-                            .windows_in_active_workspace_iter()
-                            .for_each(|mapped| {
-                                mapped.window().send_frame(
-                                    output,
-                                    get_monotonic_time(),
-                                    None,
-                                    |_, _| Some(output.clone()),
-                                );
-                                mapped.toplevel().send_pending_configure();
-                            });
-                    }
-
-                    data.compositor.space.refresh();
-                    data.compositor.popups.cleanup();
-                    let _ = data.compositor.display_handle.flush_clients();
-
-                    backend.window().request_redraw();
-                }
-                Focus(_) => {}
+                // Redraw => {}
                 CloseRequested => {
                     data.compositor.event_signal.stop();
                 }
+                _ => {}
             }
         })?;
 
@@ -123,5 +81,23 @@ impl Winit {
             data.layout_set.clone(),
             data.default_layout.clone(),
         );
+    }
+
+    pub fn render(&mut self, data: &mut WindowManagerState) {
+        let elements = data.render_elements(self.backend.renderer());
+
+        let result = {
+            let (renderer, mut framebuffer) = self.backend.bind().unwrap();
+
+            self.damage_tracker
+                .render_output(renderer, &mut framebuffer, 0, &elements, [0.; 4])
+                .unwrap()
+        };
+
+        if let Some(damage) = result.damage {
+            self.backend.submit(Some(damage)).unwrap();
+        }
+
+        self.backend.window().request_redraw();
     }
 }

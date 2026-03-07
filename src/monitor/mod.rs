@@ -5,13 +5,16 @@ use smithay::{
     desktop::WindowSurfaceType,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Scale},
+    utils::{Logical, Point},
 };
 
 use crate::{
     monitor::workspace::Workspace,
     state::WindowManagerState,
-    utils::types::{RenderElements, Renderer},
+    utils::{
+        get_monotonic_time,
+        types::{RenderElements, Renderer},
+    },
     window::MappedWindow,
 };
 
@@ -216,24 +219,41 @@ impl WindowManagerState {
         });
     }
 
-    pub fn windows_in_active_workspace_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        let monitor = self.monitors.get_monitor();
-        monitor
-            .get_workspace(monitor.get_active_workspace_name())
-            .windows_iter()
+    pub fn update_workspaces_tiling_windows_size(&mut self) {
+        let monitor = self.monitors.get_monitor_mut();
+        for workspace in &mut monitor.workspaces {
+            workspace.update_tiling_windows_size();
+        }
     }
 
-    pub fn render_elements<R: Renderer>(
-        &mut self,
-        renderer: &mut R,
-        scale: Scale<f64>,
-    ) -> Vec<RenderElements<R>>
+    pub fn refresh_windows(&self) {
+        let monitor = self.monitors.get_monitor();
+        for workspace in &monitor.workspaces {
+            workspace.refresh();
+        }
+    }
+
+    pub fn send_frame_to_windows(&self) {
+        let monitor = self.monitors.get_monitor();
+        for workspace in &monitor.workspaces {
+            let output = workspace.get_output();
+            let time = get_monotonic_time();
+
+            workspace.windows_iter().for_each(|mapped| {
+                mapped
+                    .window()
+                    .send_frame(&output, time, None, |_, _| Some(output.clone()))
+            });
+        }
+    }
+
+    pub fn render_elements<R: Renderer>(&mut self, renderer: &mut R) -> Vec<RenderElements<R>>
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
         let monitor = self.monitors.get_monitor_mut();
         monitor
             .get_workspace_mut(&monitor.get_active_workspace_name().clone())
-            .render_elements(renderer, scale)
+            .render_elements(renderer)
     }
 }
