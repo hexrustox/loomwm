@@ -224,7 +224,8 @@ impl MappedWindow {
             .to_physical_precise_round(scale);
         let opacity = self.get_opacity();
 
-        self.window()
+        let mut elems = self
+            .window()
             .render_elements::<WaylandSurfaceRenderElement<R>>(renderer, location, scale, opacity)
             .into_iter()
             .flat_map(|elem| {
@@ -241,29 +242,32 @@ impl MappedWindow {
                 ) {
                     elems.push(RenderElements::Window(elem));
                 }
-                if let Some(color) = self.get_border_color() {
-                    elems.push(RenderElements::Border(
-                        SolidColorRenderElement::from_buffer(
-                            &SolidColorBuffer::new(
-                                self.get_size(),
-                                [
-                                    color.r() as f32 / 255.,
-                                    color.g() as f32 / 255.,
-                                    color.b() as f32 / 255.,
-                                    1.,
-                                ],
-                            ),
-                            self.get_location().to_physical_precise_round(scale),
-                            scale,
-                            color.a() as f32 / 255.,
-                            smithay::backend::renderer::element::Kind::Unspecified,
-                        ),
-                    ));
-                }
 
                 elems
             })
-            .collect()
+            .collect::<Vec<_>>();
+
+        if let Some(color) = self.get_border_color() {
+            elems.push(RenderElements::Border(
+                SolidColorRenderElement::from_buffer(
+                    &SolidColorBuffer::new(
+                        self.get_size(),
+                        [
+                            color.r() as f32 / 255.,
+                            color.g() as f32 / 255.,
+                            color.b() as f32 / 255.,
+                            1.,
+                        ],
+                    ),
+                    self.get_location().to_physical_precise_round(scale),
+                    scale,
+                    color.a() as f32 / 255.,
+                    smithay::backend::renderer::element::Kind::Unspecified,
+                ),
+            ));
+        }
+
+        elems
     }
 }
 
