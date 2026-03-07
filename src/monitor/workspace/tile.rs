@@ -260,6 +260,7 @@ impl Neg for TileResizeUnit {
         }
     }
 }
+
 pub trait SearchKey<'a>: Into<TileTreeSearchKey<'a>> + Copy {}
 impl<'a, T> SearchKey<'a> for T where T: Into<TileTreeSearchKey<'a>> + Copy {}
 

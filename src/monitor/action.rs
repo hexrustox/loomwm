@@ -499,6 +499,8 @@ pub fn apply_rule_to_mapped_window(mapped: &MappedWindow, properties: WindowDyna
         state.decoration_mode = properties.decoration.map(|d| d.into());
     });
 
+    // mapped.set_border(properties.border);
+
     if let Some(opacity) = properties.opacity {
         mapped.set_opacity(opacity);
     }

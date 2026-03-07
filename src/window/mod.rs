@@ -5,9 +5,12 @@ use std::{
 
 use smithay::{
     backend::renderer::{
-        ImportAll, Renderer, RendererSuper,
+        RendererSuper,
         element::{
-            AsRenderElements, surface::WaylandSurfaceRenderElement, utils::CropRenderElement,
+            AsRenderElements,
+            solid::{SolidColorBuffer, SolidColorRenderElement},
+            surface::WaylandSurfaceRenderElement,
+            utils::CropRenderElement,
         },
     },
     desktop::Window,
@@ -22,8 +25,11 @@ use smithay::{
 use crate::{
     input::grabs::floating_resize_grab::ResizeGrabState,
     monitor::{TileTreeSearchKey, TileTreeWindow},
-    utils::Direction,
-    window::rule::WindowProperties,
+    utils::{
+        Direction,
+        types::{RenderElements, Renderer},
+    },
+    window::rule::{RGBAColor, WindowBorder, WindowProperties},
 };
 
 pub mod rule;
@@ -69,6 +75,7 @@ pub struct MappedWindowInner {
     configured_size: Size<i32, Logical>,
     focus: bool,
     floating: bool,
+    border: Option<WindowBorder>,
     opacity: f32,
     resize_state: ResizeGrabState,
 }
@@ -82,6 +89,10 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 focus,
                 floating,
+                border: Some(WindowBorder {
+                    width: 5,
+                    color: RGBAColor(0),
+                }),
                 opacity: 1.,
                 resize_state: ResizeGrabState::default(),
             })),
@@ -152,6 +163,17 @@ impl MappedWindow {
         self.inner().floating = floating;
     }
 
+    fn get_border_width(&self) -> i32 {
+        self.inner().border.clone().map_or(0, |b| b.width) as i32
+    }
+
+    // fn get_border_color(&self) -> i32 {
+    // }
+
+    pub fn set_border(&self, border: Option<WindowBorder>) {
+        self.inner().border = border;
+    }
+
     pub fn get_opacity(&self) -> f32 {
         self.inner().opacity
     }
@@ -176,28 +198,60 @@ impl MappedWindow {
         location - loc
     }
 
-    pub fn render_elements<R: Renderer + ImportAll>(
+    fn inner_location(&self, location: Point<i32, Logical>) -> Point<i32, Logical> {
+        Point::new(
+            location.x + self.get_border_width(),
+            location.y + self.get_border_width(),
+        )
+    }
+
+    fn inner_size(&self) -> Size<i32, Logical> {
+        let size = self.get_size();
+        Size::new(
+            0.max(size.w - 2 * self.get_border_width()),
+            0.max(size.h - 2 * self.get_border_width()),
+        )
+    }
+
+    pub fn render_elements<R: Renderer>(
         &self,
         renderer: &mut R,
         scale: Scale<f64>,
-    ) -> Vec<CropRenderElement<WaylandSurfaceRenderElement<R>>>
+    ) -> Vec<RenderElements<R>>
     where
-        <R as RendererSuper>::TextureId: std::clone::Clone + 'static,
+        <R as RendererSuper>::TextureId: Clone + 'static,
     {
-        let location = self.render_location().to_physical_precise_round(scale);
+        let location = self
+            .inner_location(self.render_location())
+            .to_physical_precise_round(scale);
         let opacity = self.get_opacity();
+
         self.window()
             .render_elements::<WaylandSurfaceRenderElement<R>>(renderer, location, scale, opacity)
             .into_iter()
-            .filter_map(|elem| {
-                CropRenderElement::from_element(
+            .flat_map(|elem| {
+                let mut elems = Vec::new();
+                if let Some(elem) = CropRenderElement::from_element(
                     elem,
                     scale,
                     Rectangle::new(
-                        self.get_location().to_physical_precise_round(scale),
-                        self.get_size().to_physical_precise_round(scale),
+                        self.inner_location(self.get_location())
+                            .to_physical_precise_round(scale),
+                        self.inner_size().to_physical_precise_round(scale),
                     ),
-                )
+                ) {
+                    elems.push(RenderElements::Window(elem));
+                }
+                elems.push(RenderElements::Border(
+                    SolidColorRenderElement::from_buffer(
+                        &SolidColorBuffer::new(self.get_size(), [1., 0., 0., 1.]),
+                        self.get_location().to_physical_precise_round(scale),
+                        scale,
+                        opacity,
+                        smithay::backend::renderer::element::Kind::Unspecified,
+                    ),
+                ));
+                elems
             })
             .collect()
     }
@@ -238,7 +292,7 @@ impl TileTreeWindow for MappedWindow {
     fn set_size(&mut self, size: Size<i32, Logical>) {
         self.inner().configured_size = size;
         self.toplevel().with_pending_state(|state| {
-            state.size = Some(size);
+            state.size = Some(self.inner_size());
         });
     }
 

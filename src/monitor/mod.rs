@@ -1,17 +1,19 @@
 use std::rc::Rc;
 
 use smithay::{
-    backend::renderer::{
-        ImportAll, Renderer, RendererSuper,
-        element::{surface::WaylandSurfaceRenderElement, utils::CropRenderElement},
-    },
+    backend::renderer::RendererSuper,
     desktop::WindowSurfaceType,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Scale},
 };
 
-use crate::{monitor::workspace::Workspace, state::WindowManagerState, window::MappedWindow};
+use crate::{
+    monitor::workspace::Workspace,
+    state::WindowManagerState,
+    utils::types::{RenderElements, Renderer},
+    window::MappedWindow,
+};
 
 pub use assistant::{BackendDevice, LayoutHistory};
 pub use workspace::{LayoutSet, TileRatio, TileTreeSearchKey, TileTreeWindow, WorkspaceName};
@@ -221,13 +223,12 @@ impl WindowManagerState {
             .windows_iter()
     }
 
-    pub fn render_elements<R>(
+    pub fn render_elements<R: Renderer>(
         &mut self,
         renderer: &mut R,
         scale: Scale<f64>,
-    ) -> Vec<CropRenderElement<WaylandSurfaceRenderElement<R>>>
+    ) -> Vec<RenderElements<R>>
     where
-        R: Renderer + ImportAll,
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
         let monitor = self.monitors.get_monitor_mut();

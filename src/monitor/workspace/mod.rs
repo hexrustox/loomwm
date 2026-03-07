@@ -2,10 +2,7 @@ use std::rc::Rc;
 
 use serde::Deserialize;
 use smithay::{
-    backend::renderer::{
-        ImportAll, Renderer, RendererSuper,
-        element::{surface::WaylandSurfaceRenderElement, utils::CropRenderElement},
-    },
+    backend::renderer::RendererSuper,
     desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -17,7 +14,10 @@ use crate::{
         action::apply_rule_to_mapped_window,
         workspace::tile::{TileInsertion, TileTree},
     },
-    utils::{Direction, get_app_id_and_title},
+    utils::{
+        Direction, get_app_id_and_title,
+        types::{RenderElements, Renderer},
+    },
     window::{
         MappedWindow,
         rule::{WindowRuleCandidate, WindowRules},
@@ -280,11 +280,11 @@ impl Workspace {
             .to_logical(output.current_scale().integer_scale())
     }
 
-    pub fn render_elements<R: Renderer + ImportAll>(
+    pub fn render_elements<R: Renderer>(
         &mut self,
         renderer: &mut R,
         scale: Scale<f64>,
-    ) -> Vec<CropRenderElement<WaylandSurfaceRenderElement<R>>>
+    ) -> Vec<RenderElements<R>>
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {

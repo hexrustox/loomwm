@@ -99,6 +99,7 @@
 
               pkg-config
 
+              alacritty
               weston
               rocmPackages.rocminfo
               mesa-demos

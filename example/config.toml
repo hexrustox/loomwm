@@ -64,8 +64,7 @@ repeat-rate = 25
 "alt+shift+space" = { action = "toggle_floating_hidden" }
 "alt+q" = { action = "close_window" }
 "alt+t" = { action = "execute", command = [
-  "weston-terminal",
-  "--shell=/bin/bash",
+  "alacritty",
 ] }
 "alt+a" = { action = "assistant" }
 

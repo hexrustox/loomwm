@@ -137,12 +137,20 @@ pub struct WindowRuleMatch {
     workspace_name: Option<WorkspaceName>,
 }
 
+#[derive(Debug)]
+pub struct WindowRuleCandidate {
+    pub app_id: String,
+    pub title: String,
+    pub focus: bool,
+    pub float: bool,
+    pub workspace_name: WorkspaceName,
+}
+
 #[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
 pub struct WindowProperties {
     #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
-    #[serde(flatten)]
-    #[serde(default)]
+    #[serde(default, flatten)]
     pub dynamic: WindowDynamicProperties,
 }
 
@@ -166,11 +174,11 @@ pub struct WindowOpeningProperties {
     pub workspace_name: Option<WorkspaceName>,
 }
 
-// TODO border
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
+    pub border: Option<WindowBorder>,
     pub opacity: Option<f32>,
 }
 
@@ -210,18 +218,10 @@ impl WindowDynamicProperties {
     fn override_with(self, other: Self) -> Self {
         Self {
             decoration: other.decoration.or(self.decoration),
+            border: other.border.or(self.border),
             opacity: other.opacity.or(self.opacity),
         }
     }
-}
-
-#[derive(Debug)]
-pub struct WindowRuleCandidate {
-    pub app_id: String,
-    pub title: String,
-    pub focus: bool,
-    pub float: bool,
-    pub workspace_name: WorkspaceName,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
@@ -240,6 +240,15 @@ impl From<WindowDecoration> for Mode {
         }
     }
 }
+
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+pub struct WindowBorder {
+    pub width: u32,
+    pub color: RGBAColor,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+pub struct RGBAColor(pub u32);
 
 type N = i32;
 
