@@ -184,7 +184,16 @@ pub struct WindowDynamicProperties {
 
 impl std::hash::Hash for WindowDynamicProperties {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // REMIND
+        #[cfg(test)]
+        let WindowDynamicProperties {
+            decoration: _,
+            border: _,
+            opacity: _,
+        } = self;
+
         self.decoration.hash(state);
+        self.border.hash(state);
         if let Some(f) = self.opacity {
             f.to_bits().hash(state)
         }
@@ -241,13 +250,13 @@ impl From<WindowDecoration> for Mode {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
 pub struct WindowBorder {
     pub width: u32,
     pub color: RGBAColor,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, Hash, PartialEq)]
 pub struct RGBAColor(u32);
 
 impl RGBAColor {

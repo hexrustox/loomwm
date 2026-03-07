@@ -13,6 +13,7 @@ pub fn init(event_loop: &EventLoop<CompositorData>) -> Option<INotifyWatcher> {
             ..
         }) = event
         {
+            // TODO
             sender.send(()).unwrap()
         }
     }) else {

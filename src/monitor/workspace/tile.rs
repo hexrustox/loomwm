@@ -835,6 +835,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                     #[cfg(test)]
                     assert!(!tiles.is_empty());
 
+                    // TODO
                     let ids = if direction.intersects(Direction::LEFT | Direction::RIGHT) {
                         match split {
                             TileSplit::Vertical => {
