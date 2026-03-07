@@ -4,6 +4,7 @@ allow-resize-request = true
 
 [[window-rules]]
 decoration = "server_side"
+border = { width = 2, color = "6a9fb5" }
 
 [[window-rules]]
 matches = [{ is-floating = true }]
@@ -63,9 +64,7 @@ repeat-rate = 25
 "alt+space" = { action = "toggle_floating" }
 "alt+shift+space" = { action = "toggle_floating_hidden" }
 "alt+q" = { action = "close_window" }
-"alt+t" = { action = "execute", command = [
-  "alacritty",
-] }
+"alt+t" = { action = "execute", command = ["alacritty"] }
 "alt+a" = { action = "assistant" }
 
 [pointer.bindings]

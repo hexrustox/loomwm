@@ -15,7 +15,7 @@ use crate::{
     monitor::LayoutSet,
     path::config_dir,
     utils::Direction,
-    window::rule::{WindowLocation, WindowRules},
+    window::rule::{RGBAColor, WindowLocation, WindowRules},
 };
 
 // TODO run command at start up
@@ -147,6 +147,41 @@ impl<'de> Deserialize<'de> for Direction {
         }
 
         deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for RGBAColor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = RGBAColor;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a hex string (RRGGBB or RRGGBBAA)")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if (v.len() == 6 || v.len() == 8)
+                    && let Ok(num) = u32::from_str_radix(v, 16)
+                {
+                    return Ok(RGBAColor::new(if v.len() == 6 {
+                        (num << 8) | 0xFF
+                    } else {
+                        num
+                    }));
+                }
+                Err(E::invalid_value(de::Unexpected::Str(v), &self))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
     }
 }
 
@@ -399,6 +434,18 @@ mod tests {
             direction: Direction,
         }
         toml::from_str::<Wrapper>("direction = \"invalid\"").unwrap_err();
+    }
+
+    #[test_case("\"123456\"" => RGBAColor::new(0x123456FF))]
+    #[test_case("\"12345678\"" => RGBAColor::new(0x12345678))]
+    fn test_rgba_color_valid(s: &str) -> RGBAColor {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            color: RGBAColor,
+        }
+        toml::from_str::<Wrapper>(&format!("color = {}", s))
+            .unwrap()
+            .color
     }
 
     #[test_case("\"center\"" => WindowLocation::Center; "center")]

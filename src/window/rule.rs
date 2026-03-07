@@ -247,8 +247,30 @@ pub struct WindowBorder {
     pub color: RGBAColor,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
-pub struct RGBAColor(pub u32);
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct RGBAColor(u32);
+
+impl RGBAColor {
+    pub fn new(v: u32) -> Self {
+        Self(v)
+    }
+
+    pub fn r(&self) -> u8 {
+        (self.0 >> 24) as u8
+    }
+
+    pub fn g(&self) -> u8 {
+        (self.0 >> 16) as u8
+    }
+
+    pub fn b(&self) -> u8 {
+        (self.0 >> 8) as u8
+    }
+
+    pub fn a(&self) -> u8 {
+        (self.0) as u8
+    }
+}
 
 type N = i32;
 

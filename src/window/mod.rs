@@ -89,10 +89,7 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 focus,
                 floating,
-                border: Some(WindowBorder {
-                    width: 5,
-                    color: RGBAColor(0),
-                }),
+                border: None,
                 opacity: 1.,
                 resize_state: ResizeGrabState::default(),
             })),
@@ -167,8 +164,9 @@ impl MappedWindow {
         self.inner().border.clone().map_or(0, |b| b.width) as i32
     }
 
-    // fn get_border_color(&self) -> i32 {
-    // }
+    fn get_border_color(&self) -> RGBAColor {
+        self.inner().border.clone().expect("").color
+    }
 
     pub fn set_border(&self, border: Option<WindowBorder>) {
         self.inner().border = border;
@@ -242,12 +240,21 @@ impl MappedWindow {
                 ) {
                     elems.push(RenderElements::Window(elem));
                 }
+                let color = self.get_border_color();
                 elems.push(RenderElements::Border(
                     SolidColorRenderElement::from_buffer(
-                        &SolidColorBuffer::new(self.get_size(), [1., 0., 0., 1.]),
+                        &SolidColorBuffer::new(
+                            self.get_size(),
+                            [
+                                color.r() as f32 / 255.,
+                                color.g() as f32 / 255.,
+                                color.b() as f32 / 255.,
+                                0.,
+                            ],
+                        ),
                         self.get_location().to_physical_precise_round(scale),
                         scale,
-                        opacity,
+                        color.a() as f32 / 255.,
                         smithay::backend::renderer::element::Kind::Unspecified,
                     ),
                 ));
