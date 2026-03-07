@@ -4,6 +4,10 @@ allow-resize-request = true
 
 [[window-rules]]
 decoration = "server_side"
+border = { width = 2, color = "6b6b6b" }
+
+[[window-rules]]
+matches = [{ is-focused = true }]
 border = { width = 2, color = "6a9fb5" }
 
 [[window-rules]]

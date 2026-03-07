@@ -835,23 +835,26 @@ impl<T: TileTreeWindow> TileTree<T> {
                     #[cfg(test)]
                     assert!(!tiles.is_empty());
 
-                    // TODO
                     let ids = if direction.intersects(Direction::LEFT | Direction::RIGHT) {
                         match split {
                             TileSplit::Vertical => {
-                                vec![if direction.intersects(Direction::LEFT) {
-                                    match orientation {
-                                        TileOrientation::BottomRight => tiles.last(),
-                                        TileOrientation::TopLeft => tiles.first(),
+                                if let Some(tile) = {
+                                    if direction.intersects(Direction::LEFT) {
+                                        match orientation {
+                                            TileOrientation::BottomRight => tiles.last(),
+                                            TileOrientation::TopLeft => tiles.first(),
+                                        }
+                                    } else {
+                                        match orientation {
+                                            TileOrientation::BottomRight => tiles.first(),
+                                            TileOrientation::TopLeft => tiles.last(),
+                                        }
                                     }
-                                    .unwrap()
+                                } {
+                                    vec![tile]
                                 } else {
-                                    match orientation {
-                                        TileOrientation::BottomRight => tiles.first(),
-                                        TileOrientation::TopLeft => tiles.last(),
-                                    }
-                                    .unwrap()
-                                }]
+                                    Vec::new()
+                                }
                             }
                             TileSplit::Horizontal => tiles
                                 .iter()
@@ -864,19 +867,23 @@ impl<T: TileTreeWindow> TileTree<T> {
                     } else {
                         match split {
                             TileSplit::Horizontal => {
-                                vec![if direction.intersects(Direction::TOP) {
-                                    match orientation {
-                                        TileOrientation::BottomRight => tiles.last(),
-                                        TileOrientation::TopLeft => tiles.first(),
+                                if let Some(tile) = {
+                                    if direction.intersects(Direction::TOP) {
+                                        match orientation {
+                                            TileOrientation::BottomRight => tiles.last(),
+                                            TileOrientation::TopLeft => tiles.first(),
+                                        }
+                                    } else {
+                                        match orientation {
+                                            TileOrientation::BottomRight => tiles.first(),
+                                            TileOrientation::TopLeft => tiles.last(),
+                                        }
                                     }
-                                    .unwrap()
+                                } {
+                                    vec![tile]
                                 } else {
-                                    match orientation {
-                                        TileOrientation::BottomRight => tiles.first(),
-                                        TileOrientation::TopLeft => tiles.last(),
-                                    }
-                                    .unwrap()
-                                }]
+                                    Vec::new()
+                                }
                             }
                             TileSplit::Vertical => tiles
                                 .iter()

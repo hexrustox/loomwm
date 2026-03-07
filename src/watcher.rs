@@ -13,7 +13,6 @@ pub fn init(event_loop: &EventLoop<CompositorData>) -> Option<INotifyWatcher> {
             ..
         }) = event
         {
-            // TODO
             sender.send(()).unwrap()
         }
     }) else {
@@ -33,15 +32,10 @@ pub fn init(event_loop: &EventLoop<CompositorData>) -> Option<INotifyWatcher> {
     event_loop
         .handle()
         .insert_source(reciever, move |event, _, data| {
-            if let channel::Event::Msg(_) = event {
-                match Config::read() {
-                    Ok(config) => {
-                        data.compositor.update_config(config);
-                    }
-                    Err(e) => {
-                        error!("{e}");
-                    }
-                }
+            if let channel::Event::Msg(_) = event
+                && let Ok(config) = Config::read()
+            {
+                data.compositor.update_config(config);
             }
         })
         .expect("Failed to init watcher event source");

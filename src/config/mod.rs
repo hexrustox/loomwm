@@ -30,9 +30,8 @@ impl Config {
     }
 
     pub fn read() -> anyhow::Result<Self> {
-        let config_path = Self::path();
-        toml::from_str(&read_to_string(&config_path)?)
-            .map_err(|e| anyhow!("{e}").context("Failed to read config file"))
+        let content = read_to_string(Self::path())?;
+        toml::from_str(&content).map_err(|e| anyhow!("{e}"))
     }
 }
 
