@@ -1,127 +1,14 @@
-use anyhow::anyhow;
+use std::{fmt, str::FromStr};
+
 use evdev::KeyCode;
-use serde::{
-    Deserialize, Deserializer,
-    de::{self},
-};
+use serde::{Deserialize, Deserializer, de};
 use smithay::input::keyboard::xkb;
-use std::{collections::HashMap, fmt, fs::read_to_string, path::PathBuf, str::FromStr};
 
 use crate::{
-    input::{
-        KeyBindings, KeyCombo, KeyModifiers, PointerBindings, PointerCombo, ResizeLocation,
-        WindowUnit,
-    },
-    monitor::LayoutSet,
-    path::config_dir,
+    input::{KeyCombo, KeyModifiers, PointerCombo, WindowUnit},
     utils::Direction,
-    window::rule::{RGBAColor, WindowLocation, WindowRules},
+    window::rule::{RGBAColor, WindowLocation},
 };
-
-// TODO run command at start up
-#[derive(Deserialize, Default)]
-#[serde(default)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct Config {
-    pub general: GeneralConfig,
-    pub window_rules: WindowRules,
-    pub layouts: LayoutConfig,
-    pub key: KeyConfig,
-    pub pointer: PointerConfig,
-    pub assistant: AssistantConfig,
-}
-
-impl Config {
-    pub fn path() -> PathBuf {
-        config_dir().join("config.toml")
-    }
-
-    pub fn read() -> anyhow::Result<Self> {
-        let config_path = Self::path();
-        toml::from_str(&read_to_string(&config_path)?)
-            .map_err(|e| anyhow!("{e}").context("Failed to read config file"))
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(default)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct GeneralConfig {
-    pub allow_move_request: bool,
-    pub allow_resize_request: bool,
-}
-
-impl Default for GeneralConfig {
-    fn default() -> Self {
-        Self {
-            allow_move_request: true,
-            allow_resize_request: true,
-        }
-    }
-}
-
-#[derive(Default, Deserialize)]
-#[serde(default)]
-pub struct LayoutConfig {
-    #[serde(flatten)]
-    pub layout_set: LayoutSet,
-    pub default: String,
-}
-
-#[derive(Deserialize)]
-#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
-pub struct KeyConfig {
-    pub repeat_delay: u32,
-    pub repeat_rate: u32,
-    pub bindings: KeyBindings,
-}
-
-impl Default for KeyConfig {
-    fn default() -> Self {
-        Self {
-            repeat_delay: 200,
-            repeat_rate: 25,
-            bindings: KeyBindings::default(),
-        }
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct PointerConfig {
-    pub bindings: PointerBindings,
-    #[serde(rename = "resize-at")]
-    pub resize: ResizeLocation,
-    pub selection: f32,
-}
-
-impl Default for PointerConfig {
-    fn default() -> Self {
-        Self {
-            bindings: HashMap::default(),
-            resize: ResizeLocation::default(),
-            selection: 0.8,
-        }
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
-pub struct AssistantConfig {
-    pub enable: bool,
-    pub save_layout_after: u64,
-    pub history_length: usize,
-}
-
-impl Default for AssistantConfig {
-    fn default() -> Self {
-        Self {
-            enable: true,
-            save_layout_after: 300,
-            history_length: usize::MAX,
-        }
-    }
-}
 
 impl<'de> Deserialize<'de> for Direction {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -400,8 +287,8 @@ where
 #[cfg(test)]
 mod tests {
     use evdev::KeyCode;
+    use smithay::input::keyboard::Keysym;
     use test_case::test_case;
-    use xkbcommon::xkb::Keysym;
 
     use super::*;
     use crate::input::{KeyCombo, KeyModifiers, PointerCombo};
