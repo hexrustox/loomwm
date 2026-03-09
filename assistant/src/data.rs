@@ -50,7 +50,7 @@ impl Vocab {
 }
 
 // TODO train on app title
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RankingItem {
     pub app_ids: Vec<String>,
 }
@@ -61,6 +61,7 @@ pub struct RankingBatch<B: Backend> {
     pub targets: Tensor<B, 2, Float>,
     pub word_mask: Tensor<B, 3, Bool>,
     pub list_mask: Tensor<B, 2, Bool>,
+    pub weights: Tensor<B, 1, Float>,
 }
 
 #[derive(Clone)]
@@ -74,12 +75,12 @@ impl RankingBatcher {
     }
 }
 
-impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatcher {
-    fn batch(&self, items: Vec<Arc<RankingItem>>, device: &B::Device) -> RankingBatch<B> {
+impl<B: Backend> Batcher<B, (Arc<RankingItem>, bool), RankingBatch<B>> for RankingBatcher {
+    fn batch(&self, items: Vec<(Arc<RankingItem>, bool)>, device: &B::Device) -> RankingBatch<B> {
         let batch_size = items.len();
         let max_list_len = items
             .iter()
-            .map(|item| item.app_ids.len())
+            .map(|item| item.0.app_ids.len())
             .max()
             .unwrap_or(0);
 
@@ -89,8 +90,9 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
         let mut labels_data = vec![0.0f32; batch_size * max_list_len];
         let mut list_mask_data = vec![true; batch_size * max_list_len];
         let mut word_mask_data = vec![true; batch_size * max_list_len * max_str_len];
+        let mut weights_data = vec![1.0f32; batch_size];
 
-        for (b, item) in items.into_iter().enumerate() {
+        for (b, (item, old)) in items.into_iter().enumerate() {
             let list_offset = b * max_list_len;
 
             for (i, app_id) in item
@@ -132,12 +134,15 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
             TensorData::new(list_mask_data, [batch_size, max_list_len]),
             device,
         );
+        let weights =
+            Tensor::<B, 1, Float>::from_data(TensorData::new(weights_data, [batch_size]), device);
 
         RankingBatch {
             inputs,
             targets: labels,
             word_mask,
             list_mask,
+            weights,
         }
     }
 }
@@ -145,18 +150,18 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RankingDataset {
-    items: VecDeque<Arc<RankingItem>>,
+    items: VecDeque<(Arc<RankingItem>, bool)>,
 }
 
 impl RankingDataset {
     pub fn new(items: Vec<RankingItem>) -> Self {
         Self {
-            items: items.into_iter().map(Arc::new).collect(),
+            items: items.into_iter().map(|i| (Arc::new(i), true)).collect(),
         }
     }
 
     pub fn enqueue(&mut self, item: RankingItem) {
-        self.items.push_back(Arc::new(item));
+        self.items.push_back((Arc::new(item), false));
     }
 
     pub fn dequeue(&mut self) {
@@ -164,8 +169,8 @@ impl RankingDataset {
     }
 }
 
-impl Dataset<Arc<RankingItem>> for RankingDataset {
-    fn get(&self, index: usize) -> Option<Arc<RankingItem>> {
+impl Dataset<(Arc<RankingItem>, bool)> for RankingDataset {
+    fn get(&self, index: usize) -> Option<(Arc<RankingItem>, bool)> {
         self.items.get(index).cloned()
     }
 

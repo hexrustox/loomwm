@@ -7,12 +7,8 @@ use burn::{
     optim::{AdamConfig, Optimizer, decay::WeightDecayConfig},
     prelude::Backend,
     record::CompactRecorder,
-    tensor::{
-        ElementConversion, Float, Tensor,
-        activation::{log_softmax, softmax},
-        backend::AutodiffBackend,
-    },
-    train::{InferenceStep, RegressionOutput, TrainOutput, TrainStep},
+    tensor::{ElementConversion, Float, Tensor, backend::AutodiffBackend},
+    train::{RegressionOutput, TrainOutput, TrainStep},
 };
 use tracing::error;
 
@@ -29,15 +25,58 @@ impl<B: Backend> RankerModel<B> {
             targets,
             word_mask,
             list_mask,
+            weights,
         }: RankingBatch<B>,
     ) -> RegressionOutput<B> {
         let output = self.forward(inputs, word_mask, list_mask.clone());
         let output = output.mask_fill(list_mask.clone(), -1e9);
 
-        let labels_soft = softmax(targets.clone().mask_fill(list_mask, -1e9), 1);
-        let loss = -(labels_soft * log_softmax(output.clone(), 1))
-            .sum_dim(1)
-            .mean();
+        // 1. Get dimensions for reshaping
+        let [batch_size, list_size] = output.dims();
+
+        // 2. Prepare Scores and Targets for Broadcasting
+        // Use reshape to get [Batch, List, 1] and [Batch, 1, List]
+        let s_i = output.clone().reshape([batch_size, list_size, 1]);
+        let s_j = output.clone().reshape([batch_size, 1, list_size]);
+        let s_diff = s_i - s_j; // Shape: [Batch, List, List]
+
+        // targets is already a Tensor, use directly.
+        // If targets were Int, you would use: targets.into_float()
+        let t_i = targets.clone().reshape([batch_size, list_size, 1]);
+        let t_j = targets.clone().reshape([batch_size, 1, list_size]);
+        let t_diff = t_i - t_j;
+
+        // 3. Create Masks
+        // list_mask is True for Padding -> Not Padding is False.
+        // We need a mask that is True for Valid items.
+        // We use bool_not() to invert: True (Padding) -> False (Valid)
+        let is_valid_i = list_mask
+            .clone()
+            .bool_not()
+            .reshape([batch_size, list_size, 1]);
+        let is_valid_j = list_mask.bool_not().reshape([batch_size, 1, list_size]);
+
+        // valid_pair_mask is True where BOTH items are valid (not padded)
+        let valid_pair_mask = is_valid_i.bool_and(is_valid_j);
+
+        // Identify pairs where target_i > target_j
+        let target_mask = t_diff.greater_elem(0.0);
+
+        // 4. Determine Active Pairs
+        // A pair is active if it is valid AND target_i > target_j
+        let active_pairs = valid_pair_mask.bool_and(target_mask);
+
+        // 5. Compute Pairwise Logistic Loss
+        // Loss = log(1 + exp(-(s_i - s_j)))
+        let pair_loss = (s_diff.neg().exp() + 1.0).log();
+
+        // Mask out inactive pairs (set loss to 0.0)
+        // active_pairs is a Bool tensor, so we negate it to mask the unwanted positions
+        let loss_masked = pair_loss.mask_fill(active_pairs.clone().bool_not(), 0.0);
+
+        // 6. Normalize by the number of active pairs
+        let num_active = active_pairs.float().sum(); // .float() converts Bool tensor to Float for sum
+        let loss = loss_masked.sum() / (num_active + 1e-9);
 
         RegressionOutput::new(loss, output, targets)
     }
@@ -54,15 +93,6 @@ impl<B: AutodiffBackend> TrainStep for RankerModel<B> {
     }
 }
 
-impl<B: Backend> InferenceStep for RankerModel<B> {
-    type Input = RankingBatch<B>;
-    type Output = RegressionOutput<B>;
-
-    fn step(&self, batch: Self::Input) -> RegressionOutput<B> {
-        self.forward_regression(batch)
-    }
-}
-
 #[derive(Config, Debug)]
 pub struct TrainingConfig {
     pub model: RankerModelConfig,
@@ -75,6 +105,8 @@ pub struct TrainingConfig {
     pub seed: u64,
     #[config(default = 0.001)]
     pub learning_rate: f64,
+    #[config(default = 1e-4)]
+    pub weight_decay: f32,
 }
 
 // TODO pause training for inference, continuous learning?
@@ -86,13 +118,13 @@ pub fn train<B: AutodiffBackend>(
     let vocab = Vocab::new(
         training_dataset
             .iter()
-            .flat_map(|item| item.app_ids.clone()),
+            .flat_map(|item| item.0.app_ids.clone()),
     );
     let vocab_json = serde_json::to_string(&vocab);
 
     let config = TrainingConfig::new(
         RankerModelConfig::new(vocab.vocab_size()),
-        AdamConfig::new().with_weight_decay(Some(WeightDecayConfig::new(1e-4))),
+        AdamConfig::new(),
     );
 
     B::seed(&device, config.seed);
@@ -106,7 +138,11 @@ pub fn train<B: AutodiffBackend>(
         .build(training_dataset);
 
     let mut model = config.model.init::<B>(&device);
-    let mut optimizer = config.optimizer.init();
+    let mut optimizer = config
+        .optimizer
+        .clone()
+        .with_weight_decay(Some(WeightDecayConfig::new(config.weight_decay)))
+        .init();
 
     let mut best_loss = None;
     let mut tolerance = 0.05;
@@ -156,9 +192,7 @@ pub fn train<B: AutodiffBackend>(
         tolerance = min_tolerance.max(tolerance - tolerance_step);
     }
 
-    if let Some(parent) = model_dir.parent() {
-        let _ = create_dir_all(parent);
-    }
+    let _ = create_dir_all(&model_dir);
 
     if let Err(e) =
         vocab_json.map(|contents| std::fs::write(model_dir.join("vocab.json"), contents))

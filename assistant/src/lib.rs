@@ -14,83 +14,19 @@ pub use train::train;
 #[cfg(test)]
 mod tests {
     use burn::backend::{Autodiff, NdArray, Wgpu};
+    use test_case::test_case;
 
     use super::*;
 
     const ARTIFACT_DIR: &str = "/tmp/guide";
 
-    #[test]
-    fn test_model() {
-        let items = vec![
-            RankingItem {
-                app_ids: vec!["Firefox".to_string(), "VLC".to_string(), "GIMP".to_string()],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "Chrome".to_string(),
-                    "LibreOffice".to_string(),
-                    "Nautilus".to_string(),
-                    "Blender".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec!["Firefox".to_string(), "Chrome".to_string()],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "VLC".to_string(),
-                    "GIMP".to_string(),
-                    "Thunderbird".to_string(),
-                    "Audacity".to_string(),
-                    "Inkscape".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "Firefox".to_string(),
-                    "LibreOffice".to_string(),
-                    "Audacity".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "Chrome".to_string(),
-                    "VLC".to_string(),
-                    "Nautilus".to_string(),
-                    "Blender".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "Firefox".to_string(),
-                    "GIMP".to_string(),
-                    "Inkscape".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "LibreOffice".to_string(),
-                    "VLC".to_string(),
-                    "Thunderbird".to_string(),
-                    "Audacity".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "Firefox".to_string(),
-                    "Chrome".to_string(),
-                    "Nautilus".to_string(),
-                    "Blender".to_string(),
-                ],
-            },
-            RankingItem {
-                app_ids: vec![
-                    "VLC".to_string(),
-                    "Audacity".to_string(),
-                    "Inkscape".to_string(),
-                ],
-            },
-        ];
+    #[test_case(vec![RankingItem {
+        app_ids: (1..=10).map(|n| n.to_string()).collect(),
+    }])]
+    fn test_model(items: Vec<RankingItem>) {
+        tracing_subscriber::fmt().init();
+
+        println!("{items:#?}");
 
         let device = get_device();
         let dataset = RankingDataset::new(items);
@@ -105,19 +41,18 @@ mod tests {
         }
 
         let item = RankingItem {
-            app_ids: ["Chrome", "Inkscape", "Firefox"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            app_ids: (1..=10).map(|n| n.to_string()).collect(),
         };
         let result = match device {
             BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR.into(), item, d),
             BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR.into(), item, d),
         }
-        .unwrap();
-        assert_eq!(result[0], "Firefox");
-        assert_eq!(result[1], "Chrome");
-        assert_eq!(result[2], "Inkscape");
-        assert_eq!(result.len(), 3);
+        .unwrap()
+        .into_iter()
+        .map(|s| s.parse::<usize>().unwrap())
+        .collect::<Vec<_>>();
+
+        println!("{result:#?}");
+        assert!(result.is_sorted());
     }
 }
