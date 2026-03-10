@@ -116,6 +116,18 @@ pub struct TrainingConfig {
     pub learning_rate: f64,
     #[config(default = 1e-4)]
     pub weight_decay: f32,
+    #[config(default = 0.5)]
+    pub old_data_weight: f32,
+    #[config(default = 0.05)]
+    pub tolerance: f32,
+    #[config(default = 0.002)]
+    pub tolerance_step: f32,
+    #[config(default = 0.001)]
+    pub min_tolerance: f32,
+    #[config(default = 5)]
+    pub max_patience: i32,
+    #[config(default = 100)]
+    pub max_epoch: i32,
 }
 
 // TODO pause training for inference, continuous learning?
@@ -125,6 +137,7 @@ pub fn train<B: AutodiffBackend>(
     device: B::Device,
 ) {
     info!("Start training");
+
     let vocab = Vocab::new(
         training_dataset
             .iter()
@@ -139,7 +152,7 @@ pub fn train<B: AutodiffBackend>(
 
     B::seed(&device, config.seed);
 
-    let batcher = RankingBatcher::new(vocab).with_weight(0.1);
+    let batcher = RankingBatcher::new(vocab).with_weight(config.old_data_weight);
 
     let dataloader_train = DataLoaderBuilder::new(batcher)
         .batch_size(config.batch_size)
@@ -155,14 +168,14 @@ pub fn train<B: AutodiffBackend>(
         .init();
 
     let mut best_loss = None;
-    let mut tolerance = 0.05;
-    let tolerance_step = 0.002;
-    let min_tolerance: f32 = 0.001;
+    let mut tolerance = config.tolerance;
+    let tolerance_step = config.tolerance_step;
+    let min_tolerance: f32 = config.min_tolerance;
     let mut patience_counter = 0;
-    let max_patience = 5;
+    let max_patience = config.max_patience;
     let mut loss_sum: Option<Tensor<B, 1, Float>> = None;
     let mut epoch = 0;
-    let max_epoch = 100;
+    let max_epoch = config.max_epoch;
 
     loop {
         if epoch >= max_epoch {
@@ -171,7 +184,6 @@ pub fn train<B: AutodiffBackend>(
             epoch += 1;
         }
 
-        let mut num_batches = 0.0;
         for batch in dataloader_train.iter() {
             let output = TrainStep::step(&model, batch);
             let grads = output.grads;
@@ -182,14 +194,13 @@ pub fn train<B: AutodiffBackend>(
                 None => batch_loss,
                 Some(acc) => acc + batch_loss,
             });
-            num_batches += 1.0;
         }
 
         let avg_loss = loss_sum
             .take()
             .map(|t| t.into_scalar().elem::<f32>())
             .unwrap_or(0.0)
-            / num_batches as f32;
+            / config.batch_size as f32;
 
         #[cfg(test)]
         println!("epoch: {epoch}, loss: {avg_loss}");
@@ -229,4 +240,6 @@ pub fn train<B: AutodiffBackend>(
     if let Err(e) = model.save_file(model_dir.join("model"), &CompactRecorder::new()) {
         error!("Failed to save model: {e}");
     }
+
+    info!("Training completed")
 }
