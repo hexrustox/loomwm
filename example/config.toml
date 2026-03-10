@@ -78,6 +78,8 @@ repeat-rate = 25
 "alt+shift+space" = { action = "toggle_floating_hidden" }
 "alt+q" = { action = "close_window" }
 "alt+t" = { action = "execute", command = ["alacritty"] }
+"alt+w" = { action = "execute", command = ["weston-terminal"] }
+"alt+s" = { action = "execute", command = ["weston-subsurfaces"] }
 "alt+a" = { action = "assistant" }
 
 [pointer.bindings]
@@ -88,6 +90,5 @@ repeat-rate = 25
 resize-at = "edge_or_corner"
 
 [assistant]
-enable = false
+# enable = false
 save-layout-after = 10
-history-length = 5

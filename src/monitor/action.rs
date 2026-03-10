@@ -87,7 +87,7 @@ impl WindowManagerState {
             self.focus_window(&mapped.wl_surface());
         }
 
-        self.timeout_to_save();
+        self.save_layout_history();
     }
 
     fn handle_tiling_layout_full(&mut self, mapped: Option<MappedWindow>) {
@@ -296,7 +296,7 @@ impl WindowManagerState {
             self.focus_window(&mapped.wl_surface());
         }
 
-        self.timeout_to_save();
+        self.save_layout_history();
     }
 
     pub fn toggle_focused_window_floating(&mut self, value: Option<bool>) {
@@ -340,7 +340,7 @@ impl WindowManagerState {
             self.handle_tiling_layout_full(mapped);
         }
 
-        self.timeout_to_save();
+        self.save_layout_history();
     }
 
     pub fn get_focused_workspace_floating_window_hidden(&self) -> bool {
@@ -375,7 +375,7 @@ impl WindowManagerState {
 
         mapped.toplevel().send_close();
 
-        self.timeout_to_save();
+        self.save_layout_history();
     }
 
     pub fn focus_tiling_window_in_direction(&mut self, direction: Direction) {
@@ -425,7 +425,7 @@ impl WindowManagerState {
         let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.swap_tiling_window(lhs, rhs);
 
-        self.timeout_to_save();
+        self.save_layout_history();
     }
 
     pub fn swap_focused_tiling_window_in_direction(&mut self, direction: Direction) {
@@ -454,7 +454,7 @@ impl WindowManagerState {
             workspace.swap_tiling_window(&mapped_lhs.wl_surface(), &mapped_rhs.wl_surface());
         }
 
-        self.timeout_to_save();
+        self.save_layout_history();
     }
 
     pub fn resize_focused_tiling_window(

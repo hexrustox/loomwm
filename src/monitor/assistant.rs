@@ -15,10 +15,7 @@ use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use tracing::{error, info};
 
-use crate::{
-    monitor::TileTreeWindow, path::model_dir, state::WindowManagerState,
-    utils::get_app_id_and_title, window::MappedWindow,
-};
+use crate::{path::model_dir, state::WindowManagerState, utils::get_app_id_and_title};
 
 #[derive(Clone)]
 pub struct BackendDevice {
@@ -60,8 +57,10 @@ impl BackendDevice {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct LayoutHistory(RankingDataset);
+pub struct LayoutHistory {
+    dataset: RankingDataset,
+    buffer: Vec<Arc<RankingItem>>,
+}
 
 impl LayoutHistory {
     fn path() -> PathBuf {
@@ -75,11 +74,14 @@ impl LayoutHistory {
         {
             this
         } else {
-            Self(RankingDataset::new(Vec::new()))
+            Self {
+                dataset: RankingDataset::new(Vec::new()),
+                buffer: Vec::new(),
+            }
         }
     }
 
-    fn write(&self) {
+    fn save(&self) {
         if let Some(parent) = Self::path().parent() {
             let _ = create_dir_all(parent);
         }
@@ -88,20 +90,23 @@ impl LayoutHistory {
         }
     }
 
-    fn push(&mut self, item: RankingItem, limit: usize) {
-        self.0.enqueue(item);
-        if self.0.len() > limit {
-            self.0.dequeue()
+    fn push_buffer(&mut self, item: RankingItem) {
+        let item = Arc::new(item);
+        if self
+            .dataset
+            .iter()
+            .map(|(i, _)| i)
+            .chain(self.buffer.clone())
+            .any(|i| i == item)
+        {
+            return;
         }
-    }
-
-    fn dataset(&self) -> RankingDataset {
-        self.0.clone()
+        self.buffer.push(item);
     }
 }
 
 impl WindowManagerState {
-    pub fn timeout_to_save(&mut self) {
+    pub fn save_layout_history(&mut self) {
         if !self.assistant_config.enable {
             return;
         }
@@ -125,7 +130,43 @@ impl WindowManagerState {
                             }
                         }
                         for items in workspace_windows {
-                            data.append_layout_history(items);
+                            data.layout_history.push_buffer(RankingItem {
+                                app_ids: items
+                                    .into_iter()
+                                    .map(|mapped| {
+                                        let (app_id, _) =
+                                            get_app_id_and_title(&mapped.wl_surface());
+                                        app_id
+                                    })
+                                    .collect::<Vec<_>>(),
+                            });
+
+                            if data.layout_history.buffer.len()
+                                >= data.assistant_config.buffer_length
+                            {
+                                // TODO drain buffer put into dataset, train, set all to old, save.
+                                for item in data.layout_history.buffer.drain(..) {
+                                    data.layout_history.dataset.enqueue(item);
+                                }
+
+                                data.event_loop.insert_idle(|data| {
+                                    let data = &mut data.compositor;
+
+                                    let dataset = data.layout_history.dataset.clone();
+                                    let device = data.backend_device.clone();
+                                    spawn(move || match device.get_device() {
+                                        InnerBackendDevice::Gpu(d) => {
+                                            train::<Autodiff<Wgpu>>(model_dir(), dataset, d);
+                                        }
+                                        InnerBackendDevice::Cpu(d) => {
+                                            train::<Autodiff<NdArray>>(model_dir(), dataset, d);
+                                        }
+                                    });
+                                });
+                            }
+
+                            data.layout_history.save();
+                            info!("Layout history saved");
                         }
 
                         data.save_at = None;
@@ -138,36 +179,6 @@ impl WindowManagerState {
         }
     }
 
-    fn append_layout_history(&mut self, items: Vec<MappedWindow>) {
-        self.layout_history.push(
-            RankingItem {
-                app_ids: items
-                    .into_iter()
-                    .map(|mapped| {
-                        let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
-                        app_id
-                    })
-                    .collect::<Vec<_>>(),
-            },
-            self.assistant_config.history_length,
-        );
-
-        self.event_loop.insert_idle(|data| {
-            data.compositor.layout_history.write();
-            info!("Layout history saved");
-            let dataset = data.compositor.layout_history.dataset();
-            let device = data.compositor.backend_device.clone();
-            spawn(move || match device.get_device() {
-                InnerBackendDevice::Gpu(d) => {
-                    train::<Autodiff<Wgpu>>(model_dir(), dataset, d);
-                }
-                InnerBackendDevice::Cpu(d) => {
-                    train::<Autodiff<NdArray>>(model_dir(), dataset, d);
-                }
-            });
-        });
-    }
-
     pub fn run_assistant(&mut self) {
         if !self.assistant_config.enable {
             return;
@@ -176,12 +187,13 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor();
         let workspace = monitor.get_workspace(monitor.get_active_workspace_name());
         let iter = workspace.tiling_windows_iter().cloned();
-        let mut mappeds = iter.clone().collect::<Vec<_>>();
+        let mappeds = iter.clone().collect::<Vec<_>>();
 
         if mappeds.len() <= 1 {
             return;
         }
 
+        // TODO arc
         let mut app_ids = iter
             .map(|mapped| {
                 let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
@@ -193,23 +205,24 @@ impl WindowManagerState {
         };
         let device = self.backend_device.clone();
 
-        spawn(move || {
+        let ops = spawn(move || {
             let target = match device.get_device() {
                 InnerBackendDevice::Gpu(d) => infer::<Wgpu>(model_dir(), item, d),
                 InnerBackendDevice::Cpu(d) => infer::<NdArray>(model_dir(), item, d),
             };
             let Ok(target) = target else {
                 error!("Assistant failed: {}", target.unwrap_err());
-                return;
+                return Vec::new();
             };
 
-            let ops = get_swap_operations(&mut app_ids, &target);
+            get_swap_operations(&mut app_ids, &target)
+        })
+        .join()
+        .unwrap();
 
-            for (lhs, rhs) in ops {
-                let mut mapped = mappeds[rhs].clone();
-                mappeds[lhs].swap_location_size(&mut mapped);
-            }
-        });
+        for (lhs, rhs) in ops {
+            self.swap_tiling_window(&mappeds[lhs].wl_surface(), &mappeds[rhs].wl_surface());
+        }
     }
 }
 

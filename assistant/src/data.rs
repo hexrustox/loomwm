@@ -160,8 +160,8 @@ impl RankingDataset {
         }
     }
 
-    pub fn enqueue(&mut self, item: RankingItem) {
-        self.items.push_back((Arc::new(item), false));
+    pub fn enqueue(&mut self, item: Arc<RankingItem>) {
+        self.items.push_back((item, false));
     }
 
     pub fn dequeue(&mut self) {
