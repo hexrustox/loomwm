@@ -74,10 +74,18 @@ impl<B: Backend> RankerModel<B> {
         // active_pairs is a Bool tensor, so we negate it to mask the unwanted positions
         let loss_masked = pair_loss.mask_fill(active_pairs.clone().bool_not(), 0.0);
 
+        // weights shape: [batch_size]
+        // Reshape to [batch_size, 1, 1] to broadcast over the pairs [batch_size, list_size, list_size]
+        let weights_reshaped = weights.reshape([batch_size, 1, 1]);
+
+        // Apply weights to the loss
+        // This multiplies every pair in batch 'b' by weight 'w_b'
+        let weighted_loss = loss_masked * weights_reshaped;
+
         // 6. Normalize by the number of active pairs
         let num_active = active_pairs.float().sum();
 
-        let loss = loss_masked.sum() / (num_active + 1e-9);
+        let loss = weighted_loss.sum() / (num_active + 1e-9);
 
         RegressionOutput::new(loss, output, targets)
     }
@@ -120,7 +128,7 @@ pub fn train<B: AutodiffBackend>(
     let vocab = Vocab::new(
         training_dataset
             .iter()
-            .flat_map(|item| item.0.app_ids.clone()),
+            .flat_map(|item| item.app_ids.clone()),
     );
     let vocab_json = serde_json::to_string(&vocab);
 
@@ -131,7 +139,7 @@ pub fn train<B: AutodiffBackend>(
 
     B::seed(&device, config.seed);
 
-    let batcher = RankingBatcher::new(vocab);
+    let batcher = RankingBatcher::new(vocab).with_weight(0.1);
 
     let dataloader_train = DataLoaderBuilder::new(batcher)
         .batch_size(config.batch_size)
@@ -151,7 +159,7 @@ pub fn train<B: AutodiffBackend>(
     let tolerance_step = 0.002;
     let min_tolerance: f32 = 0.001;
     let mut patience_counter = 0;
-    let max_patience = 3;
+    let max_patience = 5;
     let mut loss_sum: Option<Tensor<B, 1, Float>> = None;
     let mut epoch = 0;
     let max_epoch = 100;

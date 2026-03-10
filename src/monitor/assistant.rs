@@ -95,7 +95,6 @@ impl LayoutHistory {
         if self
             .dataset
             .iter()
-            .map(|(i, _)| i)
             .chain(self.buffer.clone())
             .any(|i| i == item)
         {
@@ -139,6 +138,7 @@ impl WindowManagerState {
                                         app_id
                                     })
                                     .collect::<Vec<_>>(),
+                                new: true,
                             });
 
                             if data.layout_history.buffer.len()
@@ -202,6 +202,7 @@ impl WindowManagerState {
             .collect::<Vec<_>>();
         let item = RankingItem {
             app_ids: app_ids.clone(),
+            new: true,
         };
         let device = self.backend_device.clone();
 

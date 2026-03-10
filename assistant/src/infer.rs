@@ -35,7 +35,7 @@ pub fn infer<B: Backend>(
 
     let batcher = RankingBatcher::new(vocab);
     let app_ids = item.app_ids.clone();
-    let batch = batcher.batch(vec![(Arc::new(item), false)], &device);
+    let batch = batcher.batch(vec![Arc::new(item)], &device);
 
     let output = model.forward(batch.inputs, batch.word_mask, batch.list_mask);
     let output: Vec<f32> = softmax(output, 1)
