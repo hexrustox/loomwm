@@ -22,12 +22,27 @@ mod tests {
 
     #[test_case(vec![RankingItem {
         app_ids: (1..=10).map(|n| n.to_string()).collect(),
-    }])]
-    fn test_model(items: Vec<RankingItem>) {
-        tracing_subscriber::fmt().init();
+    }]; "sorted")]
+    #[test_case({
+        let mut items = Vec::new();
+        for _ in 0..10 {
+            let mut ns = (1..=10).map(|n| n.to_string()).collect::<Vec<_>>();
+            for _ in 0..rand::random_range(2..4) {
+                ns.remove(rand::random_range(0..ns.len()));
+            }
+            assert!(ns.len() < 10);
+            assert!(
+                ns.clone()
+                    .into_iter()
+                    .map(|s| s.parse::<usize>().unwrap())
+                    .is_sorted()
+            );
 
-        println!("{items:#?}");
-
+            items.push(RankingItem { app_ids: ns });
+        }
+        items
+    }; "random")]
+    fn test_model_identical_dataset(items: Vec<RankingItem>) {
         let device = get_device();
         let dataset = RankingDataset::new(items);
 
@@ -52,7 +67,7 @@ mod tests {
         .map(|s| s.parse::<usize>().unwrap())
         .collect::<Vec<_>>();
 
-        println!("{result:#?}");
+        println!("{result:?}");
         assert!(result.is_sorted());
     }
 }

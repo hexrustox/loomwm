@@ -7,10 +7,10 @@ use burn::{
     optim::{AdamConfig, Optimizer, decay::WeightDecayConfig},
     prelude::Backend,
     record::CompactRecorder,
-    tensor::{ElementConversion, Float, Tensor, backend::AutodiffBackend},
+    tensor::{ElementConversion, Float, Tensor, activation::log_sigmoid, backend::AutodiffBackend},
     train::{RegressionOutput, TrainOutput, TrainStep},
 };
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
     data::{RankingBatch, RankingBatcher, RankingDataset, Vocab},
@@ -68,14 +68,15 @@ impl<B: Backend> RankerModel<B> {
 
         // 5. Compute Pairwise Logistic Loss
         // Loss = log(1 + exp(-(s_i - s_j)))
-        let pair_loss = (s_diff.neg().exp() + 1.0).log();
+        let pair_loss = log_sigmoid(s_diff).neg();
 
         // Mask out inactive pairs (set loss to 0.0)
         // active_pairs is a Bool tensor, so we negate it to mask the unwanted positions
         let loss_masked = pair_loss.mask_fill(active_pairs.clone().bool_not(), 0.0);
 
         // 6. Normalize by the number of active pairs
-        let num_active = active_pairs.float().sum(); // .float() converts Bool tensor to Float for sum
+        let num_active = active_pairs.float().sum();
+
         let loss = loss_masked.sum() / (num_active + 1e-9);
 
         RegressionOutput::new(loss, output, targets)
@@ -115,6 +116,7 @@ pub fn train<B: AutodiffBackend>(
     training_dataset: RankingDataset,
     device: B::Device,
 ) {
+    info!("Start training");
     let vocab = Vocab::new(
         training_dataset
             .iter()
@@ -151,7 +153,16 @@ pub fn train<B: AutodiffBackend>(
     let mut patience_counter = 0;
     let max_patience = 3;
     let mut loss_sum: Option<Tensor<B, 1, Float>> = None;
+    let mut epoch = 0;
+    let max_epoch = 100;
+
     loop {
+        if epoch >= max_epoch {
+            break;
+        } else {
+            epoch += 1;
+        }
+
         let mut num_batches = 0.0;
         for batch in dataloader_train.iter() {
             let output = TrainStep::step(&model, batch);
@@ -171,6 +182,9 @@ pub fn train<B: AutodiffBackend>(
             .map(|t| t.into_scalar().elem::<f32>())
             .unwrap_or(0.0)
             / num_batches as f32;
+
+        #[cfg(test)]
+        println!("epoch: {epoch}, loss: {avg_loss}");
 
         if let Some(loss) = best_loss {
             if avg_loss < loss {
