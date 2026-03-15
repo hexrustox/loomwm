@@ -14,17 +14,23 @@ pub use train::train;
 #[cfg(test)]
 mod tests {
     use burn::backend::{Autodiff, NdArray, Wgpu};
+    use rand::seq::SliceRandom;
     use test_case::test_case;
 
     use super::*;
 
     const ARTIFACT_DIR: &str = "/tmp/guide";
 
-    #[test_case(vec![RankingItem {
-        app_ids: (1..=10).map(|n| n.to_string()).collect(),
-        new: false
-    }]; "simple")]
-    #[test_case({
+    #[test_case(3, vec![RankingItem {
+        app_ids: (1..=3).map(|n| n.to_string()).collect(),
+    }]; "short_list")]
+    #[test_case(8, vec![RankingItem {
+        app_ids: (1..=8).map(|n| n.to_string()).collect(),
+    }]; "medium_list")]
+    #[test_case(15, vec![RankingItem {
+        app_ids: (1..=15).map(|n| n.to_string()).collect(),
+    }]; "long_list")]
+    #[test_case(10, {
         let mut items = Vec::new();
         for _ in 0..10 {
             let mut ns = (1..=10).map(|n| n.to_string()).collect::<Vec<_>>();
@@ -39,22 +45,23 @@ mod tests {
                     .is_sorted()
             );
 
-            items.push(RankingItem { app_ids: ns, new: false });
+            items.push(RankingItem { app_ids: ns });
         }
         items
     }; "random")]
-    #[test_case(vec![
-        RankingItem {
-            app_ids: (1..=10).rev().map(|n| n.to_string()).collect(),
-            new: false
-        },
-        RankingItem {
-            app_ids: (1..=10).map(|n| n.to_string()).collect(),
-            new: true
-        }
-    ]; "new_data")]
-    fn test_model_identical_dataset(items: Vec<RankingItem>) {
+    // #[test_case(vec![
+    //     RankingItem {
+    //         app_ids: (1..=10).rev().map(|n| n.to_string()).collect(),
+    //     },
+    //     RankingItem {
+    //         app_ids: (1..=10).map(|n| n.to_string()).collect(),
+    //     }
+    // ]; "new_data")]
+    fn test_model_identical_dataset(max: usize, items: Vec<RankingItem>) {
         let device = get_device();
+
+        println!("{items:#?}");
+
         let dataset = RankingDataset::new(items);
 
         match device.clone() {
@@ -66,10 +73,14 @@ mod tests {
             }
         }
 
-        let item = RankingItem {
-            app_ids: (1..=10).map(|n| n.to_string()).collect(),
-            new: false,
-        };
+        let mut app_ids: Vec<_> = (1..=max).collect();
+        while app_ids.is_sorted() {
+            app_ids.shuffle(&mut rand::rng());
+        }
+        println!("{app_ids:?}");
+        let app_ids = app_ids.iter().map(|n| n.to_string()).collect();
+
+        let item = RankingItem { app_ids };
         let result = match device {
             BackendDevice::Gpu(d) => infer::<Wgpu>(ARTIFACT_DIR.into(), item, d),
             BackendDevice::Cpu(d) => infer::<NdArray>(ARTIFACT_DIR.into(), item, d),

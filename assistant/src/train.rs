@@ -7,7 +7,7 @@ use burn::{
     optim::{AdamConfig, Optimizer, decay::WeightDecayConfig},
     prelude::Backend,
     record::CompactRecorder,
-    tensor::{ElementConversion, Float, Tensor, activation::log_sigmoid, backend::AutodiffBackend},
+    tensor::{ElementConversion, Float, Tensor, backend::AutodiffBackend},
     train::{RegressionOutput, TrainOutput, TrainStep},
 };
 use tracing::{error, info};
@@ -29,63 +29,22 @@ impl<B: Backend> RankerModel<B> {
         }: RankingBatch<B>,
     ) -> RegressionOutput<B> {
         let output = self.forward(inputs, word_mask, list_mask.clone());
-        let output = output.mask_fill(list_mask.clone(), -1e9);
 
-        // 1. Get dimensions for reshaping
-        let [batch_size, list_size] = output.dims();
+        let masked_output = output.clone().mask_fill(list_mask.clone(), -1e9);
 
-        // 2. Prepare Scores and Targets for Broadcasting
-        // Use reshape to get [Batch, List, 1] and [Batch, 1, List]
-        let s_i = output.clone().reshape([batch_size, list_size, 1]);
-        let s_j = output.clone().reshape([batch_size, 1, list_size]);
-        let s_diff = s_i - s_j; // Shape: [Batch, List, List]
+        let exp_scores = masked_output.clone().exp();
 
-        // targets is already a Tensor, use directly.
-        // If targets were Int, you would use: targets.into_float()
-        let t_i = targets.clone().reshape([batch_size, list_size, 1]);
-        let t_j = targets.clone().reshape([batch_size, 1, list_size]);
-        let t_diff = t_i - t_j;
+        let rev_exp = exp_scores.flip([1]);
+        let rev_cum_sum = rev_exp.cumsum(1);
+        let suffix_sums = rev_cum_sum.flip([1]);
 
-        // 3. Create Masks
-        // list_mask is True for Padding -> Not Padding is False.
-        // We need a mask that is True for Valid items.
-        // We use bool_not() to invert: True (Padding) -> False (Valid)
-        let is_valid_i = list_mask
-            .clone()
-            .bool_not()
-            .reshape([batch_size, list_size, 1]);
-        let is_valid_j = list_mask.bool_not().reshape([batch_size, 1, list_size]);
+        let log_probs = masked_output - suffix_sums.clone().log();
 
-        // valid_pair_mask is True where BOTH items are valid (not padded)
-        let valid_pair_mask = is_valid_i.bool_and(is_valid_j);
+        let valid_mask = suffix_sums.greater_elem(1e-9);
+        let valid_log_probs = log_probs.mask_fill(valid_mask.bool_not(), 0.0);
 
-        // Identify pairs where target_i > target_j
-        let target_mask = t_diff.greater_elem(0.0);
-
-        // 4. Determine Active Pairs
-        // A pair is active if it is valid AND target_i > target_j
-        let active_pairs = valid_pair_mask.bool_and(target_mask);
-
-        // 5. Compute Pairwise Logistic Loss
-        // Loss = log(1 + exp(-(s_i - s_j)))
-        let pair_loss = log_sigmoid(s_diff).neg();
-
-        // Mask out inactive pairs (set loss to 0.0)
-        // active_pairs is a Bool tensor, so we negate it to mask the unwanted positions
-        let loss_masked = pair_loss.mask_fill(active_pairs.clone().bool_not(), 0.0);
-
-        // weights shape: [batch_size]
-        // Reshape to [batch_size, 1, 1] to broadcast over the pairs [batch_size, list_size, list_size]
-        let weights_reshaped = weights.reshape([batch_size, 1, 1]);
-
-        // Apply weights to the loss
-        // This multiplies every pair in batch 'b' by weight 'w_b'
-        let weighted_loss = loss_masked * weights_reshaped;
-
-        // 6. Normalize by the number of active pairs
-        let num_active = active_pairs.float().sum();
-
-        let loss = weighted_loss.sum() / (num_active + 1e-9);
+        let list_loss = -valid_log_probs.sum_dim(1);
+        let loss = list_loss.mean();
 
         RegressionOutput::new(loss, output, targets)
     }
@@ -116,8 +75,6 @@ pub struct TrainingConfig {
     pub learning_rate: f64,
     #[config(default = 1e-4)]
     pub weight_decay: f32,
-    #[config(default = 0.5)]
-    pub old_data_weight: f32,
     #[config(default = 0.05)]
     pub tolerance: f32,
     #[config(default = 0.002)]
@@ -128,6 +85,8 @@ pub struct TrainingConfig {
     pub max_patience: i32,
     #[config(default = 100)]
     pub max_epoch: i32,
+    #[config(default = 0.5)]
+    pub old_data_weight: f32,
 }
 
 // TODO pause training for inference, continuous learning?

@@ -49,12 +49,13 @@ pub fn infer<B: Backend>(
     result.sort_by(|(_, a), (_, b)| {
         use std::cmp::Ordering::*;
         if a < b {
-            Less
-        } else if a > b {
             Greater
+        } else if a > b {
+            Less
         } else {
             Equal
         }
     });
+
     Ok(result.into_iter().map(|(s, _)| s).collect())
 }

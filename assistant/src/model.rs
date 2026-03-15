@@ -135,7 +135,6 @@ impl<B: Backend> RankerModel<B> {
         let summed = (string_out * mask_float.clone()).sum_dim(1);
         let counts = mask_float.sum_dim(1).clamp_min(1e-9);
         let string_vecs = (summed / counts).reshape([batch_size, list_len, self.d_model]);
-        let string_vecs = self.pos_encoder.forward(string_vecs);
 
         let list_pad_mask = list_mask;
         let list_input = TransformerEncoderInput::new(string_vecs).mask_pad(list_pad_mask);

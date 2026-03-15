@@ -53,7 +53,6 @@ impl Vocab {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RankingItem {
     pub app_ids: Vec<String>,
-    pub new: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +97,10 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
         let mut word_mask_data = vec![true; batch_size * max_list_len * max_str_len];
         let mut weights_data = vec![1.0f32; batch_size];
 
+        // let use_weight = items.len() > 1;
+        // let weight_diff = 1.0 - self.weight;
+        // let len = (items.len() - 1) as f32;
+
         for (b, item) in items.into_iter().enumerate() {
             let list_offset = b * max_list_len;
 
@@ -122,9 +125,9 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
                 labels_data[current_list_idx] = i as f32;
                 list_mask_data[current_list_idx] = false;
             }
-            if !item.new {
-                weights_data[b] = self.weight;
-            }
+            // if use_weight {
+            //     weights_data[b] = self.weight + (weight_diff * b as f32 / len);
+            // }
         }
 
         let inputs = Tensor::<B, 3, Int>::from_data(
@@ -169,12 +172,11 @@ impl RankingDataset {
         }
     }
 
-    pub fn enqueue(&mut self, item: Arc<RankingItem>) {
-        self.items.push_back(item);
-    }
-
-    pub fn dequeue(&mut self) {
-        self.items.pop_front();
+    pub fn enqueue(&mut self, item: RankingItem, limit: usize) {
+        self.items.push_back(Arc::new(item));
+        if self.items.len() > limit {
+            self.items.pop_front();
+        }
     }
 }
 
