@@ -25,7 +25,6 @@ impl<B: Backend> RankerModel<B> {
             targets,
             word_mask,
             list_mask,
-            weights,
         }: RankingBatch<B>,
     ) -> RegressionOutput<B> {
         let output = self.forward(inputs, word_mask, list_mask.clone());
@@ -38,10 +37,9 @@ impl<B: Backend> RankerModel<B> {
         let rev_cum_sum = rev_exp.cumsum(1);
         let suffix_sums = rev_cum_sum.flip([1]);
 
-        let log_probs = masked_output - suffix_sums.clone().log();
+        let log_probs = masked_output - suffix_sums.log();
 
-        let valid_mask = suffix_sums.greater_elem(1e-9);
-        let valid_log_probs = log_probs.mask_fill(valid_mask.bool_not(), 0.0);
+        let valid_log_probs = log_probs.mask_fill(list_mask, 0.0);
 
         let list_loss = -valid_log_probs.sum_dim(1);
         let loss = list_loss.mean();
@@ -85,8 +83,6 @@ pub struct TrainingConfig {
     pub max_patience: i32,
     #[config(default = 100)]
     pub max_epoch: i32,
-    #[config(default = 0.5)]
-    pub old_data_weight: f32,
 }
 
 // TODO pause training for inference, continuous learning?
@@ -111,7 +107,7 @@ pub fn train<B: AutodiffBackend>(
 
     B::seed(&device, config.seed);
 
-    let batcher = RankingBatcher::new(vocab).with_weight(config.old_data_weight);
+    let batcher = RankingBatcher::new(vocab);
 
     let dataloader_train = DataLoaderBuilder::new(batcher)
         .batch_size(config.batch_size)

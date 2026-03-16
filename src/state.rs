@@ -168,7 +168,7 @@ impl WindowManagerState {
             assistant_config: config.assistant,
             backend_device: BackendDevice::new(),
             save_at: None,
-            layout_history: LayoutHistory::read(),
+            layout_history: LayoutHistory::new(),
         }
     }
 

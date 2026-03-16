@@ -61,22 +61,15 @@ pub struct RankingBatch<B: Backend> {
     pub targets: Tensor<B, 2, Float>,
     pub word_mask: Tensor<B, 3, Bool>,
     pub list_mask: Tensor<B, 2, Bool>,
-    pub weights: Tensor<B, 1, Float>,
 }
 
 pub struct RankingBatcher {
     vocab: Vocab,
-    weight: f32,
 }
 
 impl RankingBatcher {
     pub fn new(vocab: Vocab) -> Self {
-        Self { vocab, weight: 1.0 }
-    }
-
-    pub fn with_weight(mut self, weight: f32) -> Self {
-        self.weight = weight;
-        self
+        Self { vocab }
     }
 }
 
@@ -95,11 +88,6 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
         let mut labels_data = vec![0.0f32; batch_size * max_list_len];
         let mut list_mask_data = vec![true; batch_size * max_list_len];
         let mut word_mask_data = vec![true; batch_size * max_list_len * max_str_len];
-        let mut weights_data = vec![1.0f32; batch_size];
-
-        // let use_weight = items.len() > 1;
-        // let weight_diff = 1.0 - self.weight;
-        // let len = (items.len() - 1) as f32;
 
         for (b, item) in items.into_iter().enumerate() {
             let list_offset = b * max_list_len;
@@ -125,9 +113,6 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
                 labels_data[current_list_idx] = i as f32;
                 list_mask_data[current_list_idx] = false;
             }
-            // if use_weight {
-            //     weights_data[b] = self.weight + (weight_diff * b as f32 / len);
-            // }
         }
 
         let inputs = Tensor::<B, 3, Int>::from_data(
@@ -146,15 +131,12 @@ impl<B: Backend> Batcher<B, Arc<RankingItem>, RankingBatch<B>> for RankingBatche
             TensorData::new(list_mask_data, [batch_size, max_list_len]),
             device,
         );
-        let weights =
-            Tensor::<B, 1, Float>::from_data(TensorData::new(weights_data, [batch_size]), device);
 
         RankingBatch {
             inputs,
             targets: labels,
             word_mask,
             list_mask,
-            weights,
         }
     }
 }
@@ -173,6 +155,9 @@ impl RankingDataset {
     }
 
     pub fn enqueue(&mut self, item: RankingItem, limit: usize) {
+        if let Some(index) = self.items.iter().position(|i| **i == item) {
+            self.items.remove(index);
+        }
         self.items.push_back(Arc::new(item));
         if self.items.len() > limit {
             self.items.pop_front();

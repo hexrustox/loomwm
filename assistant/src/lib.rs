@@ -49,14 +49,6 @@ mod tests {
         }
         items
     }; "random")]
-    // #[test_case(vec![
-    //     RankingItem {
-    //         app_ids: (1..=10).rev().map(|n| n.to_string()).collect(),
-    //     },
-    //     RankingItem {
-    //         app_ids: (1..=10).map(|n| n.to_string()).collect(),
-    //     }
-    // ]; "new_data")]
     fn test_model_identical_dataset(max: usize, items: Vec<RankingItem>) {
         let device = get_device();
 

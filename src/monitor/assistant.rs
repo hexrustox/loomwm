@@ -10,7 +10,6 @@ use assistant::{
     BackendDevice as InnerBackendDevice, RankingDataset, RankingItem, get_device, infer, train,
 };
 use burn::backend::{Autodiff, NdArray, Wgpu};
-use burn::data::dataloader::Dataset;
 use serde::{Deserialize, Serialize};
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use tracing::{error, info};
@@ -56,13 +55,41 @@ impl BackendDevice {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct LayoutHistory {
-    dataset: RankingDataset,
-    buffer: Vec<Arc<RankingItem>>,
-}
+pub struct LayoutHistory(Arc<Mutex<InnerLayoutHistory>>);
 
 impl LayoutHistory {
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(InnerLayoutHistory::read())))
+    }
+
+    fn push(&mut self, item: RankingItem, limit: usize) {
+        let mut guard = self.0.lock().unwrap();
+        guard.dataset.enqueue(item, limit);
+    }
+
+    fn get_dataset(&self) -> RankingDataset {
+        let guard = self.0.lock().unwrap();
+        guard.dataset.clone()
+    }
+
+    fn save(&self) {
+        let guard = self.0.lock().unwrap();
+        guard.save();
+    }
+}
+
+impl Clone for LayoutHistory {
+    fn clone(&self) -> Self {
+        LayoutHistory(self.0.clone())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct InnerLayoutHistory {
+    dataset: RankingDataset,
+}
+
+impl InnerLayoutHistory {
     fn path() -> PathBuf {
         model_dir().join("history.json")
     }
@@ -76,7 +103,6 @@ impl LayoutHistory {
         } else {
             Self {
                 dataset: RankingDataset::new(Vec::new()),
-                buffer: Vec::new(),
             }
         }
     }
@@ -88,19 +114,6 @@ impl LayoutHistory {
         if let Err(e) = std::fs::write(Self::path(), serde_json::to_string(self).unwrap()) {
             error!("Failed to write history: {e}");
         }
-    }
-
-    fn push_buffer(&mut self, item: RankingItem) {
-        let item = Arc::new(item);
-        if self
-            .dataset
-            .iter()
-            .chain(self.buffer.clone())
-            .any(|i| i == item)
-        {
-            return;
-        }
-        self.buffer.push(item);
     }
 }
 
@@ -119,63 +132,63 @@ impl WindowManagerState {
                 .insert_source(Timer::from_deadline(time), move |_, _, data| {
                     let data = &mut data.compositor;
 
-                    if time <= Instant::now() {
-                        let mut workspace_windows = Vec::new();
-                        for workspace in &data.monitors.get_monitor().workspaces {
-                            let mappeds =
-                                workspace.tiling_windows_iter().cloned().collect::<Vec<_>>();
-                            if mappeds.len() > 1 {
-                                workspace_windows.push(mappeds);
-                            }
+                    if let Some(time) = data.save_at {
+                        if time <= Instant::now() {
+                            data.train_model();
+
+                            data.save_at = None;
+                            TimeoutAction::Drop
+                        } else {
+                            data.save_at = Some(time);
+                            TimeoutAction::ToInstant(time)
                         }
-                        for items in workspace_windows {
-                            data.layout_history.push_buffer(RankingItem {
-                                app_ids: items
-                                    .into_iter()
-                                    .map(|mapped| {
-                                        let (app_id, _) =
-                                            get_app_id_and_title(&mapped.wl_surface());
-                                        app_id
-                                    })
-                                    .collect::<Vec<_>>(),
-                                new: true,
-                            });
-
-                            if data.layout_history.buffer.len()
-                                >= data.assistant_config.buffer_length
-                            {
-                                // TODO drain buffer put into dataset, train, set all to old, save.
-                                for item in data.layout_history.buffer.drain(..) {
-                                    data.layout_history.dataset.enqueue(item);
-                                }
-
-                                data.event_loop.insert_idle(|data| {
-                                    let data = &mut data.compositor;
-
-                                    let dataset = data.layout_history.dataset.clone();
-                                    let device = data.backend_device.clone();
-                                    spawn(move || match device.get_device() {
-                                        InnerBackendDevice::Gpu(d) => {
-                                            train::<Autodiff<Wgpu>>(model_dir(), dataset, d);
-                                        }
-                                        InnerBackendDevice::Cpu(d) => {
-                                            train::<Autodiff<NdArray>>(model_dir(), dataset, d);
-                                        }
-                                    });
-                                });
-                            }
-
-                            data.layout_history.save();
-                            info!("Layout history saved");
-                        }
-
+                    } else {
                         data.save_at = None;
                         TimeoutAction::Drop
-                    } else {
-                        data.save_at = Some(time);
-                        TimeoutAction::ToInstant(time)
                     }
                 });
+        }
+    }
+
+    fn train_model(&self) {
+        let mut workspace_windows = Vec::new();
+        for workspace in &self.monitors.get_monitor().workspaces {
+            let mappeds = workspace.tiling_windows_iter().cloned().collect::<Vec<_>>();
+            if mappeds.len() > 1 {
+                workspace_windows.push(mappeds);
+            }
+        }
+        for items in workspace_windows {
+            let mut history = self.layout_history.clone();
+            history.push(
+                RankingItem {
+                    app_ids: items
+                        .into_iter()
+                        .map(|mapped| {
+                            let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
+                            app_id
+                        })
+                        .collect::<Vec<_>>(),
+                },
+                self.assistant_config.history_length,
+            );
+            history.save();
+            info!("Layout history saved");
+
+            let device = self.backend_device.clone();
+
+            spawn(move || {
+                let dataset = history.get_dataset();
+
+                match device.get_device() {
+                    InnerBackendDevice::Gpu(d) => {
+                        train::<Autodiff<Wgpu>>(model_dir(), dataset, d);
+                    }
+                    InnerBackendDevice::Cpu(d) => {
+                        train::<Autodiff<NdArray>>(model_dir(), dataset, d);
+                    }
+                }
+            });
         }
     }
 
@@ -193,7 +206,6 @@ impl WindowManagerState {
             return;
         }
 
-        // TODO arc
         let mut app_ids = iter
             .map(|mapped| {
                 let (app_id, _) = get_app_id_and_title(&mapped.wl_surface());
@@ -202,27 +214,26 @@ impl WindowManagerState {
             .collect::<Vec<_>>();
         let item = RankingItem {
             app_ids: app_ids.clone(),
-            new: true,
         };
+
         let device = self.backend_device.clone();
+        let result = match device.get_device() {
+            InnerBackendDevice::Gpu(d) => infer::<Wgpu>(model_dir(), item, d),
+            InnerBackendDevice::Cpu(d) => infer::<NdArray>(model_dir(), item, d),
+        };
+        match result {
+            Ok(target) => {
+                self.save_at = None;
 
-        let ops = spawn(move || {
-            let target = match device.get_device() {
-                InnerBackendDevice::Gpu(d) => infer::<Wgpu>(model_dir(), item, d),
-                InnerBackendDevice::Cpu(d) => infer::<NdArray>(model_dir(), item, d),
-            };
-            let Ok(target) = target else {
-                error!("Assistant failed: {}", target.unwrap_err());
-                return Vec::new();
-            };
+                let ops = get_swap_operations(&mut app_ids, &target);
 
-            get_swap_operations(&mut app_ids, &target)
-        })
-        .join()
-        .unwrap();
-
-        for (lhs, rhs) in ops {
-            self.swap_tiling_window(&mappeds[lhs].wl_surface(), &mappeds[rhs].wl_surface());
+                for (lhs, rhs) in ops {
+                    self.swap_tiling_window(&mappeds[lhs].wl_surface(), &mappeds[rhs].wl_surface());
+                }
+            }
+            Err(e) => {
+                error!("Assistant failed: {e}");
+            }
         }
     }
 }
