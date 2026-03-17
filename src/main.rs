@@ -2,28 +2,12 @@
 
 use std::env;
 
-use notify::INotifyWatcher;
+use loomwm::{
+    CompositorData, backend::Backend, config::Config, state::WindowManagerState, watcher,
+};
 use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 use tracing::level_filters::LevelFilter;
 
-use crate::{backend::Backend, config::Config, state::WindowManagerState};
-
-mod backend;
-mod config;
-mod handlers;
-mod input;
-mod monitor;
-mod path;
-mod state;
-mod utils;
-mod watcher;
-mod window;
-
-pub struct CompositorData {
-    pub compositor: WindowManagerState,
-    pub backend: Backend,
-    pub watcher: Option<INotifyWatcher>,
-}
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt()
         .with_max_level(LevelFilter::INFO)
@@ -32,7 +16,7 @@ fn main() -> Result<(), anyhow::Error> {
     let config = Config::read()?;
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WindowManagerState> = Display::new()?;
-    let mut backend = Backend::new(event_loop.handle())?;
+    let mut backend = Backend::new_winit(event_loop.handle())?;
     let mut compositor = WindowManagerState::new(
         event_loop.handle(),
         event_loop.get_signal(),

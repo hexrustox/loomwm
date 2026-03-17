@@ -22,6 +22,12 @@ pub struct BackendDevice {
     ready: Arc<Condvar>,
 }
 
+impl Default for BackendDevice {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BackendDevice {
     pub fn new() -> Self {
         Self {
@@ -56,6 +62,12 @@ impl BackendDevice {
 }
 
 pub struct LayoutHistory(Arc<Mutex<InnerLayoutHistory>>);
+
+impl Default for LayoutHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LayoutHistory {
     pub fn new() -> Self {

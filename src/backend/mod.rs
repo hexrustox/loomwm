@@ -15,11 +15,16 @@ pub enum Backend {
 }
 
 impl Backend {
-    pub fn new(event_loop: LoopHandle<CompositorData>) -> anyhow::Result<Self> {
+    pub fn new_winit(event_loop: LoopHandle<CompositorData>) -> anyhow::Result<Self> {
         Ok(Self::Winit(Box::new(
             Winit::new(event_loop).map_err(|e| anyhow::anyhow!("{e}"))?,
         )))
     }
+
+    pub fn new_headless() -> Self {
+        Self::Headless(Headless::new())
+    }
+
     pub fn winit(&mut self) -> &mut Winit {
         match self {
             Self::Winit(x) => x,

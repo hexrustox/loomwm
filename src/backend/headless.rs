@@ -7,6 +7,12 @@ use crate::state::WindowManagerState;
 
 pub struct Headless {}
 
+impl Default for Headless {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Headless {
     pub fn new() -> Self {
         Self {}
