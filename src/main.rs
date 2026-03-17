@@ -2,16 +2,11 @@
 
 use std::env;
 
-use anyhow::anyhow;
 use notify::INotifyWatcher;
 use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 use tracing::level_filters::LevelFilter;
 
-use crate::{
-    backend::{Backend, Winit},
-    config::Config,
-    state::WindowManagerState,
-};
+use crate::{backend::Backend, config::Config, state::WindowManagerState};
 
 mod backend;
 mod config;
@@ -37,7 +32,7 @@ fn main() -> Result<(), anyhow::Error> {
     let config = Config::read()?;
     let mut event_loop: EventLoop<CompositorData> = EventLoop::try_new()?;
     let display: Display<WindowManagerState> = Display::new()?;
-    let mut backend = Backend::Winit(Winit::new(event_loop.handle()).map_err(|e| anyhow!("{e}"))?);
+    let mut backend = Backend::new(event_loop.handle())?;
     let mut compositor = WindowManagerState::new(
         event_loop.handle(),
         event_loop.get_signal(),

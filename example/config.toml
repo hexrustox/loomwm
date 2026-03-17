@@ -90,5 +90,5 @@ repeat-rate = 25
 resize-at = "edge_or_corner"
 
 [assistant]
-# enable = false
+enable = false
 save-layout-after = 10
