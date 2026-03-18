@@ -24,6 +24,7 @@ where
     root: TileId,
     current_tile: TileId,
     layouts: Rc<LayoutSet>,
+    count: u32,
 }
 
 pub type TileRatio = f64;
@@ -342,6 +343,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             root,
             current_tile: root,
             layouts,
+            count: 0,
         }
     }
 
@@ -411,6 +413,8 @@ impl<T: TileTreeWindow> TileTree<T> {
                                 .push(tile_id);
                         }
                     }
+
+                    self.count += 1;
 
                     return None;
                 }
@@ -522,12 +526,15 @@ impl<T: TileTreeWindow> TileTree<T> {
             let layout = self.layouts.get(&schema);
             self.root = Self::create_layout_tile(&mut self.arena, &layout, schema, 1.0, None);
             self.current_tile = self.root;
+            self.count = 0;
 
             for id in window_ids {
                 self.insert(TileInsertion::Id(id));
             }
+
             return self.arena.remove(target_id).map(|tile| tile.into_window());
         }
+
         None
     }
 
@@ -690,6 +697,10 @@ impl<T: TileTreeWindow> TileTree<T> {
                 _ => None,
             }
         })
+    }
+
+    pub fn windows_count(&self) -> u32 {
+        self.count
     }
 
     pub fn swap_window<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {
@@ -1405,6 +1416,7 @@ mod tests {
                 root,
                 current_tile: root,
                 layouts: Rc::new(LayoutSet(HashMap::new())),
+                count: 0,
             }
         }};
     }
@@ -1721,6 +1733,9 @@ mod tests {
             tree.insert(TestWindow::new());
         }
         assert_tree_eq!(tree, expected);
+        if !tree.arena[tree.root].as_layout_tiles().is_empty() {
+            assert_eq!(tree.count, tiles);
+        }
     }
 
     #[test]
@@ -1972,6 +1987,7 @@ mod tests {
             Some(Some(remove))
         );
         assert_tree_eq!(tree, expected);
+        assert_eq!(tree.count, tiles - 1);
     }
 
     #[test]

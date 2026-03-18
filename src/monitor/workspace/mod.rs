@@ -116,6 +116,10 @@ impl Workspace {
         self.tiling.windows_iter()
     }
 
+    pub fn windows_count(&self) -> usize {
+        self.floating.len() + self.tiling.windows_count() as usize
+    }
+
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
         self.windows_iter()
             .find(|mapped| mapped.wl_surface() == *surface)

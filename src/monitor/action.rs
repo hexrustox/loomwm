@@ -210,8 +210,7 @@ impl WindowManagerState {
 
         let old_workspace_name = monitor.get_active_workspace_name().clone();
         let old_workspace = monitor.get_workspace(&old_workspace_name);
-        // TODO improve efficiency
-        if old_workspace.windows_iter().count() == 0 {
+        if old_workspace.windows_count() == 0 {
             monitor.remove_workspace(&old_workspace_name);
         }
 
