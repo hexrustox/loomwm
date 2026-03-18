@@ -35,12 +35,7 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     event_loop.run(None, &mut data, |data| {
-        data.compositor.refresh();
-
-        data.backend.render(&mut data.compositor);
-        data.compositor.send_frame_to_windows();
-
-        data.compositor.display_handle.flush_clients().unwrap();
+        data.refresh_windows_and_flush_clients();
     })?;
 
     Ok(())

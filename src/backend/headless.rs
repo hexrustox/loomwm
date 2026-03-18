@@ -1,11 +1,17 @@
 use smithay::{
+    backend::{
+        egl::{EGLContext, EGLDisplay, native::EGLSurfacelessDisplay},
+        renderer::gles::GlesRenderer,
+    },
     output::{Mode, Output, PhysicalProperties, Subpixel},
     utils::{Physical, Size},
 };
 
 use crate::state::WindowManagerState;
 
-pub struct Headless {}
+pub struct Headless {
+    renderer: Option<GlesRenderer>,
+}
 
 impl Default for Headless {
     fn default() -> Self {
@@ -15,7 +21,7 @@ impl Default for Headless {
 
 impl Headless {
     pub fn new() -> Self {
-        Self {}
+        Self { renderer: None }
     }
 
     pub fn add_output(
@@ -45,6 +51,18 @@ impl Headless {
             .push(output, data.layout_set.clone(), data.default_layout.clone());
     }
 
-    pub fn init(&self) {}
-    pub fn render(&self) {}
+    pub fn init(&mut self) {
+        let renderer = unsafe {
+            let display = EGLDisplay::new(EGLSurfacelessDisplay).unwrap();
+            let context = EGLContext::new(&display).unwrap();
+            GlesRenderer::new(context).unwrap()
+        };
+
+        self.renderer = Some(renderer);
+    }
+
+    pub fn render(&mut self, data: &mut WindowManagerState) {
+        let renderer = self.renderer.as_mut().unwrap();
+        let _ = data.render_elements(renderer);
+    }
 }

@@ -1,8 +1,7 @@
 use std::{
-    process::Command,
+    process::{Command, Stdio},
     sync::mpsc::channel,
-    thread::{sleep, spawn},
-    time::Duration,
+    thread::spawn,
 };
 
 use loomwm::{CompositorData, backend::Backend, config::Config, state::WindowManagerState};
@@ -11,7 +10,6 @@ use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 #[test]
 fn new_window() {
     let (s_s, s_r) = channel();
-    let (c_s, c_r) = channel();
 
     let h = spawn(move || {
         let mut event_loop = EventLoop::try_new().unwrap();
@@ -23,12 +21,12 @@ fn new_window() {
             display,
             Config::default(),
         );
+        backend.headless().init();
         backend.headless().add_output(&mut compositor, (0, 0));
 
         unsafe {
             std::env::set_var("WAYLAND_DISPLAY", &compositor.socket_name);
         }
-
         s_s.send(()).unwrap();
 
         let mut data = CompositorData {
@@ -39,22 +37,23 @@ fn new_window() {
 
         event_loop
             .run(None, &mut data, |data| {
-                if let Ok(()) = c_r.try_recv() {
+                let m = data.compositor.monitors.get_monitor();
+                if m.get_workspace(m.get_active_workspace_name())
+                    .windows_count()
+                    == 1
+                {
                     data.compositor.event_signal.stop();
+                } else {
+                    data.refresh_windows_and_flush_clients();
                 }
             })
             .unwrap();
     });
 
-    s_r.recv().unwrap();
-
-    let mut child = Command::new("alacritty").spawn().unwrap();
-    sleep(Duration::from_millis(100));
-
-    c_s.send(()).unwrap();
-
-    child.kill().ok();
-    child.wait().ok();
+    spawn(move || {
+        s_r.recv().unwrap();
+        let _ = Command::new("alacritty").stderr(Stdio::null()).status();
+    });
 
     h.join().unwrap();
 }

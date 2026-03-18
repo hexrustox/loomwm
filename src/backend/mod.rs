@@ -10,7 +10,7 @@ pub mod headless;
 pub mod winit;
 
 pub enum Backend {
-    Headless(Headless),
+    Headless(Box<Headless>),
     Winit(Box<Winit>),
 }
 
@@ -22,7 +22,7 @@ impl Backend {
     }
 
     pub fn new_headless() -> Self {
-        Self::Headless(Headless::new())
+        Self::Headless(Box::default())
     }
 
     pub fn winit(&mut self) -> &mut Winit {
@@ -49,7 +49,7 @@ impl Backend {
     pub fn render(&mut self, data: &mut WindowManagerState) {
         match self {
             Self::Winit(winit) => winit.render(data),
-            Self::Headless(headless) => headless.render(),
+            Self::Headless(headless) => headless.render(data),
         }
     }
 }
