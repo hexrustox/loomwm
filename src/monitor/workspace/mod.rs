@@ -112,6 +112,10 @@ impl Workspace {
         .chain(self.tiling.windows_iter())
     }
 
+    pub fn floating_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> + Clone {
+        self.floating.iter()
+    }
+
     pub fn tiling_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> + Clone {
         self.tiling.windows_iter()
     }
