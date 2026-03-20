@@ -1,12 +1,11 @@
-use std::{
-    process::{Command, Stdio},
-    thread::{sleep, spawn},
-    time::Duration,
-};
+use std::{thread::sleep, time::Duration};
 
 use loomwm::{config::Config, utils::get_app_id_and_title};
 
-use crate::common::{TestState, assert_tiling_windows_title, has_n_windows, run_compositor_test};
+use crate::common::{
+    TestState, assert_tiling_windows_title, done, has_n_windows, is_focused, run_compositor_test,
+    spawn_alacritty, wait_until,
+};
 
 mod common;
 
@@ -25,155 +24,119 @@ default = "main"
     .unwrap()
 }
 
+fn get_active_workspace(data: &loomwm::CompositorData) -> &loomwm::monitor::Workspace {
+    let monitor = data.compositor.monitors.get_monitor();
+    monitor.get_workspace(monitor.get_active_workspace_name())
+}
+
 #[test]
 fn todo_1() {
-    let h = run_compositor_test(default_config(), (), |d, _| {
-        if has_n_windows(d, 1) {
-            TestState::Done(Box::new(|_| {}))
-        } else {
-            TestState::Running(())
-        }
-    });
+    let handle = run_compositor_test(
+        default_config(),
+        (),
+        wait_until(|data| has_n_windows(data, 1), Box::new(|_| {})),
+    );
 
-    spawn(move || {
-        let _ = Command::new("alacritty").stderr(Stdio::null()).spawn();
-    });
+    spawn_alacritty(None);
 
-    h.join().unwrap();
+    handle.join().unwrap();
 }
 
 #[test]
 fn todo_2() {
-    let ts = [0, 1, 2];
+    let titles = [0, 1, 2];
 
-    let h = run_compositor_test(
+    let handle = run_compositor_test(
         tiling_config("nodes = [{ repeat = 3 }]"),
         (),
-        move |d, _| {
-            if has_n_windows(d, 3) {
-                TestState::Done(Box::new(move |d| {
-                    assert_tiling_windows_title(d, ts.iter().map(|n| n.to_string()).collect());
-                }))
-            } else {
-                TestState::Running(())
-            }
-        },
+        wait_until(
+            |data| has_n_windows(data, 3),
+            Box::new(move |data| {
+                assert_tiling_windows_title(data, titles.iter().map(|n| n.to_string()).collect());
+            }),
+        ),
     );
 
-    for i in ts {
-        spawn(move || {
-            let _ = Command::new("alacritty")
-                .args(["-T", &i.to_string()])
-                .stderr(Stdio::null())
-                .spawn();
-        });
+    for title in titles {
+        spawn_alacritty(Some(title.to_string()));
         sleep(Duration::from_millis(50));
     }
 
-    h.join().unwrap();
+    handle.join().unwrap();
 }
 
 #[test]
 fn todo_3() {
-    let h = run_compositor_test(tiling_config("nodes = [{ }]"), (), |d, _| {
-        if has_n_windows(d, 2) {
-            TestState::Done(Box::new(|d| {
-                let m = d.compositor.monitors.get_monitor();
-                let w = m.get_workspace(m.get_active_workspace_name());
-                assert!(w.floating_windows_iter().count() == 1);
-                assert!(w.tiling_windows_iter().count() == 1);
-            }))
-        } else {
-            TestState::Running(())
-        }
-    });
+    let handle = run_compositor_test(
+        tiling_config("nodes = [{ }]"),
+        (),
+        wait_until(
+            |data| has_n_windows(data, 2),
+            Box::new(|data| {
+                let workspace = get_active_workspace(data);
+                assert!(workspace.floating_windows_iter().count() == 1);
+                assert!(workspace.tiling_windows_iter().count() == 1);
+            }),
+        ),
+    );
 
-    for _ in 0..2 {
-        spawn(move || {
-            let _ = Command::new("alacritty").stderr(Stdio::null()).spawn();
-        });
-    }
+    spawn_alacritty(None);
+    sleep(Duration::from_millis(50));
+    spawn_alacritty(None);
 
-    h.join().unwrap();
+    handle.join().unwrap();
 }
 
 #[test]
 fn todo_4() {
-    let h = run_compositor_test(default_config(), (), |d, _| {
-        if has_n_windows(d, 1) {
-            TestState::Done(Box::new(|d| {
-                let m = d.compositor.monitors.get_monitor();
-                let w = m.get_workspace(m.get_active_workspace_name());
-                let m_w = w.floating_windows_iter().next().unwrap();
-                assert!(
-                    d.compositor
-                        .get_keyboard()
-                        .current_focus()
-                        .is_some_and(|s| m_w.wl_surface() == s)
-                );
-            }))
-        } else {
-            TestState::Running(())
-        }
-    });
+    let handle = run_compositor_test(
+        default_config(),
+        (),
+        wait_until(
+            |data| has_n_windows(data, 1),
+            Box::new(|data| {
+                let workspace = get_active_workspace(data);
+                let mapped = workspace.floating_windows_iter().next().unwrap();
+                assert!(is_focused(data, mapped.wl_surface()));
+            }),
+        ),
+    );
 
-    spawn(move || {
-        let _ = Command::new("alacritty").stderr(Stdio::null()).spawn();
-    });
+    spawn_alacritty(None);
 
-    h.join().unwrap();
+    handle.join().unwrap();
 }
 
 #[test]
 fn todo_5() {
-    let ts = [0, 1];
+    let titles = [0, 1];
 
-    let h = run_compositor_test(default_config(), 0u8, move |d, phase| match phase {
-        0 if has_n_windows(d, 2) => {
-            assert_tiling_windows_title(d, ts.iter().map(|n| n.to_string()).collect());
-            let m = d.compositor.monitors.get_monitor();
-            let w = m.get_workspace(m.get_active_workspace_name());
-            let mut iter = w.floating_windows_iter();
-            let m_w = iter.next().unwrap();
-            assert!(
-                d.compositor
-                    .get_keyboard()
-                    .current_focus()
-                    .is_some_and(|s| m_w.wl_surface() == s)
-            );
-            let s = m_w.wl_surface();
-            let (_, t) = get_app_id_and_title(&s);
-            assert_eq!(t, "1");
-            drop(iter);
+    let handle = run_compositor_test(default_config(), 0u8, move |data, phase| match phase {
+        0 if has_n_windows(data, 2) => {
+            assert_tiling_windows_title(data, titles.iter().map(|n| n.to_string()).collect());
+            let workspace = get_active_workspace(data);
+            let mapped = workspace.floating_windows_iter().next().unwrap();
+            assert!(is_focused(data, mapped.wl_surface()));
+            let (_, title) = get_app_id_and_title(&mapped.wl_surface());
+            assert_eq!(title, "1");
 
-            d.compositor.close_focused_window();
+            data.compositor.close_focused_window();
             TestState::Running(1)
         }
-        1 if has_n_windows(d, 1) => TestState::Done(Box::new(|d| {
-            let m = d.compositor.monitors.get_monitor();
-            let w = m.get_workspace(m.get_active_workspace_name());
-            let m_w = w.floating_windows_iter().next().unwrap();
-            let (_, t) = get_app_id_and_title(&m_w.wl_surface());
-            assert_eq!(t, "0");
-            assert!(
-                d.compositor
-                    .get_keyboard()
-                    .current_focus()
-                    .is_some_and(|s| m_w.wl_surface() == s)
-            );
-        })),
+        1 if has_n_windows(data, 1) => done(|data| {
+            let workspace = get_active_workspace(data);
+            let mapped = workspace.floating_windows_iter().next().unwrap();
+            assert!(is_focused(data, mapped.wl_surface()));
+            let (_, title) = get_app_id_and_title(&mapped.wl_surface());
+            assert_eq!(title, "0");
+        }),
         _ => TestState::Running(phase),
     });
 
-    for i in ts {
-        spawn(move || {
-            let _ = Command::new("alacritty")
-                .args(["-T", &i.to_string()])
-                .stderr(Stdio::null())
-                .spawn();
-        });
+    for title in titles {
+        spawn_alacritty(Some(title.to_string()));
         sleep(Duration::from_millis(50));
     }
 
-    h.join().unwrap();
+    handle.join().unwrap();
 }

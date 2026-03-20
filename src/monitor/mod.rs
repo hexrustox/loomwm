@@ -9,7 +9,6 @@ use smithay::{
 };
 
 use crate::{
-    monitor::workspace::Workspace,
     state::WindowManagerState,
     utils::{
         get_monotonic_time,
@@ -19,7 +18,9 @@ use crate::{
 };
 
 pub use assistant::{BackendDevice, LayoutHistory};
-pub use workspace::{LayoutSet, TileRatio, TileTreeSearchKey, TileTreeWindow, WorkspaceName};
+pub use workspace::{
+    LayoutSet, TileRatio, TileTreeSearchKey, TileTreeWindow, Workspace, WorkspaceName,
+};
 
 mod action;
 mod assistant;

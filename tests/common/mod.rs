@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    process::{Command, Stdio},
     sync::mpsc::channel,
     thread::{JoinHandle, spawn},
     time::{Duration, Instant},
@@ -9,13 +10,52 @@ use loomwm::{
     CompositorData, backend::Backend, config::Config, state::WindowManagerState,
     utils::get_app_id_and_title,
 };
-use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
+use smithay::reexports::{
+    calloop::EventLoop, wayland_server::Display, wayland_server::protocol::wl_surface::WlSurface,
+};
 
-type DoneAssertion = Box<dyn Fn(&mut CompositorData)>;
+use crate::get_active_workspace;
+
+type DoneAssertion = Box<dyn Fn(&mut CompositorData) + Send>;
 
 pub enum TestState<C> {
     Running(C),
     Done(DoneAssertion),
+}
+
+pub fn done<C>(f: impl Fn(&mut CompositorData) + Send + 'static) -> TestState<C> {
+    TestState::Done(Box::new(f))
+}
+
+pub fn wait_until<C>(
+    check: impl Fn(&CompositorData) -> bool + 'static,
+    assertion: DoneAssertion,
+) -> impl FnMut(&mut CompositorData, C) -> TestState<C> {
+    let assertion = RefCell::new(Some(assertion));
+    move |data, state| {
+        if check(data) {
+            let assertion = assertion.borrow_mut().take().unwrap();
+            TestState::Done(assertion)
+        } else {
+            TestState::Running(state)
+        }
+    }
+}
+
+pub fn is_focused(data: &CompositorData, surface: WlSurface) -> bool {
+    let current = data.compositor.get_keyboard().current_focus();
+    current.is_some_and(|s| s == surface)
+}
+
+pub fn spawn_alacritty(title: Option<String>) {
+    spawn(move || {
+        let mut cmd = Command::new("alacritty");
+        cmd.stderr(Stdio::null());
+        if let Some(t) = title {
+            cmd.args(["-T", &t]);
+        }
+        let _ = cmd.spawn();
+    });
 }
 
 pub fn run_compositor_test<C>(
@@ -26,16 +66,16 @@ pub fn run_compositor_test<C>(
 where
     C: Clone + Send + 'static,
 {
-    let (s_s, s_r) = channel();
+    let (tx, rx) = channel();
 
-    let h = spawn(move || {
+    let handle = spawn(move || {
         let (event_loop, data) = setup_compositor(config);
-        s_s.send(()).unwrap();
+        tx.send(()).unwrap();
         run_event_loop(event_loop, data, initial_state, update);
     });
 
-    s_r.recv().unwrap();
-    h
+    rx.recv().unwrap();
+    handle
 }
 
 pub fn run_event_loop<C>(
@@ -46,12 +86,12 @@ pub fn run_event_loop<C>(
 ) where
     C: Clone,
 {
-    let end = Instant::now() + Duration::from_millis(1000);
+    let deadline = Instant::now() + Duration::from_millis(1000);
     let state = RefCell::new(TestState::Running(initial_state));
 
     event_loop
         .run(None, &mut data, |data| {
-            if Instant::now() >= end {
+            if Instant::now() >= deadline {
                 panic!("Timeout");
             }
 
@@ -98,21 +138,15 @@ pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, 
 }
 
 pub fn has_n_windows(data: &CompositorData, expected: usize) -> bool {
-    let m = data.compositor.monitors.get_monitor();
-    m.get_workspace(m.get_active_workspace_name())
-        .windows_count()
-        == expected
+    get_active_workspace(data).windows_count() == expected
 }
 
-pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) -> bool {
-    let m = data.compositor.monitors.get_monitor();
-    let iter = m
-        .get_workspace(m.get_active_workspace_name())
-        .tiling_windows_iter();
+pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) {
+    let iter = get_active_workspace(data).tiling_windows_iter();
 
-    for (w, expected_title) in iter.zip(expected_titles) {
-        let (_, t) = get_app_id_and_title(&w.wl_surface());
-        assert_eq!(t, expected_title);
+    for (mapped, expected_title) in iter.zip(expected_titles) {
+        let surface = mapped.wl_surface();
+        let (_, title) = get_app_id_and_title(&surface);
+        assert_eq!(title, expected_title);
     }
-    true
 }
