@@ -286,24 +286,24 @@ impl Rect {
     }
 
     fn overlaps_horizontally(&self, other: &Rect) -> bool {
-        self.left() <= other.right() && self.right() >= other.left()
+        self.left() < other.right() && self.right() > other.left()
     }
 
     fn overlaps_vertically(&self, other: &Rect) -> bool {
-        self.top() <= other.bottom() && self.bottom() >= other.top()
+        self.top() < other.bottom() && self.bottom() > other.top()
     }
 
     fn is_in_direction(&self, direction: Direction, target: &Rect) -> bool {
-        direction.contains(Direction::TOP)
+        direction == Direction::TOP
             && self.bottom() <= target.top()
             && self.overlaps_horizontally(target)
-            || direction.contains(Direction::BOTTOM)
+            || direction == Direction::BOTTOM
                 && self.top() >= target.bottom()
                 && self.overlaps_horizontally(target)
-            || direction.contains(Direction::LEFT)
+            || direction == Direction::LEFT
                 && self.right() <= target.left()
                 && self.overlaps_vertically(target)
-            || direction.contains(Direction::RIGHT)
+            || direction == Direction::RIGHT
                 && self.left() >= target.right()
                 && self.overlaps_vertically(target)
     }
@@ -797,9 +797,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         direction: Direction,
         target_rect: &Rect,
     ) -> Vec<&T> {
-        #[cfg(test)]
-        assert!(direction.bits().count_ones() == 1);
-
         let Some((parent_id, child_id)) = self.find_parent_with_split(
             target_id,
             if direction.intersects(Direction::LEFT | Direction::RIGHT) {
@@ -923,6 +920,9 @@ impl<T: TileTreeWindow> TileTree<T> {
         key: impl SearchKey<'a>,
         direction: Direction,
     ) -> Vec<&T> {
+        #[cfg(test)]
+        assert!(direction.bits().count_ones() == 1);
+
         let Some(target_id) = self.find_tile_id(key.into()) else {
             return Vec::new();
         };
@@ -932,16 +932,13 @@ impl<T: TileTreeWindow> TileTree<T> {
             target_window.get_size(),
         ));
 
-        let mut results = Vec::new();
         if direction.intersects(Direction::TOP | Direction::BOTTOM) {
             let direction = direction.intersection(Direction::TOP | Direction::BOTTOM);
-            results.extend(self.find_windows_in_direction(target_id, direction, &target_rect));
-        }
-        if direction.intersects(Direction::LEFT | Direction::RIGHT) {
+            self.find_windows_in_direction(target_id, direction, &target_rect)
+        } else {
             let direction = direction.intersection(Direction::LEFT | Direction::RIGHT);
-            results.extend(self.find_windows_in_direction(target_id, direction, &target_rect));
+            self.find_windows_in_direction(target_id, direction, &target_rect)
         }
-        results
     }
 
     fn adjust_adjacent_ratios(
@@ -2474,24 +2471,36 @@ mod tests {
         "navigate_deeply_nested_layout"
     )]
     #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+            ],
+            layout() [
+                window(id: 2),
+                window(id: 3),
+            ],
         ]),
-        0,
-        Direction::TOP_LEFT,
-        vec![];
-        "todo1"
+        3,
+        Direction::TOP,
+        vec![1];
+        "up_across_boundary"
     )]
     #[test_case(
-        tile_tree!(layout() [
-            window(id: 0),
-            window(id: 1),
+        tile_tree!(layout(split: Horizontal) [
+            layout() [
+                window(id: 0),
+                window(id: 1),
+            ],
+            layout() [
+                window(id: 2),
+                window(id: 3),
+            ],
         ]),
-        1,
-        Direction::BOTTOM_LEFT,
-        vec![0];
-        "todo2"
+        3,
+        Direction::LEFT,
+        vec![2];
+        "left_across_boundary"
     )]
     fn test_find_nearest_windows_in_direction(
         mut tree: TileTree<TestWindow>,
