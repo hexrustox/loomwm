@@ -1,6 +1,7 @@
 use std::{
     sync::mpsc::channel,
     thread::{JoinHandle, spawn},
+    time::{Duration, Instant},
 };
 
 use loomwm::{
@@ -9,16 +10,17 @@ use loomwm::{
 };
 use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 
-pub fn run_compositor_test<F>(config: Config, test_fn: F) -> JoinHandle<()>
+pub fn run_compositor_test<C, A>(config: Config, condition: C, assertion: A) -> JoinHandle<()>
 where
-    F: Fn(&mut CompositorData) -> bool + Send + 'static,
+    C: Fn(&mut CompositorData) -> bool + Send + 'static,
+    A: Fn(&mut CompositorData) + Send + 'static,
 {
     let (s_s, s_r) = channel();
 
     let h = spawn(move || {
         let (event_loop, data) = setup_compositor(config);
         s_s.send(()).unwrap();
-        run_event_loop(event_loop, data, |d| test_fn(d));
+        run_event_loop(event_loop, data, condition, assertion);
     });
 
     s_r.recv().unwrap();
@@ -52,16 +54,24 @@ pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, 
     (event_loop, data)
 }
 
-pub fn run_event_loop<F>(
+pub fn run_event_loop<C, A>(
     mut event_loop: EventLoop<'static, CompositorData>,
     mut data: CompositorData,
-    condition: F,
+    condition: C,
+    assertion: A,
 ) where
-    F: Fn(&mut CompositorData) -> bool,
+    C: Fn(&mut CompositorData) -> bool,
+    A: Fn(&mut CompositorData),
 {
+    let end = Instant::now() + Duration::from_millis(1000);
     event_loop
         .run(None, &mut data, |data| {
+            if Instant::now() >= end {
+                panic!("Timeout");
+            }
+
             if condition(data) {
+                assertion(data);
                 data.compositor.event_signal.stop();
             } else {
                 data.refresh_windows_and_flush_clients();
@@ -70,7 +80,7 @@ pub fn run_event_loop<F>(
         .unwrap();
 }
 
-pub fn assert_window_count(data: &CompositorData, expected: usize) -> bool {
+pub fn has_n_windows(data: &CompositorData, expected: usize) -> bool {
     let m = data.compositor.monitors.get_monitor();
     m.get_workspace(m.get_active_workspace_name())
         .windows_count()
@@ -78,10 +88,6 @@ pub fn assert_window_count(data: &CompositorData, expected: usize) -> bool {
 }
 
 pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) -> bool {
-    if !assert_window_count(data, expected_titles.len()) {
-        return false;
-    }
-
     let m = data.compositor.monitors.get_monitor();
     let iter = m
         .get_workspace(m.get_active_workspace_name())
