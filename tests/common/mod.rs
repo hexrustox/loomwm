@@ -2,19 +2,17 @@ use std::{
     cell::RefCell,
     process::{Command, Stdio},
     sync::mpsc::channel,
-    thread::{JoinHandle, spawn},
+    thread::{JoinHandle, sleep, spawn},
     time::{Duration, Instant},
 };
 
 use loomwm::{
-    CompositorData, backend::Backend, config::Config, state::WindowManagerState,
-    utils::get_app_id_and_title,
+    CompositorData, backend::Backend, config::Config, monitor::Workspace,
+    state::WindowManagerState, utils::get_app_id_and_title,
 };
 use smithay::reexports::{
     calloop::EventLoop, wayland_server::Display, wayland_server::protocol::wl_surface::WlSurface,
 };
-
-use crate::get_active_workspace;
 
 type DoneAssertion = Box<dyn Fn(&mut CompositorData) + Send>;
 
@@ -42,20 +40,14 @@ pub fn wait_until<C>(
     }
 }
 
+pub fn get_active_workspace(data: &loomwm::CompositorData) -> &Workspace {
+    let monitor = data.compositor.monitors.get_monitor();
+    monitor.get_workspace(monitor.get_active_workspace_name())
+}
+
 pub fn is_focused(data: &CompositorData, surface: WlSurface) -> bool {
     let current = data.compositor.get_keyboard().current_focus();
     current.is_some_and(|s| s == surface)
-}
-
-pub fn spawn_alacritty(title: Option<String>) {
-    spawn(move || {
-        let mut cmd = Command::new("alacritty");
-        cmd.stderr(Stdio::null());
-        if let Some(t) = title {
-            cmd.args(["-T", &t]);
-        }
-        let _ = cmd.spawn();
-    });
 }
 
 pub fn run_compositor_test<C>(
@@ -135,6 +127,18 @@ pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, 
     };
 
     (event_loop, data)
+}
+
+pub fn spawn_alacritty(title: Option<String>) {
+    spawn(move || {
+        let mut cmd = Command::new("alacritty");
+        cmd.stderr(Stdio::null());
+        if let Some(t) = title {
+            cmd.args(["-T", &t]);
+        }
+        let _ = cmd.spawn();
+        sleep(Duration::from_millis(50));
+    });
 }
 
 pub fn has_n_windows(data: &CompositorData, expected: usize) -> bool {
