@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     sync::mpsc::channel,
     thread::{JoinHandle, spawn},
     time::{Duration, Instant},
@@ -10,21 +11,63 @@ use loomwm::{
 };
 use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
 
-pub fn run_compositor_test<C, A>(config: Config, condition: C, assertion: A) -> JoinHandle<()>
+type DoneAssertion = Box<dyn Fn(&mut CompositorData)>;
+
+pub enum TestState<C> {
+    Running(C),
+    Done(DoneAssertion),
+}
+
+pub fn run_compositor_test<C>(
+    config: Config,
+    initial_state: C,
+    update: impl FnMut(&mut CompositorData, C) -> TestState<C> + Send + 'static,
+) -> JoinHandle<()>
 where
-    C: Fn(&mut CompositorData) -> bool + Send + 'static,
-    A: Fn(&mut CompositorData) + Send + 'static,
+    C: Clone + Send + 'static,
 {
     let (s_s, s_r) = channel();
 
     let h = spawn(move || {
         let (event_loop, data) = setup_compositor(config);
         s_s.send(()).unwrap();
-        run_event_loop(event_loop, data, condition, assertion);
+        run_event_loop(event_loop, data, initial_state, update);
     });
 
     s_r.recv().unwrap();
     h
+}
+
+pub fn run_event_loop<C>(
+    mut event_loop: EventLoop<'static, CompositorData>,
+    mut data: CompositorData,
+    initial_state: C,
+    mut update: impl FnMut(&mut CompositorData, C) -> TestState<C>,
+) where
+    C: Clone,
+{
+    let end = Instant::now() + Duration::from_millis(1000);
+    let state = RefCell::new(TestState::Running(initial_state));
+
+    event_loop
+        .run(None, &mut data, |data| {
+            if Instant::now() >= end {
+                panic!("Timeout");
+            }
+
+            let new_state = match &*state.borrow() {
+                TestState::Done(assert_fn) => {
+                    assert_fn(data);
+                    data.compositor.event_signal.stop();
+                    return;
+                }
+                TestState::Running(c) => update(data, c.clone()),
+            };
+            *state.borrow_mut() = new_state;
+
+            data.refresh_windows_and_flush_clients();
+        })
+        .unwrap();
 }
 
 pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, CompositorData) {
@@ -52,32 +95,6 @@ pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, 
     };
 
     (event_loop, data)
-}
-
-pub fn run_event_loop<C, A>(
-    mut event_loop: EventLoop<'static, CompositorData>,
-    mut data: CompositorData,
-    condition: C,
-    assertion: A,
-) where
-    C: Fn(&mut CompositorData) -> bool,
-    A: Fn(&mut CompositorData),
-{
-    let end = Instant::now() + Duration::from_millis(1000);
-    event_loop
-        .run(None, &mut data, |data| {
-            if Instant::now() >= end {
-                panic!("Timeout");
-            }
-
-            if condition(data) {
-                assertion(data);
-                data.compositor.event_signal.stop();
-            } else {
-                data.refresh_windows_and_flush_clients();
-            }
-        })
-        .unwrap();
 }
 
 pub fn has_n_windows(data: &CompositorData, expected: usize) -> bool {
