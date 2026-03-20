@@ -847,7 +847,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                         match split {
                             TileSplit::Vertical => {
                                 if let Some(tile) = {
-                                    if direction.intersects(Direction::LEFT) {
+                                    if direction == Direction::LEFT {
                                         match orientation {
                                             TileOrientation::BottomRight => tiles.last(),
                                             TileOrientation::TopLeft => tiles.first(),
@@ -876,7 +876,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                         match split {
                             TileSplit::Horizontal => {
                                 if let Some(tile) = {
-                                    if direction.intersects(Direction::TOP) {
+                                    if direction == Direction::TOP {
                                         match orientation {
                                             TileOrientation::BottomRight => tiles.last(),
                                             TileOrientation::TopLeft => tiles.first(),
