@@ -25,6 +25,21 @@ pub enum TestState<C> {
     Done(DoneAssertion),
 }
 
+pub fn default_config() -> Config {
+    Config::default()
+}
+
+pub fn tiling_config(layout: &str) -> Config {
+    toml::from_str::<Config>(&format!(
+        r#"[layouts]
+main = {{ {} }}
+default = "main"
+"#,
+        layout
+    ))
+    .unwrap()
+}
+
 pub fn run_compositor_test<C>(
     config: Config,
     initial_state: C,
@@ -172,6 +187,22 @@ pub fn get_next_window_in_workspace(
 pub fn is_focused(data: &CompositorData, surface: WlSurface) -> bool {
     let current = data.compositor.get_keyboard().current_focus();
     current.is_some_and(|s| s == surface)
+}
+
+pub fn get_active_workspace_name(data: &CompositorData) -> &WorkspaceName {
+    data.compositor
+        .monitors
+        .get_monitor()
+        .get_active_workspace_name()
+}
+
+pub fn assert_active_workspace_name(data: &CompositorData, expected: WorkspaceName) {
+    assert_eq!(get_active_workspace_name(data), &expected);
+}
+
+pub fn assert_window_focused_in_workspace(data: &CompositorData, workspace_name: WorkspaceName) {
+    let window = get_next_window_in_workspace(data, workspace_name);
+    assert!(is_focused(data, window.wl_surface()));
 }
 
 pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) {
