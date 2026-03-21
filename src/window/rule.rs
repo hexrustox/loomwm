@@ -187,7 +187,6 @@ impl Default for WindowProperties {
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct WindowOpeningProperties {
     #[serde(rename = "open-with-focus")]
     pub focus: Option<bool>,
