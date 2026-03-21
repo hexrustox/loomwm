@@ -7,8 +7,12 @@ use std::{
 };
 
 use loomwm::{
-    CompositorData, backend::Backend, config::Config, monitor::Workspace,
-    state::WindowManagerState, utils::get_app_id_and_title,
+    CompositorData,
+    backend::Backend,
+    config::Config,
+    monitor::{Workspace, WorkspaceName},
+    state::WindowManagerState,
+    utils::get_app_id_and_title,
 };
 use smithay::reexports::{
     calloop::EventLoop, wayland_server::Display, wayland_server::protocol::wl_surface::WlSurface,
@@ -141,8 +145,20 @@ pub fn spawn_alacritty(title: Option<String>) {
     });
 }
 
-pub fn has_n_windows(data: &CompositorData, expected: usize) -> bool {
+pub fn active_workspace_has_n_windows(data: &CompositorData, expected: usize) -> bool {
     get_active_workspace(data).windows_count() == expected
+}
+
+pub fn get_window_in_workspace(
+    data: &CompositorData,
+    workspace_name: WorkspaceName,
+) -> &loomwm::window::MappedWindow {
+    let monitor = data.compositor.monitors.get_monitor();
+    monitor
+        .get_workspace(&workspace_name)
+        .windows_iter()
+        .next()
+        .unwrap()
 }
 
 pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) {
