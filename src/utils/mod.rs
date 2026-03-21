@@ -145,3 +145,45 @@ impl Direction {
         self
     }
 }
+
+#[derive(Debug, Default, Clone, Hash, PartialEq)]
+pub struct RGBAColor(u32);
+
+impl RGBAColor {
+    pub fn new(v: u32) -> Self {
+        Self(v)
+    }
+
+    pub fn r(&self) -> u8 {
+        (self.0 >> 24) as u8
+    }
+
+    pub fn g(&self) -> u8 {
+        (self.0 >> 16) as u8
+    }
+
+    pub fn b(&self) -> u8 {
+        (self.0 >> 8) as u8
+    }
+
+    pub fn a(&self) -> u8 {
+        (self.0) as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(0xFF804020, 0xFF, 0x80, 0x40, 0x20; "opaque")]
+    #[test_case(0x00000000, 0x00, 0x00, 0x00, 0x00; "fully_transparent")]
+    #[test_case(0xFFFFFFFF, 0xFF, 0xFF, 0xFF, 0xFF; "white")]
+    fn test_rgba_color(rgba: u32, r: u8, g: u8, b: u8, a: u8) {
+        let color = RGBAColor::new(rgba);
+        assert_eq!(color.r(), r);
+        assert_eq!(color.g(), g);
+        assert_eq!(color.b(), b);
+        assert_eq!(color.a(), a);
+    }
+}

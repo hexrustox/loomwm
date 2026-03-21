@@ -6,8 +6,8 @@ use smithay::input::keyboard::xkb;
 
 use crate::{
     input::{KeyCombo, KeyModifiers, PointerCombo, WindowUnit},
-    utils::Direction,
-    window::rule::{RGBAColor, WindowLocation},
+    utils::{Direction, RGBAColor},
+    window::rule::WindowLocation,
 };
 
 impl<'de> Deserialize<'de> for Direction {

@@ -26,10 +26,10 @@ use crate::{
     input::grabs::floating_resize_grab::ResizeGrabState,
     monitor::{TileTreeSearchKey, TileTreeWindow},
     utils::{
-        Direction,
+        Direction, RGBAColor,
         types::{RenderElements, Renderer},
     },
-    window::rule::{RGBAColor, WindowBorder, WindowProperties},
+    window::rule::{WindowBorder, WindowProperties},
 };
 
 pub mod rule;
