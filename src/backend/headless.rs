@@ -61,6 +61,10 @@ impl Headless {
         self.renderer = Some(renderer);
     }
 
+    pub fn get_renderer(&mut self) -> &mut GlesRenderer {
+        self.renderer.as_mut().unwrap()
+    }
+
     pub fn render(&mut self, data: &mut WindowManagerState) {
         let renderer = self.renderer.as_mut().unwrap();
         let _ = data.render_elements(renderer);

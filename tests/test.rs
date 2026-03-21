@@ -28,6 +28,10 @@ default = "main"
 }
 
 mod integration_tests {
+    use std::cell::RefCell;
+
+    use loomwm::{input::WindowUnit, monitor::TileTreeWindow};
+
     use super::*;
 
     #[test]
@@ -308,6 +312,139 @@ mod integration_tests {
         for title in titles {
             spawn_alacritty(Some(title.to_string()));
         }
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_resize_window_in_direction() {
+        let handle = run_compositor_test(
+            tiling_config(r#"nodes = [{ repeat = 2 }]"#),
+            0,
+            move |data, phase| match phase {
+                0 if active_workspace_has_n_windows(data, 2) => {
+                    {
+                        let mut iter = get_active_workspace(data).tiling_windows_iter();
+                        let mapped = iter.next().unwrap();
+                        assert_eq!(mapped.get_size(), (50, 100).into());
+                        let mapped = iter.next().unwrap();
+                        assert_eq!(mapped.get_size(), (50, 100).into());
+                    }
+                    data.compositor
+                        .resize_focused_tiling_window(Direction::LEFT, WindowUnit::Px(10));
+                    TestState::Running(1)
+                }
+                1 => done(|data| {
+                    let mut iter = get_active_workspace(data).tiling_windows_iter();
+                    let mapped = iter.next().unwrap();
+                    assert_eq!(mapped.get_size(), (40, 100).into());
+                    let mapped = iter.next().unwrap();
+                    assert_eq!(mapped.get_size(), (60, 100).into());
+                }),
+                _ => TestState::Running(phase),
+            },
+        );
+
+        spawn_alacritty(None);
+        spawn_alacritty(None);
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_toggle_window_floating() {
+        let handle = run_compositor_test(
+            tiling_config(r#"nodes = [{ }]"#),
+            0,
+            move |data, phase| match phase {
+                0 if active_workspace_has_n_windows(data, 1) => {
+                    let workspace = get_active_workspace(data);
+                    assert_eq!(workspace.floating_windows_iter().count(), 0);
+                    assert_eq!(workspace.tiling_windows_iter().count(), 1);
+                    data.compositor.toggle_focused_window_floating(None);
+                    TestState::Running(1)
+                }
+                1 => done(|data| {
+                    let workspace = get_active_workspace(data);
+                    assert_eq!(workspace.floating_windows_iter().count(), 1);
+                    assert_eq!(workspace.tiling_windows_iter().count(), 0);
+                }),
+                _ => TestState::Running(phase),
+            },
+        );
+
+        spawn_alacritty(None);
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_toggle_floating_window_hidden() {
+        let elems = RefCell::new(0);
+        let handle = run_compositor_test(
+            tiling_config(r#"nodes = [{ }]"#),
+            0,
+            move |data, phase| match phase {
+                0 if active_workspace_has_n_windows(data, 2) => {
+                    let monitor = data.compositor.monitors.get_monitor_mut();
+                    let workspace =
+                        monitor.get_workspace_mut(&monitor.get_active_workspace_name().clone());
+                    let renderer = data.backend.headless().get_renderer();
+                    *elems.borrow_mut() = workspace.render_elements(renderer).len();
+
+                    assert!(!workspace.get_floating_window_hidden());
+                    let mapped = workspace.floating_windows_iter().next().unwrap().clone();
+                    assert!(is_focused(data, mapped.wl_surface()));
+
+                    data.compositor
+                        .set_focused_workspace_floating_window_hidden(None, Some(true));
+                    TestState::Running(1)
+                }
+                1 => {
+                    let monitor = data.compositor.monitors.get_monitor_mut();
+                    let workspace =
+                        monitor.get_workspace_mut(&monitor.get_active_workspace_name().clone());
+                    let renderer = data.backend.headless().get_renderer();
+                    assert!(*elems.borrow() > workspace.render_elements(renderer).len());
+
+                    assert!(workspace.get_floating_window_hidden());
+                    let mapped = workspace.tiling_windows_iter().next().unwrap().clone();
+                    assert!(is_focused(data, mapped.wl_surface()));
+
+                    data.compositor
+                        .set_focused_workspace_floating_window_hidden(None, Some(true));
+                    TestState::Running(2)
+                }
+                2 => {
+                    let workspace = get_active_workspace(data);
+                    assert!(!workspace.get_floating_window_hidden());
+                    let mapped = workspace.floating_windows_iter().next().unwrap().clone();
+                    assert!(is_focused(data, mapped.wl_surface()));
+
+                    data.compositor
+                        .set_focused_workspace_floating_window_hidden(Some(true), Some(false));
+                    TestState::Running(3)
+                }
+                3 => {
+                    let workspace = get_active_workspace(data);
+                    let mapped = workspace.tiling_windows_iter().next().unwrap().clone();
+                    assert!(is_focused(data, mapped.wl_surface()));
+
+                    data.compositor
+                        .set_focused_workspace_floating_window_hidden(Some(false), Some(false));
+                    TestState::Running(4)
+                }
+                4 => done(|data| {
+                    let workspace = get_active_workspace(data);
+                    let mapped = workspace.tiling_windows_iter().next().unwrap().clone();
+                    assert!(is_focused(data, mapped.wl_surface()));
+                }),
+                _ => TestState::Running(phase),
+            },
+        );
+
+        spawn_alacritty(None);
+        spawn_alacritty(None);
 
         handle.join().unwrap();
     }

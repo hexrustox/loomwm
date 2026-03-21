@@ -45,6 +45,33 @@ where
     handle
 }
 
+pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, CompositorData) {
+    let event_loop = EventLoop::try_new().unwrap();
+    let display = Display::new().unwrap();
+    let mut backend = Backend::new_headless();
+    let mut compositor = WindowManagerState::new(
+        event_loop.handle(),
+        event_loop.get_signal(),
+        display,
+        config,
+    );
+    backend.headless().init();
+    backend.headless().add_output(&mut compositor, (100, 100));
+
+    unsafe {
+        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        std::env::set_var("WAYLAND_DISPLAY", &compositor.socket_name);
+    }
+
+    let data = CompositorData {
+        compositor,
+        backend,
+        watcher: None,
+    };
+
+    (event_loop, data)
+}
+
 pub fn run_event_loop<C>(
     mut event_loop: EventLoop<'static, CompositorData>,
     mut data: CompositorData,
@@ -75,33 +102,6 @@ pub fn run_event_loop<C>(
             data.refresh_windows_and_flush_clients();
         })
         .unwrap();
-}
-
-pub fn setup_compositor(config: Config) -> (EventLoop<'static, CompositorData>, CompositorData) {
-    let event_loop = EventLoop::try_new().unwrap();
-    let display = Display::new().unwrap();
-    let mut backend = Backend::new_headless();
-    let mut compositor = WindowManagerState::new(
-        event_loop.handle(),
-        event_loop.get_signal(),
-        display,
-        config,
-    );
-    backend.headless().init();
-    backend.headless().add_output(&mut compositor, (0, 0));
-
-    unsafe {
-        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
-        std::env::set_var("WAYLAND_DISPLAY", &compositor.socket_name);
-    }
-
-    let data = CompositorData {
-        compositor,
-        backend,
-        watcher: None,
-    };
-
-    (event_loop, data)
 }
 
 pub fn spawn_alacritty(title: Option<String>) {
