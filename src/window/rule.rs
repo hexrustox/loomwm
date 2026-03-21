@@ -368,9 +368,29 @@ mod tests {
         "default_match"
     )]
     #[test_case(
+        vec![WindowRuleMatch { float: Some(true), ..Default::default() }, WindowRuleMatch::default()],
+        WindowRuleCandidate::default() => true;
+        "fallback_to_second_rule"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { app_id: Some("foo".into()), ..Default::default() }],
+        WindowRuleCandidate { app_id: "foobar".into(), ..Default::default() } => true;
+        "app_id_match"
+    )]
+    #[test_case(
         vec![WindowRuleMatch { app_id: Some("foo".into()), ..Default::default() }],
         WindowRuleCandidate::default() => false;
         "app_id_mismatch"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { title: Some("test".into()), ..Default::default() }],
+        WindowRuleCandidate { title: "my test window".into(), ..Default::default() } => true;
+        "title_match"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
+        WindowRuleCandidate { focus: true, ..Default::default() } => true;
+        "focus_match"
     )]
     #[test_case(
         vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
@@ -378,9 +398,44 @@ mod tests {
         "focus_mismatch"
     )]
     #[test_case(
-        vec![WindowRuleMatch { float: Some(true), ..Default::default() }, WindowRuleMatch::default()],
-        WindowRuleCandidate::default() => true;
-        "first_rule_mismatch"
+        vec![WindowRuleMatch { float: Some(true), ..Default::default() }],
+        WindowRuleCandidate { float: true, ..Default::default() } => true;
+        "float_match"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { float: Some(true), ..Default::default() }],
+        WindowRuleCandidate::default() => false;
+        "float_mismatch"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { is_swap_source: Some(true), ..Default::default() }],
+        WindowRuleCandidate { is_swap_source: true, ..Default::default() } => true;
+        "is_swap_source_match"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { is_swap_source: Some(false), ..Default::default() }],
+        WindowRuleCandidate { is_swap_source: true, ..Default::default() } => false;
+        "is_swap_source_mismatch"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { is_swap_target: Some(true), ..Default::default() }],
+        WindowRuleCandidate { is_swap_target: true, ..Default::default() } => true;
+        "is_swap_target_match"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { is_swap_target: Some(false), ..Default::default() }],
+        WindowRuleCandidate { is_swap_target: true, ..Default::default() } => false;
+        "is_swap_target_mismatch"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { workspace_name: Some(WorkspaceName::Id(1)), ..Default::default() }],
+        WindowRuleCandidate { workspace_name: WorkspaceName::Id(1), ..Default::default() } => true;
+        "workspace_name_match"
+    )]
+    #[test_case(
+        vec![WindowRuleMatch { workspace_name: Some(WorkspaceName::Id(1)), ..Default::default() }],
+        WindowRuleCandidate { workspace_name: WorkspaceName::Id(2), ..Default::default() } => false;
+        "workspace_name_mismatch"
     )]
     fn test_match_window_rule(
         matches: Vec<WindowRuleMatch>,
@@ -397,15 +452,113 @@ mod tests {
         WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() },
         WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() } =>
         WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() };
-        "opening_none_merge_some"
+        "lhs_none_rhs_some_keeps_none"
     )]
     #[test_case(
         WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() },
         WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() } =>
         WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() };
-        "opening_some_merge_none"
+        "lhs_some_rhs_none_keeps_some"
+    )]
+    #[test_case(
+        WindowProperties {
+            opening: Some(WindowOpeningProperties { focus: Some(true), state: None, workspace_name: None }),
+            dynamic: WindowDynamicProperties::default()
+        },
+        WindowProperties {
+            opening: Some(WindowOpeningProperties { focus: Some(false), state: None, workspace_name: None }),
+            dynamic: WindowDynamicProperties::default()
+        } =>
+        WindowProperties {
+            opening: Some(WindowOpeningProperties { focus: Some(false), state: None, workspace_name: None }),
+            dynamic: WindowDynamicProperties::default()
+        };
+        "both_some_rhs_opening_overrides"
+    )]
+    #[test_case(
+        WindowProperties {
+            opening: Some(WindowOpeningProperties::default()),
+            dynamic: WindowDynamicProperties { decoration: Some(WindowDecoration::ClientSide), border: None, opacity: None }
+        },
+        WindowProperties {
+            opening: Some(WindowOpeningProperties::default()),
+            dynamic: WindowDynamicProperties { decoration: Some(WindowDecoration::ServerSide), border: None, opacity: None }
+        } =>
+        WindowProperties {
+            opening: Some(WindowOpeningProperties::default()),
+            dynamic: WindowDynamicProperties { decoration: Some(WindowDecoration::ServerSide), border: None, opacity: None }
+        };
+        "both_some_rhs_dynamic_overrides"
     )]
     fn test_merge_properties(lhs: WindowProperties, rhs: WindowProperties) -> WindowProperties {
         lhs.merge(rhs)
+    }
+
+    #[test_case(0xFF804020, 0xFF, 0x80, 0x40, 0x20; "opaque")]
+    #[test_case(0x00000000, 0x00, 0x00, 0x00, 0x00; "fully_transparent")]
+    #[test_case(0xFFFFFFFF, 0xFF, 0xFF, 0xFF, 0xFF; "white")]
+    fn test_rgba_color(rgba: u32, r: u8, g: u8, b: u8, a: u8) {
+        let color = RGBAColor::new(rgba);
+        assert_eq!(color.r(), r);
+        assert_eq!(color.g(), g);
+        assert_eq!(color.b(), b);
+        assert_eq!(color.a(), a);
+    }
+
+    fn expect_opening(opening: Option<WindowOpeningProperties>) -> WindowProperties {
+        WindowProperties {
+            opening,
+            dynamic: WindowDynamicProperties::default(),
+        }
+    }
+
+    #[test_case(
+        vec![WindowRule {
+            matches: vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
+            properties: WindowProperties {
+                opening: Some(WindowOpeningProperties {
+                    focus: Some(false),
+                    state: Some(WindowState::Tile { ratio: None }),
+                    workspace_name: Some(WorkspaceName::Id(1)),
+                }),
+                dynamic: WindowDynamicProperties::default(),
+            },
+        }],
+        WindowRuleCandidate { focus: true, ..Default::default() } =>
+        expect_opening(Some(WindowOpeningProperties {
+            focus: Some(false),
+            state: Some(WindowState::Tile { ratio: None }),
+            workspace_name: Some(WorkspaceName::Id(1)),
+        }));
+        "rule_applies_and_candidate_updated"
+    )]
+    #[test_case(
+        vec![],
+        WindowRuleCandidate { focus: true, ..Default::default() } =>
+        expect_opening(Some(WindowOpeningProperties::default()));
+        "no_rules_returns_default_opening"
+    )]
+    #[test_case(
+        vec![WindowRule {
+            matches: vec![WindowRuleMatch { app_id: Some("nomatch".into()), ..Default::default() }],
+            properties: WindowProperties {
+                opening: Some(WindowOpeningProperties {
+                    focus: Some(true),
+                    state: None,
+                    workspace_name: None,
+                }),
+                dynamic: WindowDynamicProperties::default(),
+            },
+        }],
+        WindowRuleCandidate { app_id: "test".into(), ..Default::default() } =>
+        expect_opening(Some(WindowOpeningProperties::default()));
+        "rule_no_match_preserves_default_opening"
+    )]
+    fn test_get_properties(
+        rules: Vec<WindowRule>,
+        candidate: WindowRuleCandidate,
+    ) -> WindowProperties {
+        let window_rules = WindowRules(rules);
+        window_rules.get_properties(candidate, true)
     }
 }
