@@ -25,35 +25,6 @@ pub enum TestState<C> {
     Done(DoneAssertion),
 }
 
-pub fn done<C>(f: impl Fn(&mut CompositorData) + Send + 'static) -> TestState<C> {
-    TestState::Done(Box::new(f))
-}
-
-pub fn wait_until<C>(
-    check: impl Fn(&CompositorData) -> bool + 'static,
-    assertion: DoneAssertion,
-) -> impl FnMut(&mut CompositorData, C) -> TestState<C> {
-    let assertion = RefCell::new(Some(assertion));
-    move |data, state| {
-        if check(data) {
-            let assertion = assertion.borrow_mut().take().unwrap();
-            TestState::Done(assertion)
-        } else {
-            TestState::Running(state)
-        }
-    }
-}
-
-pub fn get_active_workspace(data: &loomwm::CompositorData) -> &Workspace {
-    let monitor = data.compositor.monitors.get_monitor();
-    monitor.get_workspace(monitor.get_active_workspace_name())
-}
-
-pub fn is_focused(data: &CompositorData, surface: WlSurface) -> bool {
-    let current = data.compositor.get_keyboard().current_focus();
-    current.is_some_and(|s| s == surface)
-}
-
 pub fn run_compositor_test<C>(
     config: Config,
     initial_state: C,
@@ -141,15 +112,52 @@ pub fn spawn_alacritty(title: Option<String>) {
             cmd.args(["-T", &t]);
         }
         let _ = cmd.spawn();
-        sleep(Duration::from_millis(50));
     });
+    sleep(Duration::from_millis(50));
+}
+
+pub fn wait_until<C>(
+    check: impl Fn(&CompositorData) -> bool + 'static,
+    assertion: DoneAssertion,
+) -> impl FnMut(&mut CompositorData, C) -> TestState<C> {
+    let assertion = RefCell::new(Some(assertion));
+    move |data, state| {
+        if check(data) {
+            let assertion = assertion.borrow_mut().take().unwrap();
+            TestState::Done(assertion)
+        } else {
+            TestState::Running(state)
+        }
+    }
+}
+
+pub fn done<C>(f: impl Fn(&mut CompositorData) + Send + 'static) -> TestState<C> {
+    TestState::Done(Box::new(f))
+}
+
+pub fn get_active_workspace(data: &loomwm::CompositorData) -> &Workspace {
+    let monitor = data.compositor.monitors.get_monitor();
+    monitor.get_workspace(monitor.get_active_workspace_name())
 }
 
 pub fn active_workspace_has_n_windows(data: &CompositorData, expected: usize) -> bool {
     get_active_workspace(data).windows_count() == expected
 }
 
-pub fn get_window_in_workspace(
+pub fn workspace_has_n_windows(
+    data: &CompositorData,
+    workspace_name: WorkspaceName,
+    count: usize,
+) -> bool {
+    data.compositor
+        .monitors
+        .get_monitor()
+        .get_workspace(&workspace_name)
+        .windows_count()
+        == count
+}
+
+pub fn get_next_window_in_workspace(
     data: &CompositorData,
     workspace_name: WorkspaceName,
 ) -> &loomwm::window::MappedWindow {
@@ -159,6 +167,11 @@ pub fn get_window_in_workspace(
         .windows_iter()
         .next()
         .unwrap()
+}
+
+pub fn is_focused(data: &CompositorData, surface: WlSurface) -> bool {
+    let current = data.compositor.get_keyboard().current_focus();
+    current.is_some_and(|s| s == surface)
 }
 
 pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) {
