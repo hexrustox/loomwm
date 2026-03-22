@@ -4,8 +4,11 @@ mod common;
 mod integration_tests {
     use std::cell::RefCell;
 
-    use loomwm::{input::WindowUnit, monitor::TileTreeWindow};
-    use loomwm::{monitor::WorkspaceName, utils::Direction};
+    use loomwm::{
+        input::WindowUnit,
+        monitor::{TileTreeWindow, WorkspaceName},
+        utils::Direction,
+    };
 
     use crate::common::{
         TestState, active_workspace_has_n_windows, assert_active_workspace_name,
