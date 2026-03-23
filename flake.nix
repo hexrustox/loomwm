@@ -100,10 +100,8 @@
               pkg-config
 
               alacritty
+              firefox
               weston
-              rocmPackages.rocminfo
-              mesa-demos
-              vulkan-tools
             ]);
           extraOpts = [
             "--pid host"
@@ -141,6 +139,7 @@
 
             "--cap-add=CAP_SYS_PTRACE"
           ];
+          removeOpts = ["--cap-drop=all"];
           image = "ubuntu:latest";
         };
       in
