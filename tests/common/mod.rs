@@ -192,6 +192,14 @@ pub fn get_floating_window(data: &CompositorData) -> loomwm::window::MappedWindo
         .clone()
 }
 
+pub fn get_tiling_window(data: &CompositorData, index: usize) -> loomwm::window::MappedWindow {
+    get_active_workspace(data)
+        .tiling_windows_iter()
+        .nth(index)
+        .unwrap()
+        .clone()
+}
+
 pub fn is_focused(data: &CompositorData, surface: WlSurface) -> bool {
     let current = data.compositor.get_keyboard().current_focus();
     current.is_some_and(|s| s == surface)

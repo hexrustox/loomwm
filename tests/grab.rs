@@ -5,7 +5,10 @@ mod integration_tests {
     use evdev::KeyCode;
     use loomwm::{
         config::Config,
-        input::grabs::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
+        input::grabs::{
+            floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab, swap_grab::SwapGrab,
+            tiling_resize_grab::TilingResizeGrab,
+        },
         monitor::TileTreeWindow,
         utils::Direction,
     };
@@ -15,13 +18,18 @@ mod integration_tests {
     };
 
     use crate::common::{
-        TestState, active_workspace_has_n_windows, default_config, done, get_floating_window,
+        TestState, active_workspace_has_n_windows, assert_tiling_windows_title, default_config,
+        done, get_active_workspace_name, get_floating_window, get_tiling_window,
         run_compositor_test, spawn_alacritty,
     };
 
-    #[test]
-    fn test_move_grab() {
-        let handle = run_compositor_test(default_config(), 0, |data, phase| match phase {
+    use crate::common::tiling_config;
+    use test_case::test_case;
+
+    #[test_case((5., 10.).into(); "move_down_right")]
+    #[test_case((-10., -5.).into(); "move_up_left")]
+    fn test_move_grab(delta: Point<f64, Logical>) {
+        let handle = run_compositor_test(default_config(), 0, move |data, phase| match phase {
             0 if active_workspace_has_n_windows(data, 1) => {
                 let mapped = get_floating_window(data);
                 assert_eq!(mapped.get_location(), (0, 0).into());
@@ -38,7 +46,7 @@ mod integration_tests {
                 let grab = MoveGrab::new(start_data, mapped, location);
                 pointer.set_grab(&mut data.compositor, grab, serial, Focus::Clear);
 
-                let motion_location = (location.x + 5., location.y + 5.).into();
+                let motion_location = (location.x + delta.x, location.y + delta.y).into();
                 pointer.motion(
                     &mut data.compositor,
                     None,
@@ -51,9 +59,9 @@ mod integration_tests {
 
                 TestState::Running(1)
             }
-            1 => done(|data| {
+            1 => done(move |data| {
                 let mapped = get_floating_window(data);
-                assert_eq!(mapped.get_location(), (5, 5).into());
+                assert_eq!(mapped.get_location(), delta.to_i32_round());
             }),
             _ => TestState::Running(phase),
         });
@@ -73,7 +81,35 @@ open-as-floating = {{ size = [{}, {}] }}
         .unwrap()
     }
 
-    fn test_floating_resize_grab_internal(
+    #[test_case(
+        Direction::RIGHT,
+        (5., 5.).into(),
+        (0, 0).into(),
+        (55, 50).into();
+        "resize_right"
+    )]
+    #[test_case(
+        Direction::BOTTOM,
+        (5., 5.).into(),
+        (0, 0).into(),
+        (50, 55).into();
+        "resize_bottom"
+    )]
+    #[test_case(
+        Direction::BOTTOM_RIGHT,
+        (5., 5.).into(),
+        (0, 0).into(),
+        (55, 55).into();
+        "resize_bottom_right"
+    )]
+    #[test_case(
+        Direction::TOP_LEFT,
+        (5., 5.).into(),
+        (5, 5).into(),
+        (45, 45).into();
+        "resize_top_left"
+    )]
+    fn test_floating_resize_grab(
         direction: Direction,
         delta: Point<f64, Logical>,
         expected_loc: Point<i32, Logical>,
@@ -133,22 +169,123 @@ open-as-floating = {{ size = [{}, {}] }}
     }
 
     #[test]
-    fn test_floating_resize_grab_bottom_right() {
-        test_floating_resize_grab_internal(
-            Direction::BOTTOM_RIGHT,
-            (5., 5.).into(),
-            (0, 0).into(),
-            (55, 55).into(),
+    fn test_swap_grab() {
+        let titles = [0, 1];
+        let handle = run_compositor_test(
+            tiling_config(r#"nodes = [{ repeat = 2 }]"#),
+            0,
+            move |data, phase| match phase {
+                0 if active_workspace_has_n_windows(data, 2) => {
+                    let mapped = get_tiling_window(data, 0);
+                    let workspace_name = get_active_workspace_name(data).clone();
+                    let hidden = data
+                        .compositor
+                        .get_focused_workspace_floating_window_hidden();
+
+                    let pointer = data.compositor.get_pointer();
+                    let pointer_location = pointer.current_location();
+                    let serial = SERIAL_COUNTER.next_serial();
+
+                    let start_data = PointerGrabStartData {
+                        focus: None,
+                        button: KeyCode::BTN_LEFT.0 as u32,
+                        location: pointer_location,
+                    };
+                    let grab = SwapGrab::new(start_data, mapped, workspace_name, hidden);
+                    pointer.set_grab(&mut data.compositor, grab, serial, Focus::Clear);
+
+                    let motion_location = (75., 50.).into();
+                    pointer.motion(
+                        &mut data.compositor,
+                        None,
+                        &MotionEvent {
+                            location: motion_location,
+                            serial: SERIAL_COUNTER.next_serial(),
+                            time: 0,
+                        },
+                    );
+
+                    TestState::Running(1)
+                }
+                1 => done(move |data| {
+                    assert_tiling_windows_title(
+                        data,
+                        titles.iter().rev().map(|n| n.to_string()).collect(),
+                    );
+                }),
+                _ => TestState::Running(phase),
+            },
         );
+
+        for title in titles {
+            spawn_alacritty(Some(title.to_string()));
+        }
+
+        handle.join().unwrap();
     }
 
     #[test]
-    fn test_floating_resize_grab_top_left() {
-        test_floating_resize_grab_internal(
-            Direction::TOP_LEFT,
-            (5., 5.).into(),
-            (5, 5).into(),
-            (45, 45).into(),
+    fn test_tiling_resize_grab() {
+        let handle = run_compositor_test(
+            toml::from_str(
+                r#"[layouts]
+main = { nodes = [{ layout = "sub", repeat = 2 }] }
+sub = { split = "horizontal", nodes = [{ repeat = 2 }] }
+default = "main"
+"#,
+            )
+            .unwrap(),
+            0,
+            |data, phase| match phase {
+                0 if active_workspace_has_n_windows(data, 4) => {
+                    let mapped = get_tiling_window(data, 3);
+                    let initial_size = mapped.get_size();
+                    assert_eq!(mapped.get_location(), (50, 50).into());
+                    assert_eq!(initial_size, (50, 50).into());
+
+                    let pointer = data.compositor.get_pointer();
+                    let pointer_location = pointer.current_location();
+                    let serial = SERIAL_COUNTER.next_serial();
+                    let start_data = PointerGrabStartData {
+                        focus: None,
+                        button: KeyCode::BTN_LEFT.0 as u32,
+                        location: pointer_location,
+                    };
+                    let grab = TilingResizeGrab::new(start_data, Direction::TOP_LEFT, initial_size);
+                    pointer.set_grab(&mut data.compositor, grab, serial, Focus::Clear);
+
+                    let motion_location = (pointer_location.x - 5., pointer_location.y - 5.).into();
+                    pointer.motion(
+                        &mut data.compositor,
+                        None,
+                        &MotionEvent {
+                            location: motion_location,
+                            serial: SERIAL_COUNTER.next_serial(),
+                            time: 0,
+                        },
+                    );
+                    TestState::Running(1)
+                }
+                1 => done(|data| {
+                    let mapped = get_tiling_window(data, 0);
+                    assert_eq!(mapped.get_location(), (0, 0).into());
+                    assert_eq!(mapped.get_size(), (45, 50).into());
+                    let mapped = get_tiling_window(data, 1);
+                    assert_eq!(mapped.get_location(), (0, 50).into());
+                    assert_eq!(mapped.get_size(), (45, 50).into());
+                    let mapped = get_tiling_window(data, 2);
+                    assert_eq!(mapped.get_location(), (45, 0).into());
+                    assert_eq!(mapped.get_size(), (55, 45).into());
+                    let mapped = get_tiling_window(data, 3);
+                    assert_eq!(mapped.get_location(), (45, 45).into());
+                    assert_eq!(mapped.get_size(), (55, 55).into());
+                }),
+                _ => TestState::Running(phase),
+            },
         );
+        for i in 0..4 {
+            spawn_alacritty(Some(i.to_string()));
+        }
+        handle.join().unwrap();
     }
 }
