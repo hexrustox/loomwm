@@ -6,7 +6,8 @@ mod integration_tests {
 
     use crate::common::{
         TestState, active_workspace_has_n_windows, assert_tiling_windows_title, done,
-        get_active_workspace, is_focused, run_compositor_test, spawn_alacritty, wait_until,
+        get_active_workspace, get_floating_window, is_focused, run_compositor_test,
+        spawn_alacritty, wait_until,
     };
 
     use crate::common::{default_config, tiling_config};
@@ -35,8 +36,7 @@ mod integration_tests {
             wait_until(
                 |data| active_workspace_has_n_windows(data, 1),
                 Box::new(|data| {
-                    let workspace = get_active_workspace(data);
-                    let mapped = workspace.floating_windows_iter().next().unwrap();
+                    let mapped = get_floating_window(data);
                     assert!(is_focused(data, mapped.wl_surface()));
                 }),
             ),

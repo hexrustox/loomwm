@@ -13,8 +13,8 @@ mod integration_tests {
     use crate::common::{
         TestState, active_workspace_has_n_windows, assert_active_workspace_name,
         assert_tiling_windows_title, assert_window_focused_in_workspace, done,
-        get_active_workspace, get_next_window_in_workspace, is_focused, run_compositor_test,
-        spawn_alacritty, workspace_has_n_windows,
+        get_active_workspace, get_floating_window, get_next_window_in_workspace, get_tiling_window,
+        is_focused, run_compositor_test, spawn_alacritty, workspace_has_n_windows,
     };
 
     use crate::common::{default_config, tiling_config};
@@ -97,18 +97,14 @@ mod integration_tests {
             0,
             |data, phase| match phase {
                 0 if active_workspace_has_n_windows(data, 2) => {
-                    let mapped = {
-                        let mut iter = get_active_workspace(data).tiling_windows_iter();
-                        iter.nth(1).unwrap()
-                    };
+                    let mapped = get_tiling_window(data, 1);
                     assert!(is_focused(data, mapped.wl_surface()));
                     data.compositor
                         .focus_tiling_window_in_direction(Direction::LEFT);
                     TestState::Running(1)
                 }
                 1 => done(|data| {
-                    let mut iter = get_active_workspace(data).tiling_windows_iter();
-                    let mapped = iter.next().unwrap();
+                    let mapped = get_tiling_window(data, 0);
                     assert!(is_focused(data, mapped.wl_surface()));
                 }),
                 _ => TestState::Running(phase),
@@ -133,12 +129,8 @@ mod integration_tests {
                         data,
                         titles.iter().map(|n| n.to_string()).collect(),
                     );
-                    {
-                        let mut iter = get_active_workspace(data).tiling_windows_iter();
-                        let _ = iter.next();
-                        let mapped = iter.next().unwrap();
-                        assert!(is_focused(data, mapped.wl_surface()));
-                    }
+                    let mapped = get_tiling_window(data, 1);
+                    assert!(is_focused(data, mapped.wl_surface()));
                     data.compositor
                         .swap_focused_tiling_window_in_direction(Direction::LEFT);
                     TestState::Running(1)
@@ -169,22 +161,18 @@ mod integration_tests {
             0,
             move |data, phase| match phase {
                 0 if active_workspace_has_n_windows(data, 2) => {
-                    {
-                        let mut iter = get_active_workspace(data).tiling_windows_iter();
-                        let mapped = iter.next().unwrap();
-                        assert_eq!(mapped.get_size(), (50, 100).into());
-                        let mapped = iter.next().unwrap();
-                        assert_eq!(mapped.get_size(), (50, 100).into());
-                    }
+                    let mapped = get_tiling_window(data, 0);
+                    assert_eq!(mapped.get_size(), (50, 100).into());
+                    let mapped = get_tiling_window(data, 1);
+                    assert_eq!(mapped.get_size(), (50, 100).into());
                     data.compositor
                         .resize_focused_tiling_window(Direction::LEFT, WindowUnit::Px(10));
                     TestState::Running(1)
                 }
                 1 => done(|data| {
-                    let mut iter = get_active_workspace(data).tiling_windows_iter();
-                    let mapped = iter.next().unwrap();
+                    let mapped = get_tiling_window(data, 0);
                     assert_eq!(mapped.get_size(), (40, 100).into());
-                    let mapped = iter.next().unwrap();
+                    let mapped = get_tiling_window(data, 1);
                     assert_eq!(mapped.get_size(), (60, 100).into());
                 }),
                 _ => TestState::Running(phase),
@@ -239,7 +227,7 @@ mod integration_tests {
                     *elems.borrow_mut() = workspace.render_elements(renderer).len();
 
                     assert!(!workspace.get_floating_window_hidden());
-                    let mapped = workspace.floating_windows_iter().next().unwrap().clone();
+                    let mapped = get_floating_window(data);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
@@ -254,7 +242,7 @@ mod integration_tests {
                     assert!(*elems.borrow() > workspace.render_elements(renderer).len());
 
                     assert!(workspace.get_floating_window_hidden());
-                    let mapped = workspace.tiling_windows_iter().next().unwrap().clone();
+                    let mapped = get_tiling_window(data, 0);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
@@ -264,7 +252,7 @@ mod integration_tests {
                 2 => {
                     let workspace = get_active_workspace(data);
                     assert!(!workspace.get_floating_window_hidden());
-                    let mapped = workspace.floating_windows_iter().next().unwrap().clone();
+                    let mapped = get_floating_window(data);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
@@ -272,8 +260,8 @@ mod integration_tests {
                     TestState::Running(3)
                 }
                 3 => {
-                    let workspace = get_active_workspace(data);
-                    let mapped = workspace.tiling_windows_iter().next().unwrap().clone();
+                    let _workspace = get_active_workspace(data);
+                    let mapped = get_tiling_window(data, 0);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
@@ -281,8 +269,8 @@ mod integration_tests {
                     TestState::Running(4)
                 }
                 4 => done(|data| {
-                    let workspace = get_active_workspace(data);
-                    let mapped = workspace.tiling_windows_iter().next().unwrap().clone();
+                    let _workspace = get_active_workspace(data);
+                    let mapped = get_tiling_window(data, 0);
                     assert!(is_focused(data, mapped.wl_surface()));
                 }),
                 _ => TestState::Running(phase),

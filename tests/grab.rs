@@ -13,7 +13,7 @@ mod integration_tests {
         utils::Direction,
     };
     use smithay::{
-        input::pointer::{Focus, GrabStartData as PointerGrabStartData, MotionEvent},
+        input::pointer::{ButtonEvent, Focus, GrabStartData as PointerGrabStartData, MotionEvent},
         utils::{Logical, Point, Rectangle, SERIAL_COUNTER, Size},
     };
 
@@ -194,12 +194,22 @@ open-as-floating = {{ size = [{}, {}] }}
                     let grab = SwapGrab::new(start_data, mapped, workspace_name, hidden);
                     pointer.set_grab(&mut data.compositor, grab, serial, Focus::Clear);
 
-                    let motion_location = (75., 50.).into();
+                    let motion_location = get_tiling_window(data, 1).center_location().to_f64();
                     pointer.motion(
                         &mut data.compositor,
                         None,
                         &MotionEvent {
                             location: motion_location,
+                            serial: SERIAL_COUNTER.next_serial(),
+                            time: 0,
+                        },
+                    );
+
+                    pointer.button(
+                        &mut data.compositor,
+                        &ButtonEvent {
+                            button: KeyCode::BTN_LEFT.0 as u32,
+                            state: smithay::backend::input::ButtonState::Released,
                             serial: SERIAL_COUNTER.next_serial(),
                             time: 0,
                         },
