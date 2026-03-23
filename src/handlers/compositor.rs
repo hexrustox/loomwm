@@ -106,9 +106,9 @@ impl CompositorHandler for WindowManagerState {
             // previously-mapped root
             if let Some(FoundMappedWindow { mut mapped, .. }) = self.find_mapped_window(surface) {
                 mapped.window().on_commit();
-                mapped.update_window();
+                mapped.resize_handle_commit();
 
-                // handle toplevel unmapped
+                // TODO handle toplevel unmapped
                 return;
             }
         }
@@ -116,9 +116,14 @@ impl CompositorHandler for WindowManagerState {
         // non-root
         if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(&root_surface) {
             mapped.window().on_commit();
+
+            return;
         }
 
-        // popup, layer shell & other surface
+        // popup
+        self.popup_handle_commit(surface);
+
+        // layer shell & other surface
     }
 }
 

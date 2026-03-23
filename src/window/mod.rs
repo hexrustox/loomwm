@@ -322,7 +322,7 @@ impl TileTreeWindow for MappedWindow {
 }
 
 impl MappedWindow {
-    pub fn update_window(&mut self) {
+    pub fn resize_handle_commit(&mut self) {
         if self.inner().resize_state != ResizeGrabState::Idle {
             let mut location = self.get_location();
             let size = self.get_size();
