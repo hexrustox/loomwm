@@ -67,6 +67,7 @@ impl WindowManagerState {
             || self.default_layout != config.layouts.default
         {
             *self.layout_set.borrow_mut() = config.layouts.layout_set;
+            self.update_workspaces_tiling_layout(&config.layouts.default);
             self.default_layout = config.layouts.default;
         }
 

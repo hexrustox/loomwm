@@ -452,32 +452,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.insert(item)
     }
 
-    fn find_tile_id(&self, key: TileTreeSearchKey) -> Option<TileId> {
-        fn traverse<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            current_id: TileId,
-            key: TileTreeSearchKey,
-        ) -> Option<TileId> {
-            match &arena[current_id].kind {
-                TileKind::Window(window) => {
-                    if window.match_id(key) {
-                        return Some(current_id);
-                    }
-                }
-                TileKind::Layout { tiles, .. } => {
-                    for &child_id in tiles.iter() {
-                        if let res @ Some(_) = traverse(arena, child_id, key) {
-                            return res;
-                        }
-                    }
-                }
-            }
-            None
-        }
-
-        traverse(&self.arena, self.root, key)
-    }
-
     pub fn remove<'a>(&mut self, key: impl SearchKey<'a>) -> Option<T> {
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,
@@ -547,6 +521,106 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
 
         None
+    }
+
+    pub fn windows_iter(&self) -> impl Iterator<Item = &T> + Clone + '_ {
+        #[derive(Clone)]
+        struct WindowsIter<'a, T> {
+            arena: &'a TileArena<T>,
+            stack: Vec<TileId>,
+        }
+
+        impl<'a, T: TileTreeWindow> Iterator for WindowsIter<'a, T> {
+            type Item = &'a T;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                while let Some(tile_id) = self.stack.pop() {
+                    match &self.arena[tile_id] {
+                        Tile {
+                            kind: TileKind::Window(window),
+                            ..
+                        } => return Some(window),
+                        _ => {
+                            for &child_id in self.arena[tile_id].as_layout_tiles().iter().rev() {
+                                self.stack.push(child_id);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+        }
+
+        let mut stack = Vec::new();
+        for &id in self.arena[self.root].as_layout_tiles().iter().rev() {
+            stack.push(id);
+        }
+
+        WindowsIter {
+            arena: &self.arena,
+            stack,
+        }
+    }
+
+    pub fn windows_iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
+        fn collect_window_ids<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            tile_id: TileId,
+            ids: &mut Vec<TileId>,
+        ) {
+            match &arena[tile_id] {
+                Tile {
+                    kind: TileKind::Window(_),
+                    ..
+                } => ids.push(tile_id),
+                tile => {
+                    for &child_id in tile.as_layout_tiles() {
+                        collect_window_ids(arena, child_id, ids);
+                    }
+                }
+            }
+        }
+
+        let mut window_ids = Vec::new();
+        for &id in self.arena[self.root].as_layout_tiles() {
+            collect_window_ids(&self.arena, id, &mut window_ids);
+        }
+
+        let arena = &mut self.arena as *mut TileArena<T>;
+
+        window_ids.into_iter().filter_map(move |tile_id| {
+            // SAFETY: each tile_id appears at most once, so all returned references are disjoint
+            let arena = unsafe { &mut *arena };
+            match &mut arena[tile_id] {
+                Tile {
+                    kind: TileKind::Window(window),
+                    ..
+                } => Some(window),
+                _ => None,
+            }
+        })
+    }
+
+    pub fn windows_count(&self) -> u32 {
+        self.count
+    }
+
+    pub fn update_layout(&mut self, layout_name: &str) {
+        let windows = self.windows_iter().cloned().collect::<Vec<_>>();
+        self.arena.clear();
+        self.root = Self::create_layout_tile(
+            &mut self.arena,
+            &self.layouts.borrow().get(layout_name),
+            layout_name.to_string(),
+            1.0,
+            None,
+        );
+        self.current_tile = self.root;
+        self.count = 0;
+
+        for window in windows {
+            self.insert(window);
+        }
     }
 
     // TODO improve efficiency
@@ -632,86 +706,30 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn windows_iter(&self) -> impl Iterator<Item = &T> + Clone + '_ {
-        #[derive(Clone)]
-        struct WindowsIter<'a, T> {
-            arena: &'a TileArena<T>,
-            stack: Vec<TileId>,
-        }
-
-        impl<'a, T: TileTreeWindow> Iterator for WindowsIter<'a, T> {
-            type Item = &'a T;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                while let Some(tile_id) = self.stack.pop() {
-                    match &self.arena[tile_id] {
-                        Tile {
-                            kind: TileKind::Window(window),
-                            ..
-                        } => return Some(window),
-                        _ => {
-                            for &child_id in self.arena[tile_id].as_layout_tiles().iter().rev() {
-                                self.stack.push(child_id);
-                            }
+    fn find_tile_id(&self, key: TileTreeSearchKey) -> Option<TileId> {
+        fn traverse<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            current_id: TileId,
+            key: TileTreeSearchKey,
+        ) -> Option<TileId> {
+            match &arena[current_id].kind {
+                TileKind::Window(window) => {
+                    if window.match_id(key) {
+                        return Some(current_id);
+                    }
+                }
+                TileKind::Layout { tiles, .. } => {
+                    for &child_id in tiles.iter() {
+                        if let res @ Some(_) = traverse(arena, child_id, key) {
+                            return res;
                         }
                     }
                 }
-                None
             }
+            None
         }
 
-        let mut stack = Vec::new();
-        for &id in self.arena[self.root].as_layout_tiles().iter().rev() {
-            stack.push(id);
-        }
-
-        WindowsIter {
-            arena: &self.arena,
-            stack,
-        }
-    }
-
-    pub fn windows_iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
-        fn collect_window_ids<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            tile_id: TileId,
-            ids: &mut Vec<TileId>,
-        ) {
-            match &arena[tile_id] {
-                Tile {
-                    kind: TileKind::Window(_),
-                    ..
-                } => ids.push(tile_id),
-                tile => {
-                    for &child_id in tile.as_layout_tiles() {
-                        collect_window_ids(arena, child_id, ids);
-                    }
-                }
-            }
-        }
-
-        let mut window_ids = Vec::new();
-        for &id in self.arena[self.root].as_layout_tiles() {
-            collect_window_ids(&self.arena, id, &mut window_ids);
-        }
-
-        let arena = &mut self.arena as *mut TileArena<T>;
-
-        window_ids.into_iter().filter_map(move |tile_id| {
-            // SAFETY: each tile_id appears at most once, so all returned references are disjoint
-            let arena = unsafe { &mut *arena };
-            match &mut arena[tile_id] {
-                Tile {
-                    kind: TileKind::Window(window),
-                    ..
-                } => Some(window),
-                _ => None,
-            }
-        })
-    }
-
-    pub fn windows_count(&self) -> u32 {
-        self.count
+        traverse(&self.arena, self.root, key)
     }
 
     pub fn swap_window<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {

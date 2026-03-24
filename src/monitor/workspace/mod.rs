@@ -98,9 +98,14 @@ impl Workspace {
     }
 
     pub fn update_tiling_windows_size(&mut self) {
-        let output = &self.output;
         self.tiling
-            .update_tile_size(output.current_location(), self.get_output_size());
+            .update_tile_size(self.output.current_location(), self.get_output_size());
+    }
+
+    pub fn update_tiling_layout(&mut self, layout_name: &str) {
+        self.tiling.update_layout(layout_name);
+        self.tiling
+            .update_tile_size(self.output.current_location(), self.get_output_size());
     }
 
     pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {

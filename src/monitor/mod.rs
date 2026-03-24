@@ -62,7 +62,7 @@ impl Monitor {
             workspaces: vec![Workspace::new(
                 output,
                 active_workspace,
-                layouts.clone(),
+                layouts,
                 layout_name,
             )],
         }
@@ -220,6 +220,13 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor_mut();
         for workspace in &mut monitor.workspaces {
             workspace.update_tiling_windows_size();
+        }
+    }
+
+    pub fn update_workspaces_tiling_layout(&mut self, layout_name: &str) {
+        let monitor = self.monitors.get_monitor_mut();
+        for workspace in &mut monitor.workspaces {
+            workspace.update_tiling_layout(layout_name);
         }
     }
 
