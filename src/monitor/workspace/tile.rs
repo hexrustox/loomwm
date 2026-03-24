@@ -9,7 +9,7 @@ use smithay::{
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{Logical, Point, Rectangle, Size},
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Neg, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ops::Neg, rc::Rc};
 
 new_key_type! { pub struct TileId; }
 
@@ -23,7 +23,7 @@ where
     arena: TileArena<T>,
     root: TileId,
     current_tile: TileId,
-    layouts: Rc<LayoutSet>,
+    layouts: Rc<RefCell<LayoutSet>>,
     count: u32,
 }
 
@@ -143,7 +143,7 @@ enum TileOrientation {
     TopLeft,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(transparent)]
 pub struct LayoutSet(HashMap<String, LayoutSchema>);
 
@@ -167,7 +167,7 @@ impl LayoutSet {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct LayoutSchema {
     #[serde(default)]
@@ -179,7 +179,7 @@ struct LayoutSchema {
 
 pub type TileRepeat = usize;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 struct LayoutNode {
     layout: Option<String>,
@@ -332,11 +332,15 @@ impl<T: TileTreeWindow> TileTree<T> {
         })
     }
 
-    pub fn new(layouts: Rc<LayoutSet>, layout_name: &str) -> Self {
+    pub fn new(layouts: Rc<RefCell<LayoutSet>>, layout_name: &str) -> Self {
         let mut arena = SlotMap::with_key();
-        let layout = layouts.get(layout_name);
-        let root =
-            Self::create_layout_tile(&mut arena, &layout, layout_name.to_string(), 1.0, None);
+        let root = Self::create_layout_tile(
+            &mut arena,
+            &layouts.borrow().get(layout_name),
+            layout_name.to_string(),
+            1.0,
+            None,
+        );
 
         Self {
             arena,
@@ -361,7 +365,9 @@ impl<T: TileTreeWindow> TileTree<T> {
         };
         let schema = schema.clone();
 
-        let layout = self.layouts.get(&schema);
+        let binding = self.layouts.clone();
+        let binding = binding.borrow();
+        let layout = binding.get(&schema);
         let idx = *schema_index;
         let mut repeat = *schema_repeat;
 
@@ -379,10 +385,9 @@ impl<T: TileTreeWindow> TileTree<T> {
                 }
 
                 if let Some(layout_name) = &node.layout {
-                    let nested_layout = self.layouts.get(layout_name);
                     let tile_id = Self::create_layout_tile(
                         &mut self.arena,
-                        &nested_layout,
+                        &self.layouts.borrow().get(layout_name),
                         layout_name.clone(),
                         node.ratio,
                         Some(self.current_tile),
@@ -435,7 +440,8 @@ impl<T: TileTreeWindow> TileTree<T> {
             ..
         } = self.arena[parent_id].kind
         {
-            let parent_layout = self.layouts.get(schema);
+            let binding = self.layouts.borrow();
+            let parent_layout = binding.get(schema);
 
             if *schema_repeat >= parent_layout.nodes[*schema_index].repeat {
                 *schema_repeat = 0;
@@ -523,8 +529,13 @@ impl<T: TileTreeWindow> TileTree<T> {
                 self.arena.remove(id);
             }
 
-            let layout = self.layouts.get(&schema);
-            self.root = Self::create_layout_tile(&mut self.arena, &layout, schema, 1.0, None);
+            self.root = Self::create_layout_tile(
+                &mut self.arena,
+                &self.layouts.borrow().get(&schema),
+                schema,
+                1.0,
+                None,
+            );
             self.current_tile = self.root;
             self.count = 0;
 
@@ -1412,7 +1423,7 @@ mod tests {
                 arena,
                 root,
                 current_tile: root,
-                layouts: Rc::new(LayoutSet(HashMap::new())),
+                layouts: Rc::new(RefCell::new(LayoutSet(HashMap::new()))),
                 count: 0,
             }
         }};
@@ -1725,7 +1736,7 @@ mod tests {
                 "root",
             ),
         };
-        let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
+        let mut tree = TileTree::<TestWindow>::new(Rc::new(RefCell::new(layouts)), layout_name);
         for _ in 0..tiles {
             tree.insert(TestWindow::new());
         }
@@ -1738,14 +1749,14 @@ mod tests {
     #[test]
     fn test_insert_override_ratio() {
         let mut tree = TileTree::<TestWindow>::new(
-            Rc::new(LayoutSet(HashMap::from_iter([(
+            Rc::new(RefCell::new(LayoutSet(HashMap::from_iter([(
                 "root".to_string(),
                 schema!(nodes: [
                     node!(win, ratio: 3),
                     node!(win, ratio: 2),
                     node!(win, ratio: 1),
                 ]),
-            )]))),
+            )])))),
             "root",
         );
         for i in 1..=3 {
@@ -1769,7 +1780,7 @@ mod tests {
     #[test_case("layouts", 7 => false; "reject_insertion_when_layouts_at_capacity")]
     #[test_case("nested layout", 4 => false; "reject_insertion_when_nested_layout_at_capacity")]
     fn test_reject_insertion(layout_name: &str, tiles: u32) -> bool {
-        let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
+        let layouts = Rc::new(RefCell::new(LayoutSet((*LAYOUT_SET).clone())));
         let mut tree = TileTree::new(layouts, layout_name);
         for i in 0..tiles - 1 {
             assert!(
@@ -1970,7 +1981,7 @@ mod tests {
                 "root",
             ),
         };
-        let mut tree = TileTree::<TestWindow>::new(Rc::new(layouts), layout_name);
+        let mut tree = TileTree::<TestWindow>::new(Rc::new(RefCell::new(layouts)), layout_name);
         for i in 0..tiles {
             tree.insert(TestWindow {
                 inner: Rc::new(RefCell::new(TestWindowInner {
@@ -1989,7 +2000,7 @@ mod tests {
 
     #[test]
     fn test_remove_nonexistent_window() {
-        let layouts = Rc::new(LayoutSet((*LAYOUT_SET).clone()));
+        let layouts = Rc::new(RefCell::new(LayoutSet((*LAYOUT_SET).clone())));
         let mut tree = TileTree::<TestWindow>::new(layouts, "windows");
 
         for i in 0..2 {

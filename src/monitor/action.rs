@@ -39,7 +39,7 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor_mut();
         let workspace_name = workspace_name
             .inspect(|name| {
-                monitor.add_workspace(name.clone());
+                monitor.add_workspace(name.clone(), self.layout_set.clone(), &self.default_layout);
             })
             .unwrap_or(monitor.get_active_workspace_name().clone());
         if focus {
@@ -214,12 +214,17 @@ impl WindowManagerState {
             monitor.remove_workspace(&old_workspace_name);
         }
 
-        monitor.add_workspace(workspace_name.clone());
+        monitor.add_workspace(
+            workspace_name.clone(),
+            self.layout_set.clone(),
+            &self.default_layout,
+        );
         monitor.active_workspace = workspace_name.clone();
 
         self.restore_workspace_focus(&workspace_name);
     }
 
+    // FIXME use switch/create active workspace method
     fn goto_workspace_by_delta(&mut self, delta: i32) {
         let monitor = self.monitors.get_monitor_mut();
 
@@ -263,7 +268,11 @@ impl WindowManagerState {
         }
 
         let monitor = self.monitors.get_monitor_mut();
-        monitor.add_workspace(workspace_name.clone());
+        monitor.add_workspace(
+            workspace_name.clone(),
+            self.layout_set.clone(),
+            &self.default_layout,
+        );
         if focus {
             monitor.active_workspace = workspace_name.clone();
         }

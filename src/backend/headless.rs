@@ -48,7 +48,7 @@ impl Headless {
 
         data.space.map_output(&output, (0, 0));
         data.monitors
-            .push(output, data.layout_set.clone(), data.default_layout.clone());
+            .push(output, data.layout_set.clone(), &data.default_layout);
     }
 
     pub fn init(&mut self) {

@@ -69,6 +69,7 @@ pub enum KeyAction {
     },
     ToggleFloatingHidden {
         value: Option<bool>,
+        // TODO use serde default
         focus: Option<bool>,
     },
     CloseWindow,

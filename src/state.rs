@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, time::Instant};
+use std::{cell::RefCell, collections::HashMap, ffi::OsString, rc::Rc, sync::Arc, time::Instant};
 
 use smithay::{
     desktop::{PopupManager, Space, Window},
@@ -50,8 +50,8 @@ pub struct WindowManagerState {
 
     pub general_config: GeneralConfig,
     pub window_rules: WindowRules,
-    pub layout_set: Rc<LayoutSet>,
-    pub default_layout: Rc<str>,
+    pub layout_set: Rc<RefCell<LayoutSet>>,
+    pub default_layout: String,
     pub key_config: KeyConfig,
     pub pointer_config: PointerConfig,
 
@@ -157,8 +157,8 @@ impl WindowManagerState {
 
             general_config: config.general,
             window_rules: config.window_rules,
-            layout_set: Rc::new(config.layouts.layout_set),
-            default_layout: Rc::from(config.layouts.default),
+            layout_set: Rc::new(RefCell::new(config.layouts.layout_set)),
+            default_layout: config.layouts.default,
             key_config: config.key,
             pointer_config: config.pointer,
 

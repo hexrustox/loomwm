@@ -63,9 +63,12 @@ impl WindowManagerState {
 
         self.general_config = config.general;
 
-        // TODO live reload
-        // self.layout_set = Rc::new(config.layouts.layout_set);
-        // self.default_layout = Rc::from(config.layouts.default);
+        if *self.layout_set.borrow() != config.layouts.layout_set
+            || self.default_layout != config.layouts.default
+        {
+            *self.layout_set.borrow_mut() = config.layouts.layout_set;
+            self.default_layout = config.layouts.default;
+        }
 
         self.get_keyboard().change_repeat_info(
             config.key.repeat_rate as i32,

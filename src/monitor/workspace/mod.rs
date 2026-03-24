@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use serde::Deserialize;
 use smithay::{
@@ -58,7 +58,7 @@ impl Workspace {
     pub fn new(
         output: Output,
         name: WorkspaceName,
-        layouts: Rc<LayoutSet>,
+        layouts: Rc<RefCell<LayoutSet>>,
         layout_name: &str,
     ) -> Self {
         Self {

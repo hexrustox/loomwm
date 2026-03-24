@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use smithay::{
     backend::renderer::RendererSuper,
@@ -32,7 +32,7 @@ pub struct Monitors {
 }
 
 impl Monitors {
-    pub fn push(&mut self, output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) {
+    pub fn push(&mut self, output: Output, layouts: Rc<RefCell<LayoutSet>>, layout_name: &str) {
         self.monitors
             .push(Monitor::new(output, layouts, layout_name));
     }
@@ -51,13 +51,10 @@ pub struct Monitor {
 
     active_workspace: WorkspaceName,
     workspaces: Vec<Workspace>,
-
-    layouts: Rc<LayoutSet>,
-    layout_name: Rc<str>,
 }
 
 impl Monitor {
-    fn new(output: Output, layouts: Rc<LayoutSet>, layout_name: Rc<str>) -> Self {
+    fn new(output: Output, layouts: Rc<RefCell<LayoutSet>>, layout_name: &str) -> Self {
         let active_workspace = WorkspaceName::Id(1);
         Self {
             output: output.clone(),
@@ -66,10 +63,8 @@ impl Monitor {
                 output,
                 active_workspace,
                 layouts.clone(),
-                &layout_name,
+                layout_name,
             )],
-            layouts,
-            layout_name,
         }
     }
 
@@ -101,21 +96,22 @@ impl Monitor {
         unreachable!()
     }
 
-    fn add_workspace(&mut self, workspace_name: WorkspaceName) {
+    fn add_workspace(
+        &mut self,
+        workspace_name: WorkspaceName,
+        layouts: Rc<RefCell<LayoutSet>>,
+        layout_name: &str,
+    ) {
         match workspace_name {
             WorkspaceName::Id(id) => {
                 if let Err(index) = self.workspaces.binary_search_by_key(&id, |workspace| {
                     let WorkspaceName::Id(id) = workspace.get_name();
                     *id
                 }) {
+                    // FIXME this removes existing workspace
                     self.workspaces.insert(
                         index,
-                        Workspace::new(
-                            self.output.clone(),
-                            workspace_name,
-                            self.layouts.clone(),
-                            &self.layout_name,
-                        ),
+                        Workspace::new(self.output.clone(), workspace_name, layouts, layout_name),
                     );
                 }
             }

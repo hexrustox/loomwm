@@ -79,7 +79,7 @@ impl Winit {
         data.monitors.push(
             self.output.clone(),
             data.layout_set.clone(),
-            data.default_layout.clone(),
+            &data.default_layout,
         );
     }
 

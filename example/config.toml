@@ -39,6 +39,9 @@ opacity = 0.8
 master = { nodes = [{ ratio = 1.5 }, { layout = "slaves" }] }
 slaves = { split = "horizontal", nodes = [{ repeat = 3 }] }
 default = "master"
+# main = { nodes = [{ layout = "sub", repeat = 2 }] }
+# sub = { split = "horizontal", nodes = [{ repeat = 2 }] }
+# default = "main"
 
 [key]
 repeat-delay = 200
