@@ -185,12 +185,28 @@ pub fn get_next_window_in_workspace(
         .unwrap()
 }
 
+pub fn get_window(data: &CompositorData) -> MappedWindow {
+    get_active_workspace(data)
+        .windows_iter()
+        .next()
+        .unwrap()
+        .clone()
+}
+
 pub fn get_floating_window(data: &CompositorData) -> MappedWindow {
     get_active_workspace(data)
         .floating_windows_iter()
         .next()
         .unwrap()
         .clone()
+}
+
+pub fn get_floating_windows_count(data: &CompositorData) -> usize {
+    get_active_workspace(data).floating_windows_iter().count()
+}
+
+pub fn get_tiling_windows_count(data: &CompositorData) -> usize {
+    get_active_workspace(data).tiling_windows_iter().count()
 }
 
 pub fn get_tiling_window(data: &CompositorData, index: usize) -> MappedWindow {

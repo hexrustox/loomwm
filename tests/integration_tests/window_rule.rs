@@ -1,7 +1,5 @@
 use crate::integration_tests::common::{
-    active_workspace_has_n_windows, get_active_workspace, get_floating_window,
-    get_next_window_in_workspace, get_tiling_window, is_focused, run_compositor_test,
-    spawn_alacritty, wait_until, workspace_has_n_windows,
+    active_workspace_has_n_windows, get_active_workspace, get_floating_window, get_next_window_in_workspace, get_tiling_window, get_window, is_focused, run_compositor_test, spawn_alacritty, wait_until, workspace_has_n_windows
 };
 use loomwm::{CompositorData, monitor::{TileTreeWindow, WorkspaceName}, utils::RGBAColor};
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
@@ -159,6 +157,41 @@ open-in-workspace = 2
 
     spawn_alacritty(Some("0".to_string()));
     spawn_alacritty(Some("1".to_string()));
+
+    handle.join().unwrap();
+}
+
+#[test]
+fn test_chain_of_window_rule() {
+    let handle = run_compositor_test(
+        toml::from_str(
+            r#"[[window-rules]]
+matches = [{ title = "0" }]
+open-with-focus = false
+
+[[window-rules]]
+matches = [{ is-focused = false }]
+open-as-floating = {}
+
+[[window-rules]]
+matches = [{ is-floating = true }]
+opacity = 0.5
+"#,
+        )
+        .unwrap(),
+        (),
+        wait_until(
+            |data| active_workspace_has_n_windows(data, 1),
+            Box::new(|data| {
+                let mapped = get_window(data);
+                assert!(!is_focused(data, mapped.wl_surface()));
+                assert!(mapped.get_floating());
+                assert_eq!(mapped.get_opacity(), 0.5);
+            }),
+        ),
+    );
+
+    spawn_alacritty(Some("0".to_string()));
 
     handle.join().unwrap();
 }

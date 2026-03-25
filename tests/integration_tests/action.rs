@@ -9,8 +9,9 @@ use loomwm::{
 use crate::integration_tests::common::{
     TestState, active_workspace_has_n_windows, assert_active_workspace_name,
     assert_tiling_windows_title, assert_window_focused_in_workspace, default_config, done,
-    get_active_workspace, get_floating_window, get_next_window_in_workspace, get_tiling_window,
-    is_focused, run_compositor_test, spawn_alacritty, tiling_config, workspace_has_n_windows,
+    get_active_workspace, get_floating_window, get_floating_windows_count,
+    get_next_window_in_workspace, get_tiling_window, get_tiling_windows_count, is_focused,
+    run_compositor_test, spawn_alacritty, tiling_config, workspace_has_n_windows,
 };
 
 #[test]
@@ -184,16 +185,14 @@ fn test_toggle_window_floating() {
             0,
             move |data, phase| match phase {
                 0 if active_workspace_has_n_windows(data, 1) => {
-                    let workspace = get_active_workspace(data);
-                    assert_eq!(workspace.floating_windows_iter().count(), 0);
-                    assert_eq!(workspace.tiling_windows_iter().count(), 1);
+                    assert_eq!(get_floating_windows_count(data), 0);
+                    assert_eq!(get_tiling_windows_count(data), 1);
                     data.compositor.toggle_focused_window_floating(None);
                     TestState::Running(1)
                 }
                 1 => done(|data| {
-                    let workspace = get_active_workspace(data);
-                    assert_eq!(workspace.floating_windows_iter().count(), 1);
-                    assert_eq!(workspace.tiling_windows_iter().count(), 0);
+                    assert_eq!(get_floating_windows_count(data), 1);
+                    assert_eq!(get_tiling_windows_count(data), 0);
                 }),
                 _ => TestState::Running(phase),
             },
