@@ -224,7 +224,6 @@ impl WindowManagerState {
         self.restore_workspace_focus(&workspace_name);
     }
 
-    // FIXME use switch/create active workspace method
     fn goto_workspace_by_delta(&mut self, delta: i32) {
         let monitor = self.monitors.get_monitor_mut();
 
@@ -237,8 +236,7 @@ impl WindowManagerState {
         let new_index = (index as i32 + delta).rem_euclid(len) as usize;
 
         let new_workspace_name = monitor.workspaces[new_index].get_name().clone();
-        monitor.active_workspace = new_workspace_name.clone();
-        self.restore_workspace_focus(&new_workspace_name);
+        self.switch_or_create_active_workspace(new_workspace_name);
     }
 
     pub fn goto_next_workspace(&mut self) {

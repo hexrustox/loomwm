@@ -108,7 +108,6 @@ impl Monitor {
                     let WorkspaceName::Id(id) = workspace.get_name();
                     *id
                 }) {
-                    // FIXME this removes existing workspace
                     self.workspaces.insert(
                         index,
                         Workspace::new(self.output.clone(), workspace_name, layouts, layout_name),
