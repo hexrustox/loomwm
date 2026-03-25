@@ -13,6 +13,7 @@ use loomwm::{
     monitor::{Workspace, WorkspaceName},
     state::WindowManagerState,
     utils::get_app_id_and_title,
+    window::MappedWindow,
 };
 use smithay::reexports::{
     calloop::EventLoop, wayland_server::Display, wayland_server::protocol::wl_surface::WlSurface,
@@ -184,7 +185,7 @@ pub fn get_next_window_in_workspace(
         .unwrap()
 }
 
-pub fn get_floating_window(data: &CompositorData) -> loomwm::window::MappedWindow {
+pub fn get_floating_window(data: &CompositorData) -> MappedWindow {
     get_active_workspace(data)
         .floating_windows_iter()
         .next()
@@ -192,7 +193,7 @@ pub fn get_floating_window(data: &CompositorData) -> loomwm::window::MappedWindo
         .clone()
 }
 
-pub fn get_tiling_window(data: &CompositorData, index: usize) -> loomwm::window::MappedWindow {
+pub fn get_tiling_window(data: &CompositorData, index: usize) -> MappedWindow {
     get_active_workspace(data)
         .tiling_windows_iter()
         .nth(index)

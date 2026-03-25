@@ -160,11 +160,11 @@ impl MappedWindow {
         self.inner().floating = floating;
     }
 
-    fn get_border_width(&self) -> i32 {
+    pub fn get_border_width(&self) -> i32 {
         self.inner().border.clone().map_or(0, |b| b.width) as i32
     }
 
-    fn get_border_color(&self) -> Option<RGBAColor> {
+    pub fn get_border_color(&self) -> Option<RGBAColor> {
         self.inner().border.clone().map(|b| b.color)
     }
 
