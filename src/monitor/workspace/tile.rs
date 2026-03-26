@@ -452,6 +452,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.insert(item)
     }
 
+    // FIXME
     pub fn remove<'a>(&mut self, key: impl SearchKey<'a>) -> Option<T> {
         fn traverse<T: TileTreeWindow>(
             arena: &TileArena<T>,

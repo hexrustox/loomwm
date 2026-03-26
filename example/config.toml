@@ -80,6 +80,7 @@ repeat-rate = 25
 "alt+ctrl+l" = { action = "resize_window", direction = "right", unit = "50px" }
 "alt+space" = { action = "toggle_floating" }
 "alt+shift+space" = { action = "toggle_floating_hidden" }
+"alt+m" = { action = "toggle_maximize" }
 "alt+f" = { action = "toggle_fullscreen" }
 "alt+q" = { action = "close_window" }
 "alt+return" = { action = "execute", command = ["alacritty"] }

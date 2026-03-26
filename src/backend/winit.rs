@@ -48,6 +48,7 @@ impl Winit {
             use WinitEvent::*;
             match event {
                 Resized { size, .. } => {
+                    // FIXME
                     data.backend.winit().output.change_current_state(
                         Some(Mode { size, refresh: 60 }),
                         None,

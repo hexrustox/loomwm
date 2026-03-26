@@ -412,7 +412,21 @@ impl WindowManagerState {
         workspace.resize_tiling_window(&surface, direction, unit);
     }
 
-    pub fn fullscreen_window(&mut self, surface: &WlSurface, value: Option<bool>) {
+    pub fn toggle_window_maximized(&mut self, surface: &WlSurface, value: Option<bool>) {
+        let Some(FoundMappedWindow {
+            mapped,
+            workspace_name,
+            ..
+        }) = self.find_mapped_window(surface)
+        else {
+            return;
+        };
+        let monitor = self.monitors.get_monitor_mut();
+        let workspace = monitor.get_workspace_mut(&workspace_name);
+        workspace.set_maximized(mapped, value);
+    }
+
+    pub fn toggle_window_fullscreen(&mut self, surface: &WlSurface, value: Option<bool>) {
         let Some(FoundMappedWindow {
             mapped,
             workspace_name,

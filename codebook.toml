@@ -10,6 +10,7 @@ words = [
     "toplevel",
     "unconstrain",
     "unfullscreen",
+    "unmaximize",
     "vecs",
     "wgpu",
     "winit",

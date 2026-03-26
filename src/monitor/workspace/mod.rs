@@ -50,6 +50,7 @@ pub struct Workspace {
 
     hide_floating: bool,
 
+    maximized: Option<Fullscreen>,
     fullscreen: Option<Fullscreen>,
 }
 
@@ -73,6 +74,7 @@ impl Workspace {
             floating: Vec::new(),
             focus_queue: Vec::new(),
             hide_floating: false,
+            maximized: None,
             fullscreen: None,
         }
     }
@@ -115,17 +117,27 @@ impl Workspace {
     }
 
     pub fn windows_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
+        use std::iter::*;
         if let Some(Fullscreen { mapped, .. }) = self.fullscreen.as_ref() {
-            Box::new(std::iter::once(mapped)) as Box<dyn Iterator<Item = _>>
+            Box::new(once(mapped))
+        } else if let Some(Fullscreen { mapped, .. }) = self.maximized.as_ref() {
+            Box::new(
+                (if mapped.is_floating() {
+                    Box::new(empty()) as Box<dyn Iterator<Item = _>>
+                } else {
+                    Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
+                })
+                .chain(once(mapped)),
+            )
         } else {
             Box::new(
                 if self.hide_floating {
-                    Box::new(std::iter::empty()) as Box<dyn Iterator<Item = _>>
+                    Box::new(empty()) as Box<dyn Iterator<Item = _>>
                 } else {
                     Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
                 }
                 .chain(self.tiling.windows_iter()),
-            ) as Box<dyn Iterator<Item = _>>
+            )
         }
     }
 
@@ -271,13 +283,59 @@ impl Workspace {
         })
     }
 
+    pub fn set_maximized(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
+        match (value, mapped.is_maximized()) {
+            (Some(true), _) | (None, false) => {
+                if let Some(Fullscreen {
+                    mut mapped, rect, ..
+                }) = self.maximized.take()
+                {
+                    mapped.set_location(rect.loc);
+                    mapped.set_size(rect.size);
+                    mapped.set_fullscreen(false);
+                };
+
+                let loc = mapped.get_location();
+                let size = mapped.get_size();
+                mapped.set_location((0, 0).into());
+                mapped.set_size(self.get_output_size());
+                mapped.set_maximized(true);
+
+                self.maximized = Some(Fullscreen {
+                    mapped,
+                    rect: Rectangle::new(loc, size),
+                });
+            }
+            (Some(false), _) | (None, true) => {
+                let Some(Fullscreen {
+                    mut mapped, rect, ..
+                }) = self.maximized.take()
+                else {
+                    return;
+                };
+                mapped.set_location(rect.loc);
+                mapped.set_size(rect.size);
+                mapped.set_maximized(false);
+            }
+        }
+    }
+
     pub fn get_fullscreen(&self) -> Option<MappedWindow> {
         self.fullscreen.as_ref().map(|f| f.mapped.clone())
     }
 
     pub fn set_fullscreen(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
-        match (value, self.fullscreen.is_some()) {
+        match (value, mapped.is_fullscreen()) {
             (Some(true), _) | (None, false) => {
+                if let Some(Fullscreen {
+                    mut mapped, rect, ..
+                }) = self.fullscreen.take()
+                {
+                    mapped.set_location(rect.loc);
+                    mapped.set_size(rect.size);
+                    mapped.set_fullscreen(false);
+                };
+
                 let loc = mapped.get_location();
                 let size = mapped.get_size();
                 mapped.set_location((0, 0).into());

@@ -239,6 +239,12 @@ impl WindowManagerState {
                     } else {
                         state.states.unset(Fullscreen);
                     }
+
+                    if mapped.is_maximized() {
+                        state.states.set(Maximized);
+                    } else {
+                        state.states.unset(Maximized);
+                    }
                 });
 
                 mapped.toplevel().with_pending_state(|state| {

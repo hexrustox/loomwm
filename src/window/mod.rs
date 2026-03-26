@@ -78,6 +78,7 @@ pub struct MappedWindowInner {
     is_swap_source: bool,
     is_swap_target: bool,
     is_fullscreen: bool,
+    is_maximized: bool,
     border: Option<WindowBorder>,
     opacity: f32,
     resize_state: ResizeGrabState,
@@ -92,8 +93,9 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 is_focused,
                 is_floating,
-                // temp
+                // TEMP
                 is_fullscreen: false,
+                is_maximized: false,
                 is_swap_source: false,
                 is_swap_target: false,
                 border: None,
@@ -173,6 +175,14 @@ impl MappedWindow {
 
     pub fn set_fullscreen(&self, fullscreen: bool) {
         self.inner().is_fullscreen = fullscreen;
+    }
+
+    pub fn is_maximized(&self) -> bool {
+        self.inner().is_maximized
+    }
+
+    pub fn set_maximized(&self, maximized: bool) {
+        self.inner().is_maximized = maximized;
     }
 
     pub fn is_swap_source(&self) -> bool {

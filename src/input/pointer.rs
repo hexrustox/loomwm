@@ -103,11 +103,8 @@ impl WindowManagerState {
             use PointerActions::*;
             match action {
                 Move => {
-                    if let Some(FoundMappedWindow {
-                        mapped,
-                        workspace_name: _,
-                        ..
-                    }) = self.find_mapped_window_under(pointer.current_location())
+                    if let Some(FoundMappedWindow { mapped, .. }) =
+                        self.find_mapped_window_under(pointer.current_location())
                         && !pointer.is_grabbed()
                     {
                         {

@@ -138,16 +138,28 @@ impl XdgShellHandler for WindowManagerState {
     }
 
     // TODO minimize, maximize, fullscreen
+    fn maximize_request(&mut self, toplevel: ToplevelSurface) {
+        if !self.general_config.allow_resize_request {
+            warn!("Client maximize request ignored");
+            return;
+        }
+        self.toggle_window_maximized(toplevel.wl_surface(), Some(true));
+    }
+
+    fn unmaximize_request(&mut self, toplevel: ToplevelSurface) {
+        self.toggle_window_maximized(toplevel.wl_surface(), Some(false));
+    }
+
     fn fullscreen_request(&mut self, toplevel: ToplevelSurface, _output: Option<WlOutput>) {
         if !self.general_config.allow_resize_request {
             warn!("Client fullscreen request ignored");
             return;
         }
-        self.fullscreen_window(toplevel.wl_surface(), Some(true));
+        self.toggle_window_fullscreen(toplevel.wl_surface(), Some(true));
     }
 
     fn unfullscreen_request(&mut self, toplevel: ToplevelSurface) {
-        self.fullscreen_window(toplevel.wl_surface(), Some(false));
+        self.toggle_window_fullscreen(toplevel.wl_surface(), Some(false));
     }
 
     // TODO
