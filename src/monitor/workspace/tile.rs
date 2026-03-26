@@ -562,45 +562,6 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn windows_iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
-        fn collect_window_ids<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            tile_id: TileId,
-            ids: &mut Vec<TileId>,
-        ) {
-            match &arena[tile_id] {
-                Tile {
-                    kind: TileKind::Window(_),
-                    ..
-                } => ids.push(tile_id),
-                tile => {
-                    for &child_id in tile.as_layout_tiles() {
-                        collect_window_ids(arena, child_id, ids);
-                    }
-                }
-            }
-        }
-
-        let mut window_ids = Vec::new();
-        for &id in self.arena[self.root].as_layout_tiles() {
-            collect_window_ids(&self.arena, id, &mut window_ids);
-        }
-
-        let arena = &mut self.arena as *mut TileArena<T>;
-
-        window_ids.into_iter().filter_map(move |tile_id| {
-            // SAFETY: each tile_id appears at most once, so all returned references are disjoint
-            let arena = unsafe { &mut *arena };
-            match &mut arena[tile_id] {
-                Tile {
-                    kind: TileKind::Window(window),
-                    ..
-                } => Some(window),
-                _ => None,
-            }
-        })
-    }
-
     pub fn windows_count(&self) -> u32 {
         self.count
     }

@@ -6,11 +6,11 @@ use smithay::{
 use crate::{
     monitor::{FoundMappedWindow, workspace::TileResizeUnit},
     state::WindowManagerState,
-    utils::{Direction, apply_rule_to_mapped_window, get_app_id_and_title},
+    utils::Direction,
     window::{
         MappedWindow,
         rule::{
-            WindowLocation, WindowOpeningProperties, WindowProperties, WindowRuleCandidate,
+            WindowDynamicProperties, WindowLocation, WindowOpeningProperties, WindowProperties,
             WindowState,
         },
     },
@@ -70,11 +70,9 @@ impl WindowManagerState {
                 }
                 mapped.set_size(mapped.clamp_size(window_size));
 
-                apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 workspace.add_floating_window(mapped.clone());
             }
             WindowState::Tile { ratio } => {
-                apply_rule_to_mapped_window(&mapped, properties.dynamic);
                 let mapped = workspace.add_tiling_window(mapped.clone(), ratio);
                 self.handle_tiling_layout_full(mapped.clone());
                 if mapped.is_some() {
@@ -94,31 +92,26 @@ impl WindowManagerState {
         let Some(mapped) = mapped else {
             return;
         };
-        let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
 
-        let candidate = WindowRuleCandidate {
-            app_id,
-            title,
-            focus: true,
-            float: true,
-            is_swap_source: false,
-            is_swap_target: false,
-            workspace_name: self
-                .monitors
-                .get_monitor()
-                .get_active_workspace_name()
-                .clone(),
-        };
-        let mut properties = self.window_rules.get_properties(candidate, true);
+        let workspace_name = self
+            .monitors
+            .get_monitor()
+            .get_active_workspace_name()
+            .clone();
+
+        let mut properties =
+            self.window_rules
+                .get_opening_properties(&mapped.wl_surface(), workspace_name, true);
         properties = properties.merge(WindowProperties {
             opening: Some(WindowOpeningProperties {
                 state: Some(WindowState::Float {
                     location: None,
                     size: None,
                 }),
-                ..Default::default()
+                focus: None,
+                workspace_name: None,
             }),
-            ..Default::default()
+            dynamic: WindowDynamicProperties::default(),
         });
 
         self.add_window(mapped.window(), properties);
@@ -133,27 +126,12 @@ impl WindowManagerState {
             }
             if let Some(FoundMappedWindow {
                 mapped,
-                workspace_name,
+                workspace_name: _,
                 ..
             }) = self.find_mapped_window(&old_surface)
             {
                 mapped.set_focus(false);
                 mapped.window().set_activated(false);
-
-                let (app_id, title) = get_app_id_and_title(&old_surface);
-                let properties = self.window_rules.get_properties(
-                    WindowRuleCandidate {
-                        app_id,
-                        title,
-                        focus: mapped.get_focus(),
-                        float: mapped.get_floating(),
-                        is_swap_source: false,
-                        is_swap_target: false,
-                        workspace_name,
-                    },
-                    false,
-                );
-                apply_rule_to_mapped_window(&mapped, properties.dynamic);
             }
         }
         keyboard.set_focus(self, Some(surface.clone()), SERIAL_COUNTER.next_serial());
@@ -167,21 +145,6 @@ impl WindowManagerState {
         };
         mapped.set_focus(true);
         mapped.window().set_activated(true);
-
-        let (app_id, title) = get_app_id_and_title(surface);
-        let properties = self.window_rules.get_properties(
-            WindowRuleCandidate {
-                app_id,
-                title,
-                focus: mapped.get_focus(),
-                float: mapped.get_floating(),
-                is_swap_source: false,
-                is_swap_target: false,
-                workspace_name: workspace_name.clone(),
-            },
-            false,
-        );
-        apply_rule_to_mapped_window(&mapped, properties.dynamic);
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
@@ -276,21 +239,6 @@ impl WindowManagerState {
         }
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
-        let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
-        let properties = self.window_rules.get_properties(
-            WindowRuleCandidate {
-                app_id,
-                title,
-                focus,
-                float: mapped.get_floating(),
-                is_swap_source: false,
-                is_swap_target: false,
-                workspace_name: workspace_name.clone(),
-            },
-            false,
-        );
-        apply_rule_to_mapped_window(&mapped, properties.dynamic);
-
         if mapped.get_floating() {
             workspace.add_floating_window(mapped.clone());
         } else {
@@ -323,21 +271,6 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-
-        let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
-        let properties = self.window_rules.get_properties(
-            WindowRuleCandidate {
-                app_id,
-                title,
-                focus: true,
-                float: mapped.get_floating(),
-                is_swap_source: false,
-                is_swap_target: false,
-                workspace_name: workspace_name.clone(),
-            },
-            false,
-        );
-        apply_rule_to_mapped_window(&mapped, properties.dynamic);
 
         if mapped.get_floating() {
             workspace.add_floating_window(mapped);

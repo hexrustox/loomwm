@@ -75,6 +75,8 @@ pub struct MappedWindowInner {
     configured_size: Size<i32, Logical>,
     focus: bool,
     floating: bool,
+    is_swap_source: bool,
+    is_swap_target: bool,
     border: Option<WindowBorder>,
     opacity: f32,
     resize_state: ResizeGrabState,
@@ -89,6 +91,8 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 focus,
                 floating,
+                is_swap_source: false,
+                is_swap_target: false,
                 border: None,
                 opacity: 1.,
                 resize_state: ResizeGrabState::default(),
@@ -158,6 +162,22 @@ impl MappedWindow {
 
     pub fn set_floating(&self, floating: bool) {
         self.inner().floating = floating;
+    }
+
+    pub fn get_is_swap_source(&self) -> bool {
+        self.inner().is_swap_source
+    }
+
+    pub fn set_is_swap_source(&self, is_swap_source: bool) {
+        self.inner().is_swap_source = is_swap_source;
+    }
+
+    pub fn get_is_swap_target(&self) -> bool {
+        self.inner().is_swap_target
+    }
+
+    pub fn set_is_swap_target(&self, is_swap_target: bool) {
+        self.inner().is_swap_target = is_swap_target;
     }
 
     pub fn get_border_width(&self) -> i32 {

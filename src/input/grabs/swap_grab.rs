@@ -1,9 +1,4 @@
-use crate::{
-    monitor::{FoundMappedWindow, WorkspaceName},
-    state::WindowManagerState,
-    utils::{apply_rule_to_mapped_window, get_app_id_and_title},
-    window::{MappedWindow, rule::WindowRuleCandidate},
-};
+use crate::{monitor::FoundMappedWindow, state::WindowManagerState, window::MappedWindow};
 use smithay::input::{
     SeatHandler,
     pointer::{
@@ -17,7 +12,6 @@ use smithay::input::{
 pub struct SwapGrab {
     start_data: PointerGrabStartData<WindowManagerState>,
     mapped: MappedWindow,
-    workspace_name: WorkspaceName,
     last_mapped: Option<MappedWindow>,
     hidden: bool,
 }
@@ -26,13 +20,11 @@ impl SwapGrab {
     pub fn new(
         start_data: PointerGrabStartData<WindowManagerState>,
         mapped: MappedWindow,
-        workspace_name: WorkspaceName,
         hidden: bool,
     ) -> Self {
         Self {
             start_data,
             mapped,
-            workspace_name,
             last_mapped: None,
             hidden,
         }
@@ -54,7 +46,7 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
 
         if let Some(FoundMappedWindow {
             mapped,
-            workspace_name,
+            workspace_name: _,
             ..
         }) = data.find_mapped_window_under(event.location)
         {
@@ -62,40 +54,14 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
                 return;
             }
 
-            if let Some(mapped) = &self.last_mapped {
-                let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
-                let properties = data.window_rules.get_properties(
-                    WindowRuleCandidate {
-                        app_id,
-                        title,
-                        focus: mapped.get_focus(),
-                        float: mapped.get_floating(),
-                        is_swap_source: false,
-                        is_swap_target: false,
-                        workspace_name: workspace_name.clone(),
-                    },
-                    false,
-                );
-                apply_rule_to_mapped_window(mapped, properties.dynamic);
+            if let Some(last_mapped) = &self.last_mapped {
+                last_mapped.set_is_swap_target(false);
             }
 
             if self.mapped == mapped {
                 self.last_mapped = None;
             } else {
-                let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
-                let properties = data.window_rules.get_properties(
-                    WindowRuleCandidate {
-                        app_id,
-                        title,
-                        focus: mapped.get_focus(),
-                        float: mapped.get_floating(),
-                        is_swap_source: false,
-                        is_swap_target: true,
-                        workspace_name,
-                    },
-                    false,
-                );
-                apply_rule_to_mapped_window(&mapped, properties.dynamic);
+                mapped.set_is_swap_target(true);
                 self.last_mapped = Some(mapped.clone());
             }
         }
@@ -124,36 +90,10 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
 
         if !handle.current_pressed().contains(&self.start_data.button) {
             if let Some(mapped) = self.last_mapped.as_ref() {
-                let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
-                let properties = data.window_rules.get_properties(
-                    WindowRuleCandidate {
-                        app_id,
-                        title,
-                        focus: mapped.get_focus(),
-                        float: mapped.get_floating(),
-                        is_swap_source: false,
-                        is_swap_target: false,
-                        workspace_name: self.workspace_name.clone(),
-                    },
-                    false,
-                );
-                apply_rule_to_mapped_window(mapped, properties.dynamic);
+                mapped.set_is_swap_target(false);
                 data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
             }
-            let (app_id, title) = get_app_id_and_title(&self.mapped.wl_surface());
-            let properties = data.window_rules.get_properties(
-                WindowRuleCandidate {
-                    app_id,
-                    title,
-                    focus: self.mapped.get_focus(),
-                    float: self.mapped.get_floating(),
-                    is_swap_source: false,
-                    is_swap_target: false,
-                    workspace_name: self.workspace_name.clone(),
-                },
-                false,
-            );
-            apply_rule_to_mapped_window(&self.mapped, properties.dynamic);
+            self.mapped.set_is_swap_source(false);
             data.set_focused_workspace_floating_window_hidden(Some(self.hidden), Some(false));
             handle.unset_grab(self, data, event.serial, event.time, true);
         }

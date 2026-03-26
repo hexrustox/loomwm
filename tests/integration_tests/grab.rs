@@ -16,8 +16,7 @@ use smithay::{
 
 use crate::integration_tests::common::{
     TestState, active_workspace_has_n_windows, assert_tiling_windows_title, default_config, done,
-    get_active_workspace_name, get_floating_window, get_tiling_window, run_compositor_test,
-    spawn_alacritty, tiling_config,
+    get_floating_window, get_tiling_window, run_compositor_test, spawn_alacritty, tiling_config,
 };
 
 use test_case::test_case;
@@ -180,7 +179,6 @@ fn test_swap_grab() {
         move |data, phase| match phase {
             0 if active_workspace_has_n_windows(data, 2) => {
                 let mapped = get_tiling_window(data, 0);
-                let workspace_name = get_active_workspace_name(data).clone();
                 let hidden = data
                     .compositor
                     .get_focused_workspace_floating_window_hidden();
@@ -194,7 +192,7 @@ fn test_swap_grab() {
                     button: KeyCode::BTN_LEFT.0 as u32,
                     location: pointer_location,
                 };
-                let grab = SwapGrab::new(start_data, mapped, workspace_name, hidden);
+                let grab = SwapGrab::new(start_data, mapped, hidden);
                 pointer.set_grab(&mut data.compositor, grab, serial, Focus::Clear);
 
                 let motion_location = get_tiling_window(data, 1).center_location().to_f64();

@@ -21,11 +21,8 @@ use smithay::{
 use crate::{
     monitor::FoundMappedWindow,
     state::WindowManagerState,
-    utils::{get_app_id_and_title, is_mapped},
-    window::{
-        UnmappedWindowState,
-        rule::{WindowProperties, WindowRuleCandidate},
-    },
+    utils::is_mapped,
+    window::{UnmappedWindowState, rule::WindowProperties},
 };
 
 impl CompositorHandler for WindowManagerState {
@@ -63,22 +60,16 @@ impl CompositorHandler for WindowManagerState {
                 } else {
                     let unmapped = entry.get();
 
-                    let (app_id, title) = get_app_id_and_title(surface);
-
-                    let candidate = WindowRuleCandidate {
-                        app_id,
-                        title,
-                        focus: true,
-                        float: false,
-                        is_swap_source: false,
-                        is_swap_target: false,
-                        workspace_name: self
-                            .monitors
-                            .get_monitor()
-                            .get_active_workspace_name()
-                            .clone(),
-                    };
-                    let properties = self.window_rules.get_properties(candidate, true);
+                    let workspace_name = self
+                        .monitors
+                        .get_monitor()
+                        .get_active_workspace_name()
+                        .clone();
+                    let properties = self.window_rules.get_opening_properties(
+                        unmapped.toplevel().wl_surface(),
+                        workspace_name,
+                        false,
+                    );
 
                     let config_state = UnmappedWindowState::Configured(properties);
 

@@ -11,7 +11,7 @@ use smithay::{
 use crate::{
     state::WindowManagerState,
     utils::{
-        get_monotonic_time,
+        apply_rule_to_mapped_window, get_monotonic_time,
         types::{RenderElements, Renderer},
     },
     window::MappedWindow,
@@ -208,11 +208,17 @@ impl WindowManagerState {
         )
     }
 
-    pub fn apply_rule_to_mapped_windows(&mut self) {
-        let monitor = self.monitors.get_monitor_mut();
-        monitor.workspaces.iter_mut().for_each(|workspace| {
-            workspace.apply_rule_to_windows(&self.window_rules);
-        });
+    pub fn recompute_window_rules(&self) {
+        let monitor = self.monitors.get_monitor();
+        for workspace in &monitor.workspaces {
+            let workspace_name = workspace.get_name();
+            for mapped in workspace.windows_iter() {
+                let dynamic = self
+                    .window_rules
+                    .get_dynamic_properties(mapped, workspace_name.clone());
+                apply_rule_to_mapped_window(mapped, dynamic);
+            }
+        }
     }
 
     pub fn update_workspaces_tiling_windows_size(&mut self) {

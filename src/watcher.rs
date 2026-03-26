@@ -56,10 +56,7 @@ impl WindowManagerState {
             assistant: _,
         } = config;
 
-        if self.window_rules.get_hash() != config.window_rules.get_hash() {
-            self.window_rules = config.window_rules;
-            self.apply_rule_to_mapped_windows();
-        }
+        self.window_rules = config.window_rules;
 
         self.general_config = config.general;
 

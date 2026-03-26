@@ -175,6 +175,8 @@ impl WindowManagerState {
     pub fn refresh(&mut self) {
         self.popups.cleanup();
 
+        self.recompute_window_rules();
+
         self.refresh_windows();
 
         self.space.refresh();

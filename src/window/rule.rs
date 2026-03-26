@@ -1,33 +1,41 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use regex::Regex;
 use serde::Deserialize;
-use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
+use smithay::reexports::{
+    wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode,
+    wayland_server::protocol::wl_surface::WlSurface,
+};
 use tracing::error;
 
 use crate::{
     monitor::{TileRatio, WorkspaceName},
-    utils::RGBAColor,
+    utils::{RGBAColor, get_app_id_and_title},
+    window::MappedWindow,
 };
 
-#[derive(Debug, Default, Deserialize, Hash)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(transparent)]
 pub struct WindowRules(Vec<WindowRule>);
 
 impl WindowRules {
-    pub fn get_properties(
+    pub fn get_opening_properties(
         &self,
-        mut candidate: WindowRuleCandidate,
-        opening: bool,
+        surface: &WlSurface,
+        workspace_name: WorkspaceName,
+        float: bool,
     ) -> WindowProperties {
-        let mut properties = if opening {
-            WindowProperties::default()
-        } else {
-            WindowProperties {
-                opening: None,
-                ..Default::default()
-            }
+        let (app_id, title) = get_app_id_and_title(surface);
+
+        let mut properties = WindowProperties::default();
+        let mut candidate = WindowRuleCandidate {
+            app_id,
+            title,
+            focus: true,
+            float,
+            is_swap_source: false,
+            is_swap_target: false,
+            workspace_name: workspace_name.clone(),
         };
+
         for rule in &self.0 {
             if rule.is_match(&candidate) {
                 properties = properties.merge(rule.properties.clone());
@@ -68,14 +76,38 @@ impl WindowRules {
         properties
     }
 
-    pub fn get_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
+    pub fn get_dynamic_properties(
+        &self,
+        mapped: &MappedWindow,
+        workspace_name: WorkspaceName,
+    ) -> WindowDynamicProperties {
+        let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
+        let candidate = WindowRuleCandidate {
+            app_id,
+            title,
+            focus: mapped.get_focus(),
+            float: mapped.get_floating(),
+            is_swap_source: mapped.get_is_swap_source(),
+            is_swap_target: mapped.get_is_swap_target(),
+            workspace_name,
+        };
+
+        let mut properties = WindowProperties {
+            opening: None,
+            dynamic: WindowDynamicProperties::default(),
+        };
+
+        for rule in &self.0 {
+            if rule.is_match(&candidate) {
+                properties = properties.merge(rule.properties.clone());
+            }
+        }
+
+        properties.dynamic
     }
 }
 
-#[derive(Debug, Deserialize, Hash)]
+#[derive(Debug, Deserialize)]
 struct WindowRule {
     #[serde(default = "default_window_rule_matches")]
     matches: Vec<WindowRuleMatch>,
@@ -143,7 +175,7 @@ impl WindowRule {
 }
 
 // TODO tags
-#[derive(Debug, Default, Deserialize, Hash)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct WindowRuleMatch {
     app_id: Option<String>,
@@ -158,18 +190,18 @@ pub struct WindowRuleMatch {
     workspace_name: Option<WorkspaceName>,
 }
 
-#[derive(Debug)]
-pub struct WindowRuleCandidate {
-    pub app_id: String,
-    pub title: String,
-    pub focus: bool,
-    pub float: bool,
-    pub is_swap_source: bool,
-    pub is_swap_target: bool,
-    pub workspace_name: WorkspaceName,
+#[derive(Debug, Clone)]
+pub(crate) struct WindowRuleCandidate {
+    app_id: String,
+    title: String,
+    focus: bool,
+    float: bool,
+    is_swap_source: bool,
+    is_swap_target: bool,
+    workspace_name: WorkspaceName,
 }
 
-#[derive(Debug, Clone, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct WindowProperties {
     #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
@@ -186,7 +218,7 @@ impl Default for WindowProperties {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 pub struct WindowOpeningProperties {
     #[serde(rename = "open-with-focus")]
     pub focus: Option<bool>,
@@ -202,24 +234,6 @@ pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub border: Option<WindowBorder>,
     pub opacity: Option<f32>,
-}
-
-impl std::hash::Hash for WindowDynamicProperties {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // REMIND
-        #[cfg(test)]
-        let WindowDynamicProperties {
-            decoration: _,
-            border: _,
-            opacity: _,
-        } = self;
-
-        self.decoration.hash(state);
-        self.border.hash(state);
-        if let Some(f) = self.opacity {
-            f.to_bits().hash(state)
-        }
-    }
 }
 
 impl WindowProperties {
@@ -255,7 +269,7 @@ impl WindowDynamicProperties {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowDecoration {
     #[default]
@@ -272,7 +286,7 @@ impl From<WindowDecoration> for Mode {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Hash, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
 pub struct WindowBorder {
     pub width: u32,
     pub color: RGBAColor,
@@ -297,23 +311,7 @@ impl Default for WindowState {
     }
 }
 
-impl std::hash::Hash for WindowState {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Float { location, size } => {
-                location.hash(state);
-                size.hash(state);
-            }
-            Self::Tile { ratio } => {
-                if let Some(r) = ratio {
-                    r.to_bits().hash(state);
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WindowLocation {
     Center,
     Location(N, N),
@@ -469,62 +467,5 @@ mod tests {
     )]
     fn test_merge_properties(lhs: WindowProperties, rhs: WindowProperties) -> WindowProperties {
         lhs.merge(rhs)
-    }
-
-    fn expect_opening(opening: Option<WindowOpeningProperties>) -> WindowProperties {
-        WindowProperties {
-            opening,
-            dynamic: WindowDynamicProperties::default(),
-        }
-    }
-
-    #[test_case(
-        vec![WindowRule {
-            matches: vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
-            properties: WindowProperties {
-                opening: Some(WindowOpeningProperties {
-                    focus: Some(false),
-                    state: Some(WindowState::Tile { ratio: None }),
-                    workspace_name: Some(WorkspaceName::Id(1)),
-                }),
-                dynamic: WindowDynamicProperties::default(),
-            },
-        }],
-        WindowRuleCandidate { focus: true, ..Default::default() } =>
-        expect_opening(Some(WindowOpeningProperties {
-            focus: Some(false),
-            state: Some(WindowState::Tile { ratio: None }),
-            workspace_name: Some(WorkspaceName::Id(1)),
-        }));
-        "rule_applies_and_candidate_updated"
-    )]
-    #[test_case(
-        vec![],
-        WindowRuleCandidate { focus: true, ..Default::default() } =>
-        expect_opening(Some(WindowOpeningProperties::default()));
-        "no_rules_returns_default_opening"
-    )]
-    #[test_case(
-        vec![WindowRule {
-            matches: vec![WindowRuleMatch { app_id: Some("nomatch".into()), ..Default::default() }],
-            properties: WindowProperties {
-                opening: Some(WindowOpeningProperties {
-                    focus: Some(true),
-                    state: None,
-                    workspace_name: None,
-                }),
-                dynamic: WindowDynamicProperties::default(),
-            },
-        }],
-        WindowRuleCandidate { app_id: "test".into(), ..Default::default() } =>
-        expect_opening(Some(WindowOpeningProperties::default()));
-        "rule_no_match_preserves_default_opening"
-    )]
-    fn test_get_properties(
-        rules: Vec<WindowRule>,
-        candidate: WindowRuleCandidate,
-    ) -> WindowProperties {
-        let window_rules = WindowRules(rules);
-        window_rules.get_properties(candidate, true)
     }
 }

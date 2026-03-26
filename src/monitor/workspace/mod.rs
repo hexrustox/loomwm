@@ -12,13 +12,10 @@ use smithay::{
 use crate::{
     monitor::workspace::tile::{TileInsertion, TileTree},
     utils::{
-        Direction, apply_rule_to_mapped_window, get_app_id_and_title,
+        Direction,
         types::{RenderElements, Renderer},
     },
-    window::{
-        MappedWindow,
-        rule::{WindowRuleCandidate, WindowRules},
-    },
+    window::MappedWindow,
 };
 
 mod tile;
@@ -240,30 +237,6 @@ impl Workspace {
     pub fn set_floating_window_hidden(&mut self, value: Option<bool>) {
         self.hide_floating = value.unwrap_or(!self.hide_floating);
         self.restore_focus_after_window_hidden();
-    }
-
-    pub fn apply_rule_to_windows(&mut self, window_rules: &WindowRules) {
-        let workspace_name = self.get_name().clone();
-        for mapped in self
-            .floating
-            .iter_mut()
-            .chain(self.tiling.windows_iter_mut())
-        {
-            let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
-            let properties = window_rules.get_properties(
-                WindowRuleCandidate {
-                    app_id,
-                    title,
-                    focus: mapped.get_focus(),
-                    float: mapped.get_floating(),
-                    is_swap_source: false,
-                    is_swap_target: false,
-                    workspace_name: workspace_name.clone(),
-                },
-                false,
-            );
-            apply_rule_to_mapped_window(mapped, properties.dynamic);
-        }
     }
 
     pub fn find_mapped_window_under(
