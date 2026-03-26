@@ -9,18 +9,8 @@ use tracing::error;
 use crate::{
     monitor::{TileRatio, WorkspaceName},
     utils::{RGBAColor, get_app_id_and_title},
-    window::MappedWindow,
+    window::{MappedWindow, WindowRole},
 };
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum WindowRole {
-    #[default]
-    Normal,
-    Maximized,
-    Fullscreen,
-    SwapSource,
-    SwapTarget,
-}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(transparent)]
@@ -103,24 +93,12 @@ impl WindowRules {
     ) -> WindowDynamicProperties {
         let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
 
-        let role = if mapped.is_swap_source() {
-            WindowRole::SwapSource
-        } else if mapped.is_swap_target() {
-            WindowRole::SwapTarget
-        } else if mapped.is_maximized() {
-            WindowRole::Maximized
-        } else if mapped.is_fullscreen() {
-            WindowRole::Fullscreen
-        } else {
-            WindowRole::Normal
-        };
-
         let candidate = WindowRuleCandidate {
             app_id,
             title,
             is_focused: mapped.is_focused(),
             is_floating: mapped.is_floating(),
-            role,
+            role: mapped.role(),
             workspace_name,
         };
 

@@ -8,7 +8,10 @@ use crate::{
     input::{KeyCombo, KeyModifiers, PointerCombo, WindowUnit},
     monitor::WorkspaceName,
     utils::{Direction, RGBAColor},
-    window::rule::{WindowLocation, WindowRole, WindowRuleMatch},
+    window::{
+        WindowRole,
+        rule::{WindowLocation, WindowRuleMatch},
+    },
 };
 
 impl<'de> Deserialize<'de> for Direction {

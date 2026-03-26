@@ -34,6 +34,16 @@ use crate::{
 
 pub mod rule;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum WindowRole {
+    #[default]
+    Normal,
+    Maximized,
+    Fullscreen,
+    SwapSource,
+    SwapTarget,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct UnmappedWindow {
     pub window: Window,
@@ -75,23 +85,45 @@ pub struct MappedWindowInner {
     configured_size: Size<i32, Logical>,
     is_focused: bool,
     is_floating: bool,
-    is_maximized: bool,
-    is_fullscreen: bool,
-    is_swap_source: bool,
-    is_swap_target: bool,
+    role: WindowRole,
     border: Option<WindowBorder>,
     opacity: f32,
     resize_state: ResizeGrabState,
 }
 
+macro_rules! get_setter {
+    (bool $field:ident, $get:ident, $set:ident) => {
+        pub fn $get(&self) -> bool {
+            self.inner().$field
+        }
+        pub fn $set(&self, value: bool) {
+            self.inner().$field = value;
+        }
+    };
+    (role $get:ident, $set:ident, $variant:ident) => {
+        pub fn $get(&self) -> bool {
+            self.inner().role == WindowRole::$variant
+        }
+        pub fn $set(&self, value: bool) {
+            self.inner().role = if value {
+                WindowRole::$variant
+            } else {
+                WindowRole::Normal
+            };
+        }
+    };
+    ($field:ident: $T:ty, $get:ident, $set:ident) => {
+        pub fn $get(&self) -> $T {
+            self.inner().$field.clone()
+        }
+        pub fn $set(&self, value: $T) {
+            self.inner().$field = value;
+        }
+    };
+}
+
 impl MappedWindow {
-    pub fn new(
-        window: Window,
-        is_focused: bool,
-        is_floating: bool,
-        is_maximized: bool,
-        is_fullscreen: bool,
-    ) -> Self {
+    pub fn new(window: Window, is_focused: bool, is_floating: bool, role: WindowRole) -> Self {
         Self {
             inner: Arc::new(Mutex::new(MappedWindowInner {
                 window,
@@ -99,10 +131,7 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 is_focused,
                 is_floating,
-                is_maximized,
-                is_fullscreen,
-                is_swap_source: false,
-                is_swap_target: false,
+                role,
                 border: None,
                 opacity: 1.,
                 resize_state: ResizeGrabState::default(),
@@ -113,6 +142,15 @@ impl MappedWindow {
     fn inner(&self) -> MutexGuard<'_, MappedWindowInner> {
         self.inner.lock().expect("Mapped window lock panic")
     }
+
+    get_setter!(bool is_focused, is_focused, set_focus);
+    get_setter!(bool is_floating, is_floating, set_floating);
+    get_setter!(role is_fullscreen, set_fullscreen, Fullscreen);
+    get_setter!(role is_maximized, set_maximized, Maximized);
+    get_setter!(role is_swap_source, set_swap_source, SwapSource);
+    get_setter!(role is_swap_target, set_swap_target, SwapTarget);
+    get_setter!(opacity: f32, get_opacity, set_opacity);
+    get_setter!(border: Option<WindowBorder>, get_border, set_border);
 
     pub fn window(&self) -> Window {
         self.inner().window.clone()
@@ -158,52 +196,8 @@ impl MappedWindow {
             .into()
     }
 
-    pub fn is_focused(&self) -> bool {
-        self.inner().is_focused
-    }
-
-    pub fn set_focus(&self, focus: bool) {
-        self.inner().is_focused = focus;
-    }
-
-    pub fn is_floating(&self) -> bool {
-        self.inner().is_floating
-    }
-
-    pub fn set_floating(&self, floating: bool) {
-        self.inner().is_floating = floating;
-    }
-
-    pub fn is_fullscreen(&self) -> bool {
-        self.inner().is_fullscreen
-    }
-
-    pub fn set_fullscreen(&self, fullscreen: bool) {
-        self.inner().is_fullscreen = fullscreen;
-    }
-
-    pub fn is_maximized(&self) -> bool {
-        self.inner().is_maximized
-    }
-
-    pub fn set_maximized(&self, maximized: bool) {
-        self.inner().is_maximized = maximized;
-    }
-
-    pub fn is_swap_source(&self) -> bool {
-        self.inner().is_swap_source
-    }
-
-    pub fn set_swap_source(&self, is_swap_source: bool) {
-        self.inner().is_swap_source = is_swap_source;
-    }
-
-    pub fn is_swap_target(&self) -> bool {
-        self.inner().is_swap_target
-    }
-
-    pub fn set_swap_target(&self, is_swap_target: bool) {
-        self.inner().is_swap_target = is_swap_target;
+    pub fn role(&self) -> WindowRole {
+        self.inner().role
     }
 
     pub fn get_border_width(&self) -> i32 {
@@ -215,18 +209,6 @@ impl MappedWindow {
 
     pub fn get_border_color(&self) -> Option<RGBAColor> {
         self.inner().border.clone().map(|b| b.color)
-    }
-
-    pub fn set_border(&self, border: Option<WindowBorder>) {
-        self.inner().border = border;
-    }
-
-    pub fn get_opacity(&self) -> f32 {
-        self.inner().opacity
-    }
-
-    pub fn set_opacity(&self, opacity: f32) {
-        self.inner().opacity = opacity;
     }
 
     pub fn set_resize_state(&self, state: ResizeGrabState) {
