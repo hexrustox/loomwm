@@ -23,7 +23,7 @@ use crate::{
     input::grabs::{floating_resize_grab::FloatingResizeGrab, move_grab::MoveGrab},
     monitor::{FoundMappedWindow, TileTreeWindow},
     state::WindowManagerState,
-    window::UnmappedWindow,
+    window::{UnmappedWindow, WindowRole},
 };
 
 impl XdgShellHandler for WindowManagerState {
@@ -143,11 +143,11 @@ impl XdgShellHandler for WindowManagerState {
             warn!("Client maximize request ignored");
             return;
         }
-        self.toggle_window_maximized(toplevel.wl_surface(), Some(true));
+        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Maximized, Some(true));
     }
 
     fn unmaximize_request(&mut self, toplevel: ToplevelSurface) {
-        self.toggle_window_maximized(toplevel.wl_surface(), Some(false));
+        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Maximized, Some(false));
     }
 
     fn fullscreen_request(&mut self, toplevel: ToplevelSurface, _output: Option<WlOutput>) {
@@ -155,11 +155,11 @@ impl XdgShellHandler for WindowManagerState {
             warn!("Client fullscreen request ignored");
             return;
         }
-        self.toggle_window_fullscreen(toplevel.wl_surface(), Some(true));
+        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Fullscreen, Some(true));
     }
 
     fn unfullscreen_request(&mut self, toplevel: ToplevelSurface) {
-        self.toggle_window_fullscreen(toplevel.wl_surface(), Some(false));
+        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Fullscreen, Some(false));
     }
 
     // TODO

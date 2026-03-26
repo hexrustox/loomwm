@@ -15,7 +15,7 @@ use crate::{
         Direction,
         types::{RenderElements, Renderer},
     },
-    window::MappedWindow,
+    window::{MappedWindow, WindowRole},
 };
 
 mod tile;
@@ -50,14 +50,19 @@ pub struct Workspace {
 
     hide_floating: bool,
 
-    maximized: Option<Exclusive>,
-    fullscreen: Option<Exclusive>,
+    occupant: Option<Occupant>,
 }
 
 #[derive(Debug)]
-struct Exclusive {
+struct Occupant {
     mapped: MappedWindow,
     rect: Option<Rectangle<i32, Logical>>,
+}
+
+pub enum OccupantAction {
+    Toggle(MappedWindow),
+    Set(MappedWindow),
+    Unset,
 }
 
 impl Workspace {
@@ -74,8 +79,7 @@ impl Workspace {
             floating: Vec::new(),
             focus_queue: Vec::new(),
             hide_floating: false,
-            maximized: None,
-            fullscreen: None,
+            occupant: None,
         }
     }
 
@@ -225,14 +229,11 @@ impl Workspace {
         let mapped = self
             .remove_floating_window(surface)
             .or(self.remove_tiling_window(surface));
-        if let Some(Exclusive { mapped: m, .. }) =
-            self.maximized.as_ref().or(self.fullscreen.as_ref())
-            && let Some(ref m2) = mapped
-            && m == m2
+        if let Some(Occupant { mapped: m, .. }) = self.occupant.as_ref()
+            && mapped.as_ref() == Some(m)
         {
-            let m = m.clone();
-            self.set_maximized(m.clone(), Some(false));
-            self.set_fullscreen(m.clone(), Some(false));
+            let role = m.role();
+            self.set_occupant(OccupantAction::Unset, role);
         }
         mapped
     }
@@ -273,98 +274,61 @@ impl Workspace {
         })
     }
 
-    pub fn set_maximized(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
-        match (value, mapped.is_maximized()) {
-            (Some(true), _) | (None, false) => {
-                if let Some(Exclusive {
-                    mut mapped, rect, ..
-                }) = self.maximized.take()
-                {
-                    if let Some(rect) = rect {
-                        mapped.set_location(rect.loc);
-                        mapped.set_size(rect.size);
-                    } else {
-                        self.update_tiling_windows_size();
-                    }
-                    mapped.set_maximized(false);
-                };
-
-                let loc = mapped.get_location();
-                let size = mapped.get_size();
-                mapped.set_location((0, 0).into());
-                mapped.set_size(self.get_output_size());
-                mapped.set_maximized(true);
-
-                self.maximized = Some(Exclusive {
-                    rect: if mapped.is_floating() {
-                        Some(Rectangle::new(loc, size))
-                    } else {
-                        None
-                    },
-                    mapped,
-                });
+    pub fn set_occupant(&mut self, action: OccupantAction, role: WindowRole) {
+        match action {
+            OccupantAction::Toggle(mapped) => {
+                if mapped.role() == role {
+                    self.deactivate_occupant();
+                } else {
+                    self.activate_occupant(mapped, role);
+                }
             }
-            (Some(false), _) | (None, true) => {
-                if let Some(Exclusive {
-                    mut mapped, rect, ..
-                }) = self.maximized.take()
-                {
-                    if let Some(rect) = rect {
-                        mapped.set_location(rect.loc);
-                        mapped.set_size(rect.size);
-                    } else {
-                        self.update_tiling_windows_size();
-                    }
-                    mapped.set_maximized(false);
-                };
+            OccupantAction::Set(mapped) => {
+                self.activate_occupant(mapped, role);
+            }
+            OccupantAction::Unset => {
+                self.deactivate_occupant();
             }
         }
     }
 
-    pub fn set_fullscreen(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
-        match (value, mapped.is_fullscreen()) {
-            (Some(true), _) | (None, false) => {
-                if let Some(Exclusive {
-                    mut mapped, rect, ..
-                }) = self.fullscreen.take()
-                {
-                    if let Some(rect) = rect {
-                        mapped.set_location(rect.loc);
-                        mapped.set_size(rect.size);
-                    } else {
-                        self.update_tiling_windows_size();
-                    }
-                    mapped.set_fullscreen(false);
-                };
+    fn activate_occupant(&mut self, mut mapped: MappedWindow, role: WindowRole) {
+        self.deactivate_occupant();
 
-                let loc = mapped.get_location();
-                let size = mapped.get_size();
-                mapped.set_location((0, 0).into());
-                mapped.set_size(self.get_output_size());
-                mapped.set_fullscreen(true);
+        let loc = mapped.get_location();
+        let size = mapped.get_size();
+        mapped.set_location((0, 0).into());
+        mapped.set_size(self.get_output_size());
+        match role {
+            WindowRole::Maximized => mapped.set_maximized(true),
+            WindowRole::Fullscreen => mapped.set_fullscreen(true),
+            _ => {}
+        }
+        self.occupant = Some(Occupant {
+            rect: if mapped.is_floating() {
+                Some(Rectangle::new(loc, size))
+            } else {
+                None
+            },
+            mapped,
+        });
+    }
 
-                self.fullscreen = Some(Exclusive {
-                    rect: if mapped.is_floating() {
-                        Some(Rectangle::new(loc, size))
-                    } else {
-                        None
-                    },
-                    mapped,
-                });
+    fn deactivate_occupant(&mut self) {
+        if let Some(Occupant {
+            mut mapped, rect, ..
+        }) = self.occupant.take()
+        {
+            if let Some(rect) = rect {
+                mapped.set_location(rect.loc);
+                mapped.set_size(rect.size);
+            } else {
+                self.update_tiling_windows_size();
             }
-            (Some(false), _) | (None, true) => {
-                if let Some(Exclusive {
-                    mut mapped, rect, ..
-                }) = self.fullscreen.take()
-                {
-                    if let Some(rect) = rect {
-                        mapped.set_location(rect.loc);
-                        mapped.set_size(rect.size);
-                    } else {
-                        self.update_tiling_windows_size();
-                    }
-                    mapped.set_fullscreen(false);
-                };
+            match mapped.role() {
+                WindowRole::Maximized => mapped.set_maximized(false),
+                WindowRole::Fullscreen => mapped.set_fullscreen(false),
+                _ => {}
             }
         }
     }
@@ -395,17 +359,19 @@ impl Workspace {
     {
         let iter: Box<dyn Iterator<Item = _>> = {
             use std::iter::*;
-            if let Some(Exclusive { mapped, .. }) = self.fullscreen.as_ref() {
-                Box::new(once(mapped))
-            } else if let Some(Exclusive { mapped, .. }) = self.maximized.as_ref() {
-                Box::new(
-                    (if mapped.is_floating() {
-                        Box::new(empty()) as Box<dyn Iterator<Item = _>>
-                    } else {
-                        Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
-                    })
-                    .chain(once(mapped)),
-                )
+            if let Some(Occupant { mapped, .. }) = self.occupant.as_ref() {
+                if mapped.role() == WindowRole::Fullscreen {
+                    Box::new(once(mapped))
+                } else {
+                    Box::new(
+                        (if mapped.is_floating() {
+                            Box::new(empty()) as Box<dyn Iterator<Item = _>>
+                        } else {
+                            Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
+                        })
+                        .chain(once(mapped)),
+                    )
+                }
             } else {
                 Box::new(
                     if self.hide_floating {

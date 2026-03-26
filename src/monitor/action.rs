@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-pub use super::workspace::{TileTreeWindow, WorkspaceName};
+pub use super::workspace::{OccupantAction, TileTreeWindow, WorkspaceName};
 
 impl WindowManagerState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
@@ -84,10 +84,10 @@ impl WindowManagerState {
             self.focus_window(&mapped.wl_surface());
         }
         if mapped.is_maximized() {
-            self.toggle_window_maximized(&mapped.wl_surface(), Some(true));
+            self.toggle_window_occupant(&mapped.wl_surface(), WindowRole::Maximized, Some(true));
         }
         if mapped.is_fullscreen() {
-            self.toggle_window_fullscreen(&mapped.wl_surface(), Some(true));
+            self.toggle_window_occupant(&mapped.wl_surface(), WindowRole::Fullscreen, Some(true));
         }
 
         self.save_layout_history();
@@ -420,7 +420,12 @@ impl WindowManagerState {
         workspace.resize_tiling_window(&surface, direction, unit);
     }
 
-    pub fn toggle_window_maximized(&mut self, surface: &WlSurface, value: Option<bool>) {
+    pub fn toggle_window_occupant(
+        &mut self,
+        surface: &WlSurface,
+        role: WindowRole,
+        value: Option<bool>,
+    ) {
         let Some(FoundMappedWindow {
             mapped,
             workspace_name,
@@ -429,22 +434,13 @@ impl WindowManagerState {
         else {
             return;
         };
-        let monitor = self.monitors.get_monitor_mut();
-        let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.set_maximized(mapped, value);
-    }
-
-    pub fn toggle_window_fullscreen(&mut self, surface: &WlSurface, value: Option<bool>) {
-        let Some(FoundMappedWindow {
-            mapped,
-            workspace_name,
-            ..
-        }) = self.find_mapped_window(surface)
-        else {
-            return;
+        let action = match value {
+            Some(true) => OccupantAction::Set(mapped),
+            Some(false) => OccupantAction::Unset,
+            None => OccupantAction::Toggle(mapped),
         };
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.set_fullscreen(mapped, value);
+        workspace.set_occupant(action, role);
     }
 }

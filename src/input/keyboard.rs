@@ -13,6 +13,7 @@ use crate::{
     monitor::{TileRatio, WorkspaceName},
     state::WindowManagerState,
     utils::Direction,
+    window::WindowRole,
 };
 
 bitflags! {
@@ -206,12 +207,12 @@ impl WindowManagerState {
             }
             ToggleMaximize { value } => {
                 if let Some(surface) = self.get_keyboard().current_focus() {
-                    self.toggle_window_maximized(&surface, *value);
+                    self.toggle_window_occupant(&surface, WindowRole::Maximized, *value);
                 }
             }
             ToggleFullscreen { value } => {
                 if let Some(surface) = self.get_keyboard().current_focus() {
-                    self.toggle_window_fullscreen(&surface, *value);
+                    self.toggle_window_occupant(&surface, WindowRole::Fullscreen, *value);
                 }
             }
             CloseWindow => {
