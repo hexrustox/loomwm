@@ -68,7 +68,7 @@ impl CompositorHandler for WindowManagerState {
                     let properties = self.window_rules.get_opening_properties(
                         unmapped.toplevel().wl_surface(),
                         workspace_name,
-                        false,
+                        None,
                     );
 
                     let config_state = UnmappedWindowState::Configured(properties);

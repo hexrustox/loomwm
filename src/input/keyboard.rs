@@ -202,6 +202,7 @@ impl WindowManagerState {
                 self.close_focused_window();
             }
             Execute { command: args } => {
+                // TODO dump stdout & err
                 if let Some(program) = args.first() {
                     let _ = Command::new(program).args(args.iter().skip(1)).spawn();
                 }

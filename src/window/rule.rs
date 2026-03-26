@@ -21,19 +21,29 @@ impl WindowRules {
         &self,
         surface: &WlSurface,
         workspace_name: WorkspaceName,
-        is_floating: bool,
+        float_state: Option<WindowState>,
     ) -> WindowProperties {
         let (app_id, title) = get_app_id_and_title(surface);
 
-        let mut properties = WindowProperties::default();
+        let default_state = Some(WindowState::Tile { ratio: None });
+        let state = float_state.or(default_state);
+
         let mut candidate = WindowRuleCandidate {
             app_id,
             title,
             is_focused: true,
-            is_floating,
+            is_floating: matches!(state, Some(WindowState::Float { .. })),
             is_swap_source: false,
             is_swap_target: false,
             workspace_name: workspace_name.clone(),
+        };
+        let mut properties = WindowProperties {
+            opening: Some(WindowOpeningProperties {
+                layout_state: state,
+                open_with_focus: Some(true),
+                open_in_workspace: None,
+            }),
+            dynamic: WindowDynamicProperties::default(),
         };
 
         for rule in &self.0 {

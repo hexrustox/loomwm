@@ -9,10 +9,7 @@ use crate::{
     utils::Direction,
     window::{
         MappedWindow,
-        rule::{
-            WindowDynamicProperties, WindowLocation, WindowOpeningProperties, WindowProperties,
-            WindowState,
-        },
+        rule::{WindowLocation, WindowOpeningProperties, WindowProperties, WindowState},
     },
 };
 
@@ -26,14 +23,14 @@ impl WindowManagerState {
             open_in_workspace,
         }) = properties.opening
         else {
-            #[cfg(test)]
-            panic!("Missing window opening properties");
-            #[allow(unreachable_code)]
-            return;
+            unreachable!();
         };
 
-        let focus = open_with_focus.unwrap_or(true);
-        let floating = matches!(layout_state, Some(WindowState::Float { .. }));
+        let focus = open_with_focus.unwrap();
+        let floating = match layout_state.as_ref().unwrap() {
+            WindowState::Float { .. } => true,
+            WindowState::Tile { .. } => false,
+        };
         let mut mapped = MappedWindow::new(window, focus, floating);
 
         let monitor = self.monitors.get_monitor_mut();
@@ -99,20 +96,14 @@ impl WindowManagerState {
             .get_active_workspace_name()
             .clone();
 
-        let mut properties =
-            self.window_rules
-                .get_opening_properties(&mapped.wl_surface(), workspace_name, true);
-        properties = properties.merge(WindowProperties {
-            opening: Some(WindowOpeningProperties {
-                layout_state: Some(WindowState::Float {
-                    location: None,
-                    size: None,
-                }),
-                open_with_focus: None,
-                open_in_workspace: None,
+        let properties = self.window_rules.get_opening_properties(
+            &mapped.wl_surface(),
+            workspace_name,
+            Some(WindowState::Float {
+                location: None,
+                size: None,
             }),
-            dynamic: WindowDynamicProperties::default(),
-        });
+        );
 
         self.add_window(mapped.window(), properties);
     }
