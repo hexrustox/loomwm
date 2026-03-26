@@ -6,7 +6,7 @@ use smithay::{
     desktop::space::SpaceElement,
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Size},
+    utils::{Logical, Point, Rectangle, Size},
 };
 
 use crate::{
@@ -49,6 +49,14 @@ pub struct Workspace {
     focus_queue: Vec<MappedWindow>,
 
     hide_floating: bool,
+
+    fullscreen: Option<Fullscreen>,
+}
+
+#[derive(Debug)]
+struct Fullscreen {
+    mapped: MappedWindow,
+    rect: Rectangle<i32, Logical>,
 }
 
 impl Workspace {
@@ -65,6 +73,7 @@ impl Workspace {
             floating: Vec::new(),
             focus_queue: Vec::new(),
             hide_floating: false,
+            fullscreen: None,
         }
     }
 
@@ -105,13 +114,19 @@ impl Workspace {
             .update_tile_size(self.output.current_location(), self.get_output_size());
     }
 
-    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
-        (if self.hide_floating {
-            Box::new(std::iter::empty())
+    pub fn windows_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
+        if let Some(Fullscreen { mapped, .. }) = self.fullscreen.as_ref() {
+            Box::new(std::iter::once(mapped)) as Box<dyn Iterator<Item = _>>
         } else {
-            Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
-        })
-        .chain(self.tiling.windows_iter())
+            Box::new(
+                if self.hide_floating {
+                    Box::new(std::iter::empty()) as Box<dyn Iterator<Item = _>>
+                } else {
+                    Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
+                }
+                .chain(self.tiling.windows_iter()),
+            ) as Box<dyn Iterator<Item = _>>
+        }
     }
 
     pub fn floating_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> + Clone {
@@ -254,6 +269,38 @@ impl Workspace {
                 None
             }
         })
+    }
+
+    pub fn get_fullscreen(&self) -> Option<MappedWindow> {
+        self.fullscreen.as_ref().map(|f| f.mapped.clone())
+    }
+
+    pub fn set_fullscreen(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
+        match (value, self.fullscreen.is_some()) {
+            (Some(true), _) | (None, false) => {
+                let loc = mapped.get_location();
+                let size = mapped.get_size();
+                mapped.set_location((0, 0).into());
+                mapped.set_size(self.get_output_size());
+                mapped.set_fullscreen(true);
+
+                self.fullscreen = Some(Fullscreen {
+                    mapped,
+                    rect: Rectangle::new(loc, size),
+                });
+            }
+            (Some(false), _) | (None, true) => {
+                let Some(Fullscreen {
+                    mut mapped, rect, ..
+                }) = self.fullscreen.take()
+                else {
+                    return;
+                };
+                mapped.set_location(rect.loc);
+                mapped.set_size(rect.size);
+                mapped.set_fullscreen(false);
+            }
+        };
     }
 
     pub fn refresh(&self) {

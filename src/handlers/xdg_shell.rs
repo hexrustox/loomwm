@@ -9,7 +9,7 @@ use smithay::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
             Resource,
-            protocol::{wl_seat::WlSeat, wl_surface::WlSurface},
+            protocol::{wl_output::WlOutput, wl_seat::WlSeat, wl_surface::WlSurface},
         },
     },
     utils::{Rectangle, Serial},
@@ -138,11 +138,21 @@ impl XdgShellHandler for WindowManagerState {
     }
 
     // TODO minimize, maximize, fullscreen
+    fn fullscreen_request(&mut self, toplevel: ToplevelSurface, _output: Option<WlOutput>) {
+        if !self.general_config.allow_resize_request {
+            warn!("Client fullscreen request ignored");
+            return;
+        }
+        self.fullscreen_window(toplevel.wl_surface(), Some(true));
+    }
+
+    fn unfullscreen_request(&mut self, toplevel: ToplevelSurface) {
+        self.fullscreen_window(toplevel.wl_surface(), Some(false));
+    }
 
     // TODO
     // fn app_id_changed(&mut self, surface: ToplevelSurface) {
     // }
-
     // fn title_changed(&mut self, surface: ToplevelSurface) {
     // }
 }

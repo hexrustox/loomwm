@@ -41,6 +41,7 @@ impl Config {
 pub struct GeneralConfig {
     pub allow_move_request: bool,
     pub allow_resize_request: bool,
+    pub allow_fullscreen_request: bool,
 }
 
 impl Default for GeneralConfig {
@@ -48,6 +49,7 @@ impl Default for GeneralConfig {
         Self {
             allow_move_request: true,
             allow_resize_request: true,
+            allow_fullscreen_request: true,
         }
     }
 }

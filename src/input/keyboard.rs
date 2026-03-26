@@ -72,6 +72,9 @@ pub enum KeyAction {
         // TODO use serde default
         focus: Option<bool>,
     },
+    ToggleFullscreen {
+        value: Option<bool>,
+    },
     CloseWindow,
     Execute {
         command: Vec<String>,
@@ -197,6 +200,11 @@ impl WindowManagerState {
             }
             ToggleFloatingHidden { value, focus } => {
                 self.set_focused_workspace_floating_window_hidden(*value, *focus);
+            }
+            ToggleFullscreen { value } => {
+                if let Some(surface) = self.get_keyboard().current_focus() {
+                    self.fullscreen_window(&surface, *value);
+                }
             }
             CloseWindow => {
                 self.close_focused_window();

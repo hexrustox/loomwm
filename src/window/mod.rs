@@ -77,6 +77,7 @@ pub struct MappedWindowInner {
     is_floating: bool,
     is_swap_source: bool,
     is_swap_target: bool,
+    is_fullscreen: bool,
     border: Option<WindowBorder>,
     opacity: f32,
     resize_state: ResizeGrabState,
@@ -91,6 +92,8 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 is_focused,
                 is_floating,
+                // temp
+                is_fullscreen: false,
                 is_swap_source: false,
                 is_swap_target: false,
                 border: None,
@@ -164,6 +167,14 @@ impl MappedWindow {
         self.inner().is_floating = floating;
     }
 
+    pub fn is_fullscreen(&self) -> bool {
+        self.inner().is_fullscreen
+    }
+
+    pub fn set_fullscreen(&self, fullscreen: bool) {
+        self.inner().is_fullscreen = fullscreen;
+    }
+
     pub fn is_swap_source(&self) -> bool {
         self.inner().is_swap_source
     }
@@ -181,6 +192,9 @@ impl MappedWindow {
     }
 
     pub fn get_border_width(&self) -> i32 {
+        if self.is_fullscreen() {
+            return 0;
+        }
         self.inner().border.clone().map_or(0, |b| b.width) as i32
     }
 
@@ -267,7 +281,9 @@ impl MappedWindow {
             })
             .collect::<Vec<_>>();
 
-        if let Some(color) = self.get_border_color() {
+        if let Some(color) = self.get_border_color()
+            && self.get_border_width() > 0
+        {
             elems.push(RenderElements::Border(
                 SolidColorRenderElement::from_buffer(
                     &SolidColorBuffer::new(

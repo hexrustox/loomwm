@@ -9,6 +9,7 @@ words = [
     "smithay",
     "toplevel",
     "unconstrain",
+    "unfullscreen",
     "vecs",
     "wgpu",
     "winit",

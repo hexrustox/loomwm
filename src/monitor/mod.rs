@@ -211,7 +211,7 @@ impl WindowManagerState {
         )
     }
 
-    pub fn recompute_window_rules(&self) {
+    pub fn apply_window_rules(&self) {
         let monitor = self.monitors.get_monitor();
         for workspace in &monitor.workspaces {
             let workspace_name = workspace.get_name();
@@ -219,23 +219,28 @@ impl WindowManagerState {
                 let properties = self
                     .window_rules
                     .get_dynamic_properties(mapped, workspace_name.clone());
-                if mapped.is_floating() {
-                    mapped.toplevel().with_pending_state(|state| {
-                        use xdg_toplevel::State::*;
+
+                use xdg_toplevel::State::*;
+                mapped.toplevel().with_pending_state(|state| {
+                    if mapped.is_floating() {
                         state.states.unset(TiledTop);
                         state.states.unset(TiledBottom);
                         state.states.unset(TiledLeft);
                         state.states.unset(TiledRight);
-                    });
-                } else {
-                    mapped.toplevel().with_pending_state(|state| {
-                        use xdg_toplevel::State::*;
+                    } else {
                         state.states.set(TiledTop);
                         state.states.set(TiledBottom);
                         state.states.set(TiledLeft);
                         state.states.set(TiledRight);
-                    });
-                }
+                    }
+
+                    if mapped.is_fullscreen() {
+                        state.states.set(Fullscreen);
+                    } else {
+                        state.states.unset(Fullscreen);
+                    }
+                });
+
                 mapped.toplevel().with_pending_state(|state| {
                     state.decoration_mode = properties.decoration.map(|d| d.into());
                 });
@@ -250,6 +255,10 @@ impl WindowManagerState {
     pub fn update_workspaces_tiling_windows_size(&mut self) {
         let monitor = self.monitors.get_monitor_mut();
         for workspace in &mut monitor.workspaces {
+            if let Some(mut mapped) = workspace.get_fullscreen() {
+                mapped.set_size(workspace.get_output_size());
+                continue;
+            }
             workspace.update_tiling_windows_size();
         }
     }
