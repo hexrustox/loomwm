@@ -50,14 +50,14 @@ pub struct Workspace {
 
     hide_floating: bool,
 
-    maximized: Option<Fullscreen>,
-    fullscreen: Option<Fullscreen>,
+    maximized: Option<Exclusive>,
+    fullscreen: Option<Exclusive>,
 }
 
 #[derive(Debug)]
-struct Fullscreen {
+struct Exclusive {
     mapped: MappedWindow,
-    rect: Rectangle<i32, Logical>,
+    rect: Option<Rectangle<i32, Logical>>,
 }
 
 impl Workspace {
@@ -116,29 +116,8 @@ impl Workspace {
             .update_tile_size(self.output.current_location(), self.get_output_size());
     }
 
-    pub fn windows_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
-        use std::iter::*;
-        if let Some(Fullscreen { mapped, .. }) = self.fullscreen.as_ref() {
-            Box::new(once(mapped))
-        } else if let Some(Fullscreen { mapped, .. }) = self.maximized.as_ref() {
-            Box::new(
-                (if mapped.is_floating() {
-                    Box::new(empty()) as Box<dyn Iterator<Item = _>>
-                } else {
-                    Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
-                })
-                .chain(once(mapped)),
-            )
-        } else {
-            Box::new(
-                if self.hide_floating {
-                    Box::new(empty()) as Box<dyn Iterator<Item = _>>
-                } else {
-                    Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
-                }
-                .chain(self.tiling.windows_iter()),
-            )
-        }
+    pub fn windows_iter(&self) -> impl Iterator<Item = &MappedWindow> {
+        self.floating.iter().chain(self.tiling.windows_iter())
     }
 
     pub fn floating_windows_iter(&self) -> impl Iterator<Item = &MappedWindow> + Clone {
@@ -243,8 +222,19 @@ impl Workspace {
     }
 
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<MappedWindow> {
-        self.remove_floating_window(surface)
-            .or(self.remove_tiling_window(surface))
+        let mapped = self
+            .remove_floating_window(surface)
+            .or(self.remove_tiling_window(surface));
+        if let Some(Exclusive { mapped: m, .. }) =
+            self.maximized.as_ref().or(self.fullscreen.as_ref())
+            && let Some(ref m2) = mapped
+            && m == m2
+        {
+            let m = m.clone();
+            self.set_maximized(m.clone(), Some(false));
+            self.set_fullscreen(m.clone(), Some(false));
+        }
+        mapped
     }
 
     fn restore_focus_after_window_hidden(&mut self) {
@@ -286,13 +276,17 @@ impl Workspace {
     pub fn set_maximized(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
         match (value, mapped.is_maximized()) {
             (Some(true), _) | (None, false) => {
-                if let Some(Fullscreen {
+                if let Some(Exclusive {
                     mut mapped, rect, ..
                 }) = self.maximized.take()
                 {
-                    mapped.set_location(rect.loc);
-                    mapped.set_size(rect.size);
-                    mapped.set_fullscreen(false);
+                    if let Some(rect) = rect {
+                        mapped.set_location(rect.loc);
+                        mapped.set_size(rect.size);
+                    } else {
+                        self.update_tiling_windows_size();
+                    }
+                    mapped.set_maximized(false);
                 };
 
                 let loc = mapped.get_location();
@@ -301,21 +295,28 @@ impl Workspace {
                 mapped.set_size(self.get_output_size());
                 mapped.set_maximized(true);
 
-                self.maximized = Some(Fullscreen {
+                self.maximized = Some(Exclusive {
+                    rect: if mapped.is_floating() {
+                        Some(Rectangle::new(loc, size))
+                    } else {
+                        None
+                    },
                     mapped,
-                    rect: Rectangle::new(loc, size),
                 });
             }
             (Some(false), _) | (None, true) => {
-                let Some(Fullscreen {
+                if let Some(Exclusive {
                     mut mapped, rect, ..
                 }) = self.maximized.take()
-                else {
-                    return;
+                {
+                    if let Some(rect) = rect {
+                        mapped.set_location(rect.loc);
+                        mapped.set_size(rect.size);
+                    } else {
+                        self.update_tiling_windows_size();
+                    }
+                    mapped.set_maximized(false);
                 };
-                mapped.set_location(rect.loc);
-                mapped.set_size(rect.size);
-                mapped.set_maximized(false);
             }
         }
     }
@@ -323,12 +324,16 @@ impl Workspace {
     pub fn set_fullscreen(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
         match (value, mapped.is_fullscreen()) {
             (Some(true), _) | (None, false) => {
-                if let Some(Fullscreen {
+                if let Some(Exclusive {
                     mut mapped, rect, ..
                 }) = self.fullscreen.take()
                 {
-                    mapped.set_location(rect.loc);
-                    mapped.set_size(rect.size);
+                    if let Some(rect) = rect {
+                        mapped.set_location(rect.loc);
+                        mapped.set_size(rect.size);
+                    } else {
+                        self.update_tiling_windows_size();
+                    }
                     mapped.set_fullscreen(false);
                 };
 
@@ -338,23 +343,30 @@ impl Workspace {
                 mapped.set_size(self.get_output_size());
                 mapped.set_fullscreen(true);
 
-                self.fullscreen = Some(Fullscreen {
+                self.fullscreen = Some(Exclusive {
+                    rect: if mapped.is_floating() {
+                        Some(Rectangle::new(loc, size))
+                    } else {
+                        None
+                    },
                     mapped,
-                    rect: Rectangle::new(loc, size),
                 });
             }
             (Some(false), _) | (None, true) => {
-                let Some(Fullscreen {
+                if let Some(Exclusive {
                     mut mapped, rect, ..
                 }) = self.fullscreen.take()
-                else {
-                    return;
+                {
+                    if let Some(rect) = rect {
+                        mapped.set_location(rect.loc);
+                        mapped.set_size(rect.size);
+                    } else {
+                        self.update_tiling_windows_size();
+                    }
+                    mapped.set_fullscreen(false);
                 };
-                mapped.set_location(rect.loc);
-                mapped.set_size(rect.size);
-                mapped.set_fullscreen(false);
             }
-        };
+        }
     }
 
     pub fn refresh(&self) {
@@ -381,9 +393,32 @@ impl Workspace {
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
+        let iter: Box<dyn Iterator<Item = _>> = {
+            use std::iter::*;
+            if let Some(Exclusive { mapped, .. }) = self.fullscreen.as_ref() {
+                Box::new(once(mapped))
+            } else if let Some(Exclusive { mapped, .. }) = self.maximized.as_ref() {
+                Box::new(
+                    (if mapped.is_floating() {
+                        Box::new(empty()) as Box<dyn Iterator<Item = _>>
+                    } else {
+                        Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
+                    })
+                    .chain(once(mapped)),
+                )
+            } else {
+                Box::new(
+                    if self.hide_floating {
+                        Box::new(empty()) as Box<dyn Iterator<Item = _>>
+                    } else {
+                        Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
+                    }
+                    .chain(self.tiling.windows_iter()),
+                )
+            }
+        };
         let scale = self.output.current_scale().fractional_scale().into();
-        self.windows_iter()
-            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
+        iter.flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()
     }
 }

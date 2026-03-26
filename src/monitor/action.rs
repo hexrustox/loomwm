@@ -19,19 +19,27 @@ impl WindowManagerState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
         let Some(WindowOpeningProperties {
             open_with_focus,
+            open_maximized,
+            open_fullscreen,
             layout_state,
             open_in_workspace,
         }) = properties.opening
         else {
             unreachable!();
         };
+        let layout_state = layout_state.unwrap();
 
-        let focus = open_with_focus.unwrap();
-        let floating = match layout_state.as_ref().unwrap() {
+        let floating = match layout_state {
             WindowState::Float { .. } => true,
             WindowState::Tile { .. } => false,
         };
-        let mut mapped = MappedWindow::new(window, focus, floating);
+        let mut mapped = MappedWindow::new(
+            window,
+            open_with_focus.unwrap(),
+            floating,
+            open_maximized.unwrap_or(false),
+            open_fullscreen.unwrap_or(false),
+        );
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace_name = open_in_workspace
@@ -39,12 +47,12 @@ impl WindowManagerState {
                 monitor.add_workspace(name.clone(), self.layout_set.clone(), &self.default_layout);
             })
             .unwrap_or(monitor.get_active_workspace_name().clone());
-        if focus {
+        if mapped.is_focused() {
             monitor.active_workspace = workspace_name.clone();
         }
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
-        match layout_state.unwrap_or_default() {
+        match layout_state {
             WindowState::Float { location, size } => {
                 let window_size = size
                     .map(|(w, h)| (w, h).into())
@@ -80,6 +88,12 @@ impl WindowManagerState {
 
         if mapped.is_focused() {
             self.focus_window(&mapped.wl_surface());
+        }
+        if mapped.is_maximized() {
+            self.toggle_window_maximized(&mapped.wl_surface(), Some(true));
+        }
+        if mapped.is_fullscreen() {
+            self.toggle_window_fullscreen(&mapped.wl_surface(), Some(true));
         }
 
         self.save_layout_history();

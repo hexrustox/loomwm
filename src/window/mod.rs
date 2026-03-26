@@ -75,17 +75,23 @@ pub struct MappedWindowInner {
     configured_size: Size<i32, Logical>,
     is_focused: bool,
     is_floating: bool,
+    is_maximized: bool,
+    is_fullscreen: bool,
     is_swap_source: bool,
     is_swap_target: bool,
-    is_fullscreen: bool,
-    is_maximized: bool,
     border: Option<WindowBorder>,
     opacity: f32,
     resize_state: ResizeGrabState,
 }
 
 impl MappedWindow {
-    pub fn new(window: Window, is_focused: bool, is_floating: bool) -> Self {
+    pub fn new(
+        window: Window,
+        is_focused: bool,
+        is_floating: bool,
+        is_maximized: bool,
+        is_fullscreen: bool,
+    ) -> Self {
         Self {
             inner: Arc::new(Mutex::new(MappedWindowInner {
                 window,
@@ -93,9 +99,8 @@ impl MappedWindow {
                 configured_size: (0, 0).into(),
                 is_focused,
                 is_floating,
-                // TEMP
-                is_fullscreen: false,
-                is_maximized: false,
+                is_maximized,
+                is_fullscreen,
                 is_swap_source: false,
                 is_swap_target: false,
                 border: None,

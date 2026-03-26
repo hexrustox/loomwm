@@ -26,22 +26,24 @@ impl WindowRules {
         let (app_id, title) = get_app_id_and_title(surface);
 
         let default_state = Some(WindowState::Tile { ratio: None });
-        let state = float_state.or(default_state);
+        let layout_state = float_state.or(default_state);
 
         let mut candidate = WindowRuleCandidate {
             app_id,
             title,
             is_focused: true,
-            is_floating: matches!(state, Some(WindowState::Float { .. })),
+            is_floating: matches!(layout_state, Some(WindowState::Float { .. })),
+            is_maximized: false,
+            is_fullscreen: false,
             is_swap_source: false,
             is_swap_target: false,
-            workspace_name: workspace_name.clone(),
+            workspace_name,
         };
         let mut properties = WindowProperties {
             opening: Some(WindowOpeningProperties {
-                layout_state: state,
                 open_with_focus: Some(true),
-                open_in_workspace: None,
+                layout_state,
+                ..Default::default()
             }),
             dynamic: WindowDynamicProperties::default(),
         };
@@ -55,6 +57,8 @@ impl WindowRules {
                 if let Some(ref op) = properties.opening {
                     let WindowOpeningProperties {
                         open_with_focus: _,
+                        open_maximized: _,
+                        open_fullscreen: _,
                         layout_state: _,
                         open_in_workspace: _,
                     } = op;
@@ -66,6 +70,20 @@ impl WindowRules {
                 }) = properties.opening
                 {
                     candidate.is_focused = focus;
+                }
+                if let Some(WindowOpeningProperties {
+                    open_maximized: Some(maximized),
+                    ..
+                }) = properties.opening
+                {
+                    candidate.is_maximized = maximized;
+                }
+                if let Some(WindowOpeningProperties {
+                    open_fullscreen: Some(fullscreen),
+                    ..
+                }) = properties.opening
+                {
+                    candidate.is_fullscreen = fullscreen;
                 }
                 if let Some(WindowOpeningProperties {
                     layout_state: Some(WindowState::Float { .. }),
@@ -98,6 +116,8 @@ impl WindowRules {
             title,
             is_focused: mapped.is_focused(),
             is_floating: mapped.is_floating(),
+            is_maximized: mapped.is_maximized(),
+            is_fullscreen: mapped.is_fullscreen(),
             is_swap_source: mapped.is_swap_source(),
             is_swap_target: mapped.is_swap_target(),
             workspace_name,
@@ -152,6 +172,8 @@ impl WindowRule {
                     title_pattern: _,
                     is_focused: _,
                     is_floating: _,
+                    is_maximized: _,
+                    is_fullscreen: _,
                     is_swap_source: _,
                     is_swap_target: _,
                     in_workspace: _,
@@ -161,6 +183,8 @@ impl WindowRule {
                     title: _,
                     is_focused: _,
                     is_floating: _,
+                    is_maximized: _,
+                    is_fullscreen: _,
                     is_swap_source: _,
                     is_swap_target: _,
                     workspace_name: _,
@@ -171,6 +195,12 @@ impl WindowRule {
                 && regex_matches(rule.title_pattern.as_deref(), &candidate.title)
                 && rule.is_focused.is_none_or(|v| candidate.is_focused == v)
                 && rule.is_floating.is_none_or(|v| candidate.is_floating == v)
+                && rule
+                    .is_maximized
+                    .is_none_or(|v| candidate.is_maximized == v)
+                && rule
+                    .is_fullscreen
+                    .is_none_or(|v| candidate.is_fullscreen == v)
                 && rule
                     .is_swap_source
                     .is_none_or(|v| candidate.is_swap_source == v)
@@ -193,6 +223,8 @@ pub struct WindowRuleMatch {
     title_pattern: Option<String>,
     is_focused: Option<bool>,
     is_floating: Option<bool>,
+    is_maximized: Option<bool>,
+    is_fullscreen: Option<bool>,
     is_swap_source: Option<bool>,
     is_swap_target: Option<bool>,
     in_workspace: Option<WorkspaceName>,
@@ -204,6 +236,8 @@ struct WindowRuleCandidate {
     title: String,
     is_focused: bool,
     is_floating: bool,
+    is_maximized: bool,
+    is_fullscreen: bool,
     is_swap_source: bool,
     is_swap_target: bool,
     workspace_name: WorkspaceName,
@@ -230,6 +264,8 @@ impl Default for WindowProperties {
 #[serde(rename_all = "kebab-case")]
 pub struct WindowOpeningProperties {
     pub open_with_focus: Option<bool>,
+    pub open_maximized: Option<bool>,
+    pub open_fullscreen: Option<bool>,
     #[serde(flatten)]
     pub layout_state: Option<WindowState>,
     pub open_in_workspace: Option<WorkspaceName>,
@@ -260,6 +296,8 @@ impl WindowOpeningProperties {
     fn override_with(self, other: Self) -> Self {
         Self {
             open_with_focus: other.open_with_focus.or(self.open_with_focus),
+            open_maximized: other.open_maximized.or(self.open_maximized),
+            open_fullscreen: other.open_fullscreen.or(self.open_fullscreen),
             layout_state: other.layout_state.or(self.layout_state),
             open_in_workspace: other.open_in_workspace.or(self.open_in_workspace),
         }
@@ -312,12 +350,6 @@ pub enum WindowState {
     Tile { ratio: Option<TileRatio> },
 }
 
-impl Default for WindowState {
-    fn default() -> Self {
-        Self::Tile { ratio: None }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum WindowLocation {
     Center,
@@ -336,6 +368,8 @@ mod tests {
                 title: "".into(),
                 is_focused: false,
                 is_floating: false,
+                is_maximized: false,
+                is_fullscreen: false,
                 is_swap_source: false,
                 is_swap_target: false,
                 workspace_name: WorkspaceName::Id(0),
@@ -444,15 +478,15 @@ mod tests {
     )]
     #[test_case(
         WindowProperties {
-            opening: Some(WindowOpeningProperties { open_with_focus: Some(true), layout_state: None, open_in_workspace: None }),
+            opening: Some(WindowOpeningProperties { open_with_focus: Some(true), ..Default::default() }),
             dynamic: WindowDynamicProperties::default()
         },
         WindowProperties {
-            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), layout_state: None, open_in_workspace: None }),
+            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), ..Default::default() }),
             dynamic: WindowDynamicProperties::default()
         } =>
         WindowProperties {
-            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), layout_state: None, open_in_workspace: None }),
+            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), ..Default::default() }),
             dynamic: WindowDynamicProperties::default()
         };
         "both_some_rhs_opening_overrides"
