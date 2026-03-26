@@ -224,7 +224,7 @@ impl Workspace {
         if let Some(mapped) = self
             .focus_queue
             .iter()
-            .rfind(|mapped| mapped.get_floating() != self.hide_floating)
+            .rfind(|mapped| mapped.is_floating() != self.hide_floating)
         {
             self.append_to_focus_queue(mapped.clone());
         }

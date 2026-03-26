@@ -117,7 +117,7 @@ impl WindowManagerState {
                                 button,
                                 location,
                             };
-                            if mapped.get_floating() {
+                            if mapped.is_floating() {
                                 let grab = MoveGrab::new(
                                     start_data,
                                     mapped.clone(),
@@ -133,7 +133,7 @@ impl WindowManagerState {
                                     );
                                 }
 
-                                mapped.set_is_swap_source(true);
+                                mapped.set_swap_source(true);
 
                                 let grab = SwapGrab::new(start_data, mapped.clone(), hidden);
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -206,7 +206,7 @@ impl WindowManagerState {
                             }
                         };
 
-                        if mapped.get_floating() {
+                        if mapped.is_floating() {
                             let grab = FloatingResizeGrab::new(
                                 start_data,
                                 mapped.clone(),

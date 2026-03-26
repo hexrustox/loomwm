@@ -73,8 +73,8 @@ pub struct MappedWindowInner {
     window: Window,
     location: Point<i32, Logical>,
     configured_size: Size<i32, Logical>,
-    focus: bool,
-    floating: bool,
+    is_focused: bool,
+    is_floating: bool,
     is_swap_source: bool,
     is_swap_target: bool,
     border: Option<WindowBorder>,
@@ -83,14 +83,14 @@ pub struct MappedWindowInner {
 }
 
 impl MappedWindow {
-    pub fn new(window: Window, focus: bool, floating: bool) -> Self {
+    pub fn new(window: Window, is_focused: bool, is_floating: bool) -> Self {
         Self {
             inner: Arc::new(Mutex::new(MappedWindowInner {
                 window,
                 location: (0, 0).into(),
                 configured_size: (0, 0).into(),
-                focus,
-                floating,
+                is_focused,
+                is_floating,
                 is_swap_source: false,
                 is_swap_target: false,
                 border: None,
@@ -148,35 +148,35 @@ impl MappedWindow {
             .into()
     }
 
-    pub fn get_focus(&self) -> bool {
-        self.inner().focus
+    pub fn is_focused(&self) -> bool {
+        self.inner().is_focused
     }
 
     pub fn set_focus(&self, focus: bool) {
-        self.inner().focus = focus;
+        self.inner().is_focused = focus;
     }
 
-    pub fn get_floating(&self) -> bool {
-        self.inner().floating
+    pub fn is_floating(&self) -> bool {
+        self.inner().is_floating
     }
 
     pub fn set_floating(&self, floating: bool) {
-        self.inner().floating = floating;
+        self.inner().is_floating = floating;
     }
 
-    pub fn get_is_swap_source(&self) -> bool {
+    pub fn is_swap_source(&self) -> bool {
         self.inner().is_swap_source
     }
 
-    pub fn set_is_swap_source(&self, is_swap_source: bool) {
+    pub fn set_swap_source(&self, is_swap_source: bool) {
         self.inner().is_swap_source = is_swap_source;
     }
 
-    pub fn get_is_swap_target(&self) -> bool {
+    pub fn is_swap_target(&self) -> bool {
         self.inner().is_swap_target
     }
 
-    pub fn set_is_swap_target(&self, is_swap_target: bool) {
+    pub fn set_swap_target(&self, is_swap_target: bool) {
         self.inner().is_swap_target = is_swap_target;
     }
 

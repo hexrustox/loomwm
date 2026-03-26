@@ -21,7 +21,7 @@ impl WindowRules {
         &self,
         surface: &WlSurface,
         workspace_name: WorkspaceName,
-        float: bool,
+        is_floating: bool,
     ) -> WindowProperties {
         let (app_id, title) = get_app_id_and_title(surface);
 
@@ -29,8 +29,8 @@ impl WindowRules {
         let mut candidate = WindowRuleCandidate {
             app_id,
             title,
-            focus: true,
-            float,
+            is_focused: true,
+            is_floating,
             is_swap_source: false,
             is_swap_target: false,
             workspace_name: workspace_name.clone(),
@@ -44,27 +44,28 @@ impl WindowRules {
                 #[cfg(test)]
                 if let Some(ref op) = properties.opening {
                     let WindowOpeningProperties {
-                        focus: _,
-                        state: _,
-                        workspace_name: _,
+                        open_with_focus: _,
+                        layout_state: _,
+                        open_in_workspace: _,
                     } = op;
                 }
 
                 if let Some(WindowOpeningProperties {
-                    focus: Some(focus), ..
-                }) = properties.opening
-                {
-                    candidate.focus = focus;
-                }
-                if let Some(WindowOpeningProperties {
-                    state: Some(WindowState::Float { .. }),
+                    open_with_focus: Some(focus),
                     ..
                 }) = properties.opening
                 {
-                    candidate.float = true;
+                    candidate.is_focused = focus;
                 }
                 if let Some(WindowOpeningProperties {
-                    workspace_name: Some(ref workspace_name),
+                    layout_state: Some(WindowState::Float { .. }),
+                    ..
+                }) = properties.opening
+                {
+                    candidate.is_floating = true;
+                }
+                if let Some(WindowOpeningProperties {
+                    open_in_workspace: Some(ref workspace_name),
                     ..
                 }) = properties.opening
                 {
@@ -85,10 +86,10 @@ impl WindowRules {
         let candidate = WindowRuleCandidate {
             app_id,
             title,
-            focus: mapped.get_focus(),
-            float: mapped.get_floating(),
-            is_swap_source: mapped.get_is_swap_source(),
-            is_swap_target: mapped.get_is_swap_target(),
+            is_focused: mapped.is_focused(),
+            is_floating: mapped.is_floating(),
+            is_swap_source: mapped.is_swap_source(),
+            is_swap_target: mapped.is_swap_target(),
             workspace_name,
         };
 
@@ -137,29 +138,29 @@ impl WindowRule {
             #[cfg(test)]
             {
                 let WindowRuleMatch {
-                    app_id: _,
-                    title: _,
-                    focus: _,
-                    float: _,
+                    app_id_pattern: _,
+                    title_pattern: _,
+                    is_focused: _,
+                    is_floating: _,
                     is_swap_source: _,
                     is_swap_target: _,
-                    workspace_name: _,
+                    in_workspace: _,
                 } = rule;
                 let WindowRuleCandidate {
                     app_id: _,
                     title: _,
-                    focus: _,
-                    float: _,
+                    is_focused: _,
+                    is_floating: _,
                     is_swap_source: _,
                     is_swap_target: _,
                     workspace_name: _,
                 } = candidate;
             }
 
-            regex_matches(rule.app_id.as_deref(), &candidate.app_id)
-                && regex_matches(rule.title.as_deref(), &candidate.title)
-                && rule.focus.is_none_or(|v| candidate.focus == v)
-                && rule.float.is_none_or(|v| candidate.float == v)
+            regex_matches(rule.app_id_pattern.as_deref(), &candidate.app_id)
+                && regex_matches(rule.title_pattern.as_deref(), &candidate.title)
+                && rule.is_focused.is_none_or(|v| candidate.is_focused == v)
+                && rule.is_floating.is_none_or(|v| candidate.is_floating == v)
                 && rule
                     .is_swap_source
                     .is_none_or(|v| candidate.is_swap_source == v)
@@ -167,7 +168,7 @@ impl WindowRule {
                     .is_swap_target
                     .is_none_or(|v| candidate.is_swap_target == v)
                 && rule
-                    .workspace_name
+                    .in_workspace
                     .as_ref()
                     .is_none_or(|v| candidate.workspace_name == *v)
         })
@@ -178,24 +179,21 @@ impl WindowRule {
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct WindowRuleMatch {
-    app_id: Option<String>,
-    title: Option<String>,
-    #[serde(rename = "is-focused")]
-    focus: Option<bool>,
-    #[serde(rename = "is-floating")]
-    float: Option<bool>,
+    app_id_pattern: Option<String>,
+    title_pattern: Option<String>,
+    is_focused: Option<bool>,
+    is_floating: Option<bool>,
     is_swap_source: Option<bool>,
     is_swap_target: Option<bool>,
-    #[serde(rename = "in-workspace")]
-    workspace_name: Option<WorkspaceName>,
+    in_workspace: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WindowRuleCandidate {
+struct WindowRuleCandidate {
     app_id: String,
     title: String,
-    focus: bool,
-    float: bool,
+    is_focused: bool,
+    is_floating: bool,
     is_swap_source: bool,
     is_swap_target: bool,
     workspace_name: WorkspaceName,
@@ -219,13 +217,12 @@ impl Default for WindowProperties {
 }
 
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct WindowOpeningProperties {
-    #[serde(rename = "open-with-focus")]
-    pub focus: Option<bool>,
+    pub open_with_focus: Option<bool>,
     #[serde(flatten)]
-    pub state: Option<WindowState>,
-    #[serde(rename = "open-in-workspace")]
-    pub workspace_name: Option<WorkspaceName>,
+    pub layout_state: Option<WindowState>,
+    pub open_in_workspace: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
@@ -252,9 +249,9 @@ impl WindowProperties {
 impl WindowOpeningProperties {
     fn override_with(self, other: Self) -> Self {
         Self {
-            focus: other.focus.or(self.focus),
-            state: other.state.or(self.state),
-            workspace_name: other.workspace_name.or(self.workspace_name),
+            open_with_focus: other.open_with_focus.or(self.open_with_focus),
+            layout_state: other.layout_state.or(self.layout_state),
+            open_in_workspace: other.open_in_workspace.or(self.open_in_workspace),
         }
     }
 }
@@ -327,8 +324,8 @@ mod tests {
             Self {
                 app_id: "".into(),
                 title: "".into(),
-                focus: false,
-                float: false,
+                is_focused: false,
+                is_floating: false,
                 is_swap_source: false,
                 is_swap_target: false,
                 workspace_name: WorkspaceName::Id(0),
@@ -343,42 +340,42 @@ mod tests {
         "default_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { float: Some(true), ..Default::default() }, WindowRuleMatch::default()],
+        vec![WindowRuleMatch { is_floating: Some(true), ..Default::default() }, WindowRuleMatch::default()],
         WindowRuleCandidate::default() => true;
         "fallback_to_second_rule"
     )]
     #[test_case(
-        vec![WindowRuleMatch { app_id: Some("foo".into()), ..Default::default() }],
+        vec![WindowRuleMatch { app_id_pattern: Some("foo".into()), ..Default::default() }],
         WindowRuleCandidate { app_id: "foobar".into(), ..Default::default() } => true;
         "app_id_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { app_id: Some("foo".into()), ..Default::default() }],
+        vec![WindowRuleMatch { app_id_pattern: Some("foo".into()), ..Default::default() }],
         WindowRuleCandidate::default() => false;
         "app_id_mismatch"
     )]
     #[test_case(
-        vec![WindowRuleMatch { title: Some("test".into()), ..Default::default() }],
+        vec![WindowRuleMatch { title_pattern: Some("test".into()), ..Default::default() }],
         WindowRuleCandidate { title: "my test window".into(), ..Default::default() } => true;
         "title_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
-        WindowRuleCandidate { focus: true, ..Default::default() } => true;
+        vec![WindowRuleMatch { is_focused: Some(true), ..Default::default() }],
+        WindowRuleCandidate { is_focused: true, ..Default::default() } => true;
         "focus_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { focus: Some(true), ..Default::default() }],
+        vec![WindowRuleMatch { is_focused: Some(true), ..Default::default() }],
         WindowRuleCandidate::default() => false;
         "focus_mismatch"
     )]
     #[test_case(
-        vec![WindowRuleMatch { float: Some(true), ..Default::default() }],
-        WindowRuleCandidate { float: true, ..Default::default() } => true;
+        vec![WindowRuleMatch { is_floating: Some(true), ..Default::default() }],
+        WindowRuleCandidate { is_floating: true, ..Default::default() } => true;
         "float_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { float: Some(true), ..Default::default() }],
+        vec![WindowRuleMatch { is_floating: Some(true), ..Default::default() }],
         WindowRuleCandidate::default() => false;
         "float_mismatch"
     )]
@@ -403,12 +400,12 @@ mod tests {
         "is_swap_target_mismatch"
     )]
     #[test_case(
-        vec![WindowRuleMatch { workspace_name: Some(WorkspaceName::Id(1)), ..Default::default() }],
+        vec![WindowRuleMatch { in_workspace: Some(WorkspaceName::Id(1)), ..Default::default() }],
         WindowRuleCandidate { workspace_name: WorkspaceName::Id(1), ..Default::default() } => true;
         "workspace_name_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { workspace_name: Some(WorkspaceName::Id(1)), ..Default::default() }],
+        vec![WindowRuleMatch { in_workspace: Some(WorkspaceName::Id(1)), ..Default::default() }],
         WindowRuleCandidate { workspace_name: WorkspaceName::Id(2), ..Default::default() } => false;
         "workspace_name_mismatch"
     )]
@@ -437,15 +434,15 @@ mod tests {
     )]
     #[test_case(
         WindowProperties {
-            opening: Some(WindowOpeningProperties { focus: Some(true), state: None, workspace_name: None }),
+            opening: Some(WindowOpeningProperties { open_with_focus: Some(true), layout_state: None, open_in_workspace: None }),
             dynamic: WindowDynamicProperties::default()
         },
         WindowProperties {
-            opening: Some(WindowOpeningProperties { focus: Some(false), state: None, workspace_name: None }),
+            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), layout_state: None, open_in_workspace: None }),
             dynamic: WindowDynamicProperties::default()
         } =>
         WindowProperties {
-            opening: Some(WindowOpeningProperties { focus: Some(false), state: None, workspace_name: None }),
+            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), layout_state: None, open_in_workspace: None }),
             dynamic: WindowDynamicProperties::default()
         };
         "both_some_rhs_opening_overrides"

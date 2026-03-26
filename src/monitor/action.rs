@@ -21,9 +21,9 @@ pub use super::workspace::{TileTreeWindow, WorkspaceName};
 impl WindowManagerState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
         let Some(WindowOpeningProperties {
-            focus,
-            state,
-            workspace_name,
+            open_with_focus,
+            layout_state,
+            open_in_workspace,
         }) = properties.opening
         else {
             #[cfg(test)]
@@ -32,12 +32,12 @@ impl WindowManagerState {
             return;
         };
 
-        let focus = focus.unwrap_or(true);
-        let floating = matches!(state, Some(WindowState::Float { .. }));
+        let focus = open_with_focus.unwrap_or(true);
+        let floating = matches!(layout_state, Some(WindowState::Float { .. }));
         let mut mapped = MappedWindow::new(window, focus, floating);
 
         let monitor = self.monitors.get_monitor_mut();
-        let workspace_name = workspace_name
+        let workspace_name = open_in_workspace
             .inspect(|name| {
                 monitor.add_workspace(name.clone(), self.layout_set.clone(), &self.default_layout);
             })
@@ -47,7 +47,7 @@ impl WindowManagerState {
         }
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
-        match state.unwrap_or_default() {
+        match layout_state.unwrap_or_default() {
             WindowState::Float { location, size } => {
                 let window_size = size
                     .map(|(w, h)| (w, h).into())
@@ -81,7 +81,7 @@ impl WindowManagerState {
             }
         }
 
-        if mapped.get_focus() {
+        if mapped.is_focused() {
             self.focus_window(&mapped.wl_surface());
         }
 
@@ -104,12 +104,12 @@ impl WindowManagerState {
                 .get_opening_properties(&mapped.wl_surface(), workspace_name, true);
         properties = properties.merge(WindowProperties {
             opening: Some(WindowOpeningProperties {
-                state: Some(WindowState::Float {
+                layout_state: Some(WindowState::Float {
                     location: None,
                     size: None,
                 }),
-                focus: None,
-                workspace_name: None,
+                open_with_focus: None,
+                open_in_workspace: None,
             }),
             dynamic: WindowDynamicProperties::default(),
         });
@@ -149,7 +149,7 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.append_to_focus_queue(mapped.clone());
-        if mapped.get_floating() {
+        if mapped.is_floating() {
             workspace.raise_floating_window(surface);
         }
     }
@@ -239,7 +239,7 @@ impl WindowManagerState {
         }
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
-        if mapped.get_floating() {
+        if mapped.is_floating() {
             workspace.add_floating_window(mapped.clone());
         } else {
             let mapped = workspace.add_tiling_window(mapped.clone(), None);
@@ -267,12 +267,12 @@ impl WindowManagerState {
             return;
         };
 
-        mapped.set_floating(value.unwrap_or(!mapped.get_floating()));
+        mapped.set_floating(value.unwrap_or(!mapped.is_floating()));
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
-        if mapped.get_floating() {
+        if mapped.is_floating() {
             workspace.add_floating_window(mapped);
         } else {
             let mapped = workspace.add_tiling_window(mapped, None);
@@ -330,7 +330,7 @@ impl WindowManagerState {
         else {
             return;
         };
-        if mapped.get_floating() {
+        if mapped.is_floating() {
             return;
         }
         let monitor = self.monitors.get_monitor();
@@ -356,7 +356,7 @@ impl WindowManagerState {
         else {
             return;
         };
-        if mapped_lhs.get_floating() || mapped_rhs.get_floating() {
+        if mapped_lhs.is_floating() || mapped_rhs.is_floating() {
             return;
         }
 
@@ -380,7 +380,7 @@ impl WindowManagerState {
         else {
             return;
         };
-        if mapped_lhs.get_floating() {
+        if mapped_lhs.is_floating() {
             return;
         }
 
@@ -413,7 +413,7 @@ impl WindowManagerState {
         else {
             return;
         };
-        if mapped.get_floating() {
+        if mapped.is_floating() {
             return;
         }
         let monitor = self.monitors.get_monitor_mut();

@@ -5,13 +5,10 @@ use smithay::{
     backend::renderer::utils::with_renderer_surface_state,
     reexports::{
         rustix::time::{ClockId, clock_gettime},
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::protocol::wl_surface::WlSurface,
     },
     wayland::{compositor::with_states, shell::xdg::XdgToplevelSurfaceData},
 };
-
-use crate::window::{MappedWindow, rule::WindowDynamicProperties};
 
 pub mod types;
 
@@ -36,33 +33,6 @@ pub fn get_app_id_and_title(surface: &WlSurface) -> (String, String) {
             (String::default(), String::default())
         }
     })
-}
-
-pub fn apply_rule_to_mapped_window(mapped: &MappedWindow, properties: WindowDynamicProperties) {
-    if mapped.get_floating() {
-        mapped.toplevel().with_pending_state(|state| {
-            use xdg_toplevel::State::*;
-            state.states.unset(TiledTop);
-            state.states.unset(TiledBottom);
-            state.states.unset(TiledLeft);
-            state.states.unset(TiledRight);
-        });
-    } else {
-        mapped.toplevel().with_pending_state(|state| {
-            use xdg_toplevel::State::*;
-            state.states.set(TiledTop);
-            state.states.set(TiledBottom);
-            state.states.set(TiledLeft);
-            state.states.set(TiledRight);
-        });
-    }
-    mapped.toplevel().with_pending_state(|state| {
-        state.decoration_mode = properties.decoration.map(|d| d.into());
-    });
-
-    mapped.set_border(properties.border);
-
-    mapped.set_opacity(properties.opacity.unwrap_or(1.0));
 }
 
 pub fn floats_to_ints(floats: &[f64], target_sum: i32) -> Vec<i32> {

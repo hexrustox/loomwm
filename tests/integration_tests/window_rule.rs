@@ -31,7 +31,7 @@ default = "main"
 "#,
         |data| {
             let mapped = get_floating_window(data);
-            assert!(mapped.get_floating());
+            assert!(mapped.is_floating());
         }; "state_float"
     )]
 #[test_case(
@@ -105,7 +105,7 @@ fn test_window_rule_tiling() {
     let handle = run_compositor_test(
         toml::from_str(
             r#"[[window-rules]]
-matches = [{ title = "0" }]
+matches = [{ title-pattern = "0" }]
 open-as-tiling = { ratio = 1.5 }
 
 [layouts]
@@ -134,7 +134,7 @@ fn test_window_rule_workspace_no_focus() {
     let handle = run_compositor_test(
         toml::from_str(
             r#"[[window-rules]]
-matches = [{ title = "0" }]
+matches = [{ title-pattern = "0" }]
 open-with-focus = false
 open-in-workspace = 2
 "#,
@@ -166,7 +166,7 @@ fn test_chain_of_window_rule() {
     let handle = run_compositor_test(
         toml::from_str(
             r#"[[window-rules]]
-matches = [{ title = "0" }]
+matches = [{ title-pattern = "0" }]
 open-with-focus = false
 
 [[window-rules]]
@@ -185,7 +185,7 @@ opacity = 0.5
             Box::new(|data| {
                 let mapped = get_window(data);
                 assert!(!is_focused(data, mapped.wl_surface()));
-                assert!(mapped.get_floating());
+                assert!(mapped.is_floating());
                 assert_eq!(mapped.get_opacity(), 0.5);
             }),
         ),

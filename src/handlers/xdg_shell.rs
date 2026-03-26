@@ -89,7 +89,7 @@ impl XdgShellHandler for WindowManagerState {
         if let Some(start_data) = check_grab(&seat, surface, serial)
             && let Some(pointer) = seat.get_pointer()
             && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
-            && mapped.get_floating()
+            && mapped.is_floating()
         {
             let grab = MoveGrab::new(start_data, mapped.clone(), mapped.get_location().to_f64());
             pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -117,7 +117,7 @@ impl XdgShellHandler for WindowManagerState {
         if let Some(start_data) = check_grab(&seat, surface, serial)
             && let Some(pointer) = seat.get_pointer()
             && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
-            && mapped.get_floating()
+            && mapped.is_floating()
         {
             let grab = FloatingResizeGrab::new(
                 start_data,

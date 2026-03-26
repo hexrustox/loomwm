@@ -4,14 +4,17 @@ use smithay::{
     backend::renderer::RendererSuper,
     desktop::WindowSurfaceType,
     output::Output,
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    reexports::{
+        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_server::protocol::wl_surface::WlSurface,
+    },
     utils::{Logical, Point},
 };
 
 use crate::{
     state::WindowManagerState,
     utils::{
-        apply_rule_to_mapped_window, get_monotonic_time,
+        get_monotonic_time,
         types::{RenderElements, Renderer},
     },
     window::MappedWindow,
@@ -213,10 +216,33 @@ impl WindowManagerState {
         for workspace in &monitor.workspaces {
             let workspace_name = workspace.get_name();
             for mapped in workspace.windows_iter() {
-                let dynamic = self
+                let properties = self
                     .window_rules
                     .get_dynamic_properties(mapped, workspace_name.clone());
-                apply_rule_to_mapped_window(mapped, dynamic);
+                if mapped.is_floating() {
+                    mapped.toplevel().with_pending_state(|state| {
+                        use xdg_toplevel::State::*;
+                        state.states.unset(TiledTop);
+                        state.states.unset(TiledBottom);
+                        state.states.unset(TiledLeft);
+                        state.states.unset(TiledRight);
+                    });
+                } else {
+                    mapped.toplevel().with_pending_state(|state| {
+                        use xdg_toplevel::State::*;
+                        state.states.set(TiledTop);
+                        state.states.set(TiledBottom);
+                        state.states.set(TiledLeft);
+                        state.states.set(TiledRight);
+                    });
+                }
+                mapped.toplevel().with_pending_state(|state| {
+                    state.decoration_mode = properties.decoration.map(|d| d.into());
+                });
+
+                mapped.set_border(properties.border);
+
+                mapped.set_opacity(properties.opacity.unwrap_or(1.0));
             }
         }
     }

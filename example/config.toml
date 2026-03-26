@@ -25,7 +25,7 @@ opacity = 0.8
 
 # [[window-rules]]
 # matches = [
-#   { app-id = "", title = "" },
+#   { app-id-pattern = "", title-pattern = "" },
 #   { is-focused = true },
 #   { is-floating = true },
 #   { in-workspace = 1 },
