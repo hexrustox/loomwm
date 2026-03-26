@@ -12,6 +12,16 @@ use crate::{
     window::MappedWindow,
 };
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum WindowRole {
+    #[default]
+    Normal,
+    Maximized,
+    Fullscreen,
+    SwapSource,
+    SwapTarget,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(transparent)]
 pub struct WindowRules(Vec<WindowRule>);
@@ -33,10 +43,7 @@ impl WindowRules {
             title,
             is_focused: true,
             is_floating: matches!(layout_state, Some(WindowState::Float { .. })),
-            is_maximized: false,
-            is_fullscreen: false,
-            is_swap_source: false,
-            is_swap_target: false,
+            role: WindowRole::Normal,
             workspace_name,
         };
         let mut properties = WindowProperties {
@@ -52,18 +59,6 @@ impl WindowRules {
             if rule.is_match(&candidate) {
                 properties = properties.merge(rule.properties.clone());
 
-                // REMIND
-                #[cfg(test)]
-                if let Some(ref op) = properties.opening {
-                    let WindowOpeningProperties {
-                        open_with_focus: _,
-                        open_maximized: _,
-                        open_fullscreen: _,
-                        layout_state: _,
-                        open_in_workspace: _,
-                    } = op;
-                }
-
                 if let Some(WindowOpeningProperties {
                     open_with_focus: Some(focus),
                     ..
@@ -71,20 +66,7 @@ impl WindowRules {
                 {
                     candidate.is_focused = focus;
                 }
-                if let Some(WindowOpeningProperties {
-                    open_maximized: Some(maximized),
-                    ..
-                }) = properties.opening
-                {
-                    candidate.is_maximized = maximized;
-                }
-                if let Some(WindowOpeningProperties {
-                    open_fullscreen: Some(fullscreen),
-                    ..
-                }) = properties.opening
-                {
-                    candidate.is_fullscreen = fullscreen;
-                }
+
                 if let Some(WindowOpeningProperties {
                     layout_state: Some(WindowState::Float { .. }),
                     ..
@@ -92,6 +74,15 @@ impl WindowRules {
                 {
                     candidate.is_floating = true;
                 }
+
+                if let Some(WindowOpeningProperties {
+                    open_as: Some(role),
+                    ..
+                }) = properties.opening
+                {
+                    candidate.role = role;
+                }
+
                 if let Some(WindowOpeningProperties {
                     open_in_workspace: Some(ref workspace_name),
                     ..
@@ -111,15 +102,25 @@ impl WindowRules {
         workspace_name: WorkspaceName,
     ) -> WindowDynamicProperties {
         let (app_id, title) = get_app_id_and_title(&mapped.wl_surface());
+
+        let role = if mapped.is_swap_source() {
+            WindowRole::SwapSource
+        } else if mapped.is_swap_target() {
+            WindowRole::SwapTarget
+        } else if mapped.is_maximized() {
+            WindowRole::Maximized
+        } else if mapped.is_fullscreen() {
+            WindowRole::Fullscreen
+        } else {
+            WindowRole::Normal
+        };
+
         let candidate = WindowRuleCandidate {
             app_id,
             title,
             is_focused: mapped.is_focused(),
             is_floating: mapped.is_floating(),
-            is_maximized: mapped.is_maximized(),
-            is_fullscreen: mapped.is_fullscreen(),
-            is_swap_source: mapped.is_swap_source(),
-            is_swap_target: mapped.is_swap_target(),
+            role,
             workspace_name,
         };
 
@@ -164,49 +165,11 @@ impl WindowRule {
         }
 
         self.matches.iter().any(|rule| {
-            // REMIND
-            #[cfg(test)]
-            {
-                let WindowRuleMatch {
-                    app_id_pattern: _,
-                    title_pattern: _,
-                    is_focused: _,
-                    is_floating: _,
-                    is_maximized: _,
-                    is_fullscreen: _,
-                    is_swap_source: _,
-                    is_swap_target: _,
-                    in_workspace: _,
-                } = rule;
-                let WindowRuleCandidate {
-                    app_id: _,
-                    title: _,
-                    is_focused: _,
-                    is_floating: _,
-                    is_maximized: _,
-                    is_fullscreen: _,
-                    is_swap_source: _,
-                    is_swap_target: _,
-                    workspace_name: _,
-                } = candidate;
-            }
-
             regex_matches(rule.app_id_pattern.as_deref(), &candidate.app_id)
                 && regex_matches(rule.title_pattern.as_deref(), &candidate.title)
                 && rule.is_focused.is_none_or(|v| candidate.is_focused == v)
                 && rule.is_floating.is_none_or(|v| candidate.is_floating == v)
-                && rule
-                    .is_maximized
-                    .is_none_or(|v| candidate.is_maximized == v)
-                && rule
-                    .is_fullscreen
-                    .is_none_or(|v| candidate.is_fullscreen == v)
-                && rule
-                    .is_swap_source
-                    .is_none_or(|v| candidate.is_swap_source == v)
-                && rule
-                    .is_swap_target
-                    .is_none_or(|v| candidate.is_swap_target == v)
+                && rule.role.is_none_or(|v| candidate.role == v)
                 && rule
                     .in_workspace
                     .as_ref()
@@ -215,19 +178,14 @@ impl WindowRule {
     }
 }
 
-// TODO tags
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Debug, Default)]
 pub struct WindowRuleMatch {
-    app_id_pattern: Option<String>,
-    title_pattern: Option<String>,
-    is_focused: Option<bool>,
-    is_floating: Option<bool>,
-    is_maximized: Option<bool>,
-    is_fullscreen: Option<bool>,
-    is_swap_source: Option<bool>,
-    is_swap_target: Option<bool>,
-    in_workspace: Option<WorkspaceName>,
+    pub app_id_pattern: Option<String>,
+    pub title_pattern: Option<String>,
+    pub is_focused: Option<bool>,
+    pub is_floating: Option<bool>,
+    pub role: Option<WindowRole>,
+    pub in_workspace: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Clone)]
@@ -236,10 +194,7 @@ struct WindowRuleCandidate {
     title: String,
     is_focused: bool,
     is_floating: bool,
-    is_maximized: bool,
-    is_fullscreen: bool,
-    is_swap_source: bool,
-    is_swap_target: bool,
+    role: WindowRole,
     workspace_name: WorkspaceName,
 }
 
@@ -264,15 +219,13 @@ impl Default for WindowProperties {
 #[serde(rename_all = "kebab-case")]
 pub struct WindowOpeningProperties {
     pub open_with_focus: Option<bool>,
-    pub open_maximized: Option<bool>,
-    pub open_fullscreen: Option<bool>,
     #[serde(flatten)]
     pub layout_state: Option<WindowState>,
+    pub open_as: Option<WindowRole>,
     pub open_in_workspace: Option<WorkspaceName>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub border: Option<WindowBorder>,
@@ -296,9 +249,8 @@ impl WindowOpeningProperties {
     fn override_with(self, other: Self) -> Self {
         Self {
             open_with_focus: other.open_with_focus.or(self.open_with_focus),
-            open_maximized: other.open_maximized.or(self.open_maximized),
-            open_fullscreen: other.open_fullscreen.or(self.open_fullscreen),
             layout_state: other.layout_state.or(self.layout_state),
+            open_as: other.open_as.or(self.open_as),
             open_in_workspace: other.open_in_workspace.or(self.open_in_workspace),
         }
     }
@@ -364,99 +316,62 @@ mod tests {
     impl Default for WindowRuleCandidate {
         fn default() -> Self {
             Self {
-                app_id: "".into(),
-                title: "".into(),
+                app_id: String::new(),
+                title: String::new(),
                 is_focused: false,
                 is_floating: false,
-                is_maximized: false,
-                is_fullscreen: false,
-                is_swap_source: false,
-                is_swap_target: false,
+                role: WindowRole::Normal,
                 workspace_name: WorkspaceName::Id(0),
             }
         }
     }
 
-    #[test_case(vec![], WindowRuleCandidate::default() => false; "empty")]
     #[test_case(
         vec![WindowRuleMatch::default()],
-        WindowRuleCandidate::default() => true;
-        "default_match"
+        WindowRuleCandidate { role: WindowRole::Maximized, ..Default::default() } => true;
+        "none_role_matches_any"
     )]
     #[test_case(
-        vec![WindowRuleMatch { is_floating: Some(true), ..Default::default() }, WindowRuleMatch::default()],
-        WindowRuleCandidate::default() => true;
-        "fallback_to_second_rule"
+        vec![WindowRuleMatch::default()],
+        WindowRuleCandidate { role: WindowRole::Normal, ..Default::default() } => true;
+        "none_role_matches_normal"
     )]
     #[test_case(
-        vec![WindowRuleMatch { app_id_pattern: Some("foo".into()), ..Default::default() }],
-        WindowRuleCandidate { app_id: "foobar".into(), ..Default::default() } => true;
-        "app_id_match"
+        vec![WindowRuleMatch { role: Some(WindowRole::Maximized), ..Default::default() }],
+        WindowRuleCandidate { role: WindowRole::Maximized, ..Default::default() } => true;
+        "exact_match_maximized"
     )]
     #[test_case(
-        vec![WindowRuleMatch { app_id_pattern: Some("foo".into()), ..Default::default() }],
-        WindowRuleCandidate::default() => false;
-        "app_id_mismatch"
+        vec![WindowRuleMatch { role: Some(WindowRole::Maximized), ..Default::default() }],
+        WindowRuleCandidate { role: WindowRole::Normal, ..Default::default() } => false;
+        "mismatch_maximized_vs_normal"
     )]
     #[test_case(
-        vec![WindowRuleMatch { title_pattern: Some("test".into()), ..Default::default() }],
-        WindowRuleCandidate { title: "my test window".into(), ..Default::default() } => true;
-        "title_match"
+        vec![WindowRuleMatch { role: Some(WindowRole::Maximized), ..Default::default() }],
+        WindowRuleCandidate { role: WindowRole::Fullscreen, ..Default::default() } => false;
+        "mismatch_maximized_vs_fullscreen"
     )]
     #[test_case(
-        vec![WindowRuleMatch { is_focused: Some(true), ..Default::default() }],
-        WindowRuleCandidate { is_focused: true, ..Default::default() } => true;
-        "focus_match"
+        vec![WindowRuleMatch { role: Some(WindowRole::Normal), ..Default::default() }],
+        WindowRuleCandidate { role: WindowRole::Normal, ..Default::default() } => true;
+        "exact_match_normal"
     )]
     #[test_case(
-        vec![WindowRuleMatch { is_focused: Some(true), ..Default::default() }],
-        WindowRuleCandidate::default() => false;
-        "focus_mismatch"
+        vec![WindowRuleMatch { role: Some(WindowRole::SwapSource), ..Default::default() }],
+        WindowRuleCandidate { role: WindowRole::SwapSource, ..Default::default() } => true;
+        "exact_match_swap_source"
     )]
     #[test_case(
-        vec![WindowRuleMatch { is_floating: Some(true), ..Default::default() }],
-        WindowRuleCandidate { is_floating: true, ..Default::default() } => true;
-        "float_match"
+        vec![WindowRuleMatch { is_floating: Some(true), role: Some(WindowRole::Maximized), ..Default::default() }],
+        WindowRuleCandidate { is_floating: true, role: WindowRole::Maximized, ..Default::default() } => true;
+        "floating_and_role_both_match"
     )]
     #[test_case(
-        vec![WindowRuleMatch { is_floating: Some(true), ..Default::default() }],
-        WindowRuleCandidate::default() => false;
-        "float_mismatch"
+        vec![WindowRuleMatch { is_floating: Some(true), role: Some(WindowRole::Maximized), ..Default::default() }],
+        WindowRuleCandidate { is_floating: true, role: WindowRole::Normal, ..Default::default() } => false;
+        "floating_matches_but_role_does_not"
     )]
-    #[test_case(
-        vec![WindowRuleMatch { is_swap_source: Some(true), ..Default::default() }],
-        WindowRuleCandidate { is_swap_source: true, ..Default::default() } => true;
-        "is_swap_source_match"
-    )]
-    #[test_case(
-        vec![WindowRuleMatch { is_swap_source: Some(false), ..Default::default() }],
-        WindowRuleCandidate { is_swap_source: true, ..Default::default() } => false;
-        "is_swap_source_mismatch"
-    )]
-    #[test_case(
-        vec![WindowRuleMatch { is_swap_target: Some(true), ..Default::default() }],
-        WindowRuleCandidate { is_swap_target: true, ..Default::default() } => true;
-        "is_swap_target_match"
-    )]
-    #[test_case(
-        vec![WindowRuleMatch { is_swap_target: Some(false), ..Default::default() }],
-        WindowRuleCandidate { is_swap_target: true, ..Default::default() } => false;
-        "is_swap_target_mismatch"
-    )]
-    #[test_case(
-        vec![WindowRuleMatch { in_workspace: Some(WorkspaceName::Id(1)), ..Default::default() }],
-        WindowRuleCandidate { workspace_name: WorkspaceName::Id(1), ..Default::default() } => true;
-        "workspace_name_match"
-    )]
-    #[test_case(
-        vec![WindowRuleMatch { in_workspace: Some(WorkspaceName::Id(1)), ..Default::default() }],
-        WindowRuleCandidate { workspace_name: WorkspaceName::Id(2), ..Default::default() } => false;
-        "workspace_name_mismatch"
-    )]
-    fn test_match_window_rule(
-        matches: Vec<WindowRuleMatch>,
-        candidate: WindowRuleCandidate,
-    ) -> bool {
+    fn test_role_match(matches: Vec<WindowRuleMatch>, candidate: WindowRuleCandidate) -> bool {
         (WindowRule {
             matches,
             properties: WindowProperties::default(),
@@ -465,48 +380,30 @@ mod tests {
     }
 
     #[test_case(
-        WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() },
-        WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() } =>
-        WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() };
-        "lhs_none_rhs_some_keeps_none"
+        None, None => None;
+        "none_none"
     )]
     #[test_case(
-        WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() },
-        WindowProperties { opening: None, dynamic: WindowDynamicProperties::default() } =>
-        WindowProperties { opening: Some(WindowOpeningProperties::default()), dynamic: WindowDynamicProperties::default() };
-        "lhs_some_rhs_none_keeps_some"
+        None, Some(WindowRole::Maximized) => Some(WindowRole::Maximized);
+        "none_some"
     )]
     #[test_case(
-        WindowProperties {
-            opening: Some(WindowOpeningProperties { open_with_focus: Some(true), ..Default::default() }),
-            dynamic: WindowDynamicProperties::default()
-        },
-        WindowProperties {
-            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), ..Default::default() }),
-            dynamic: WindowDynamicProperties::default()
-        } =>
-        WindowProperties {
-            opening: Some(WindowOpeningProperties { open_with_focus: Some(false), ..Default::default() }),
-            dynamic: WindowDynamicProperties::default()
+        Some(WindowRole::Maximized), None => Some(WindowRole::Maximized);
+        "some_none"
+    )]
+    #[test_case(
+        Some(WindowRole::Maximized), Some(WindowRole::Fullscreen) => Some(WindowRole::Fullscreen);
+        "some_some_rhs_wins"
+    )]
+    fn test_merge_open_as(lhs: Option<WindowRole>, rhs: Option<WindowRole>) -> Option<WindowRole> {
+        let lhs = WindowOpeningProperties {
+            open_as: lhs,
+            ..Default::default()
         };
-        "both_some_rhs_opening_overrides"
-    )]
-    #[test_case(
-        WindowProperties {
-            opening: Some(WindowOpeningProperties::default()),
-            dynamic: WindowDynamicProperties { decoration: Some(WindowDecoration::ClientSide), border: None, opacity: None }
-        },
-        WindowProperties {
-            opening: Some(WindowOpeningProperties::default()),
-            dynamic: WindowDynamicProperties { decoration: Some(WindowDecoration::ServerSide), border: None, opacity: None }
-        } =>
-        WindowProperties {
-            opening: Some(WindowOpeningProperties::default()),
-            dynamic: WindowDynamicProperties { decoration: Some(WindowDecoration::ServerSide), border: None, opacity: None }
+        let rhs = WindowOpeningProperties {
+            open_as: rhs,
+            ..Default::default()
         };
-        "both_some_rhs_dynamic_overrides"
-    )]
-    fn test_merge_properties(lhs: WindowProperties, rhs: WindowProperties) -> WindowProperties {
-        lhs.merge(rhs)
+        lhs.override_with(rhs).open_as
     }
 }

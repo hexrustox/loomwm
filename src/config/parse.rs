@@ -6,8 +6,9 @@ use smithay::input::keyboard::xkb;
 
 use crate::{
     input::{KeyCombo, KeyModifiers, PointerCombo, WindowUnit},
+    monitor::WorkspaceName,
     utils::{Direction, RGBAColor},
-    window::rule::WindowLocation,
+    window::rule::{WindowLocation, WindowRole, WindowRuleMatch},
 };
 
 impl<'de> Deserialize<'de> for Direction {
@@ -117,6 +118,104 @@ impl<'de> Deserialize<'de> for WindowLocation {
         }
 
         deserializer.deserialize_any(Visitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for WindowRole {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = WindowRole;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(
+                    formatter,
+                    "one of: maximized, fullscreen, swap-source, swap-target"
+                )
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<WindowRole, E> {
+                match v {
+                    "maximized" => Ok(WindowRole::Maximized),
+                    "fullscreen" => Ok(WindowRole::Fullscreen),
+                    "swap-source" => Ok(WindowRole::SwapSource),
+                    "swap-target" => Ok(WindowRole::SwapTarget),
+                    other => Err(E::unknown_variant(
+                        other,
+                        &["maximized", "fullscreen", "swap-source", "swap-target"],
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+struct WindowRuleMatchDe {
+    app_id_pattern: Option<String>,
+    title_pattern: Option<String>,
+    is_focused: Option<bool>,
+    is_floating: Option<bool>,
+    is_maximized: Option<bool>,
+    is_fullscreen: Option<bool>,
+    is_swap_source: Option<bool>,
+    is_swap_target: Option<bool>,
+    in_workspace: Option<WorkspaceName>,
+}
+
+impl WindowRuleMatchDe {
+    fn try_into_match(self) -> Result<WindowRuleMatch, String> {
+        let mut set = Vec::new();
+        if self.is_maximized == Some(true) {
+            set.push("is-maximized");
+        }
+        if self.is_fullscreen == Some(true) {
+            set.push("is-fullscreen");
+        }
+        if self.is_swap_source == Some(true) {
+            set.push("is-swap-source");
+        }
+        if self.is_swap_target == Some(true) {
+            set.push("is-swap-target");
+        }
+        if set.len() > 1 {
+            return Err(format!(
+                "conflicting fields set to true: {}. these are mutually exclusive",
+                set.join(", ")
+            ));
+        }
+
+        let role = if self.is_maximized == Some(true) {
+            Some(WindowRole::Maximized)
+        } else if self.is_fullscreen == Some(true) {
+            Some(WindowRole::Fullscreen)
+        } else if self.is_swap_source == Some(true) {
+            Some(WindowRole::SwapSource)
+        } else if self.is_swap_target == Some(true) {
+            Some(WindowRole::SwapTarget)
+        } else {
+            None
+        };
+
+        Ok(WindowRuleMatch {
+            app_id_pattern: self.app_id_pattern,
+            title_pattern: self.title_pattern,
+            is_focused: self.is_focused,
+            is_floating: self.is_floating,
+            role,
+            in_workspace: self.in_workspace,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for WindowRuleMatch {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let de = WindowRuleMatchDe::deserialize(deserializer)?;
+        de.try_into_match().map_err(de::Error::custom)
     }
 }
 
@@ -293,7 +392,7 @@ mod tests {
     use super::*;
     use crate::input::{KeyCombo, KeyModifiers, PointerCombo};
     use crate::utils::Direction;
-    use crate::window::rule::WindowLocation;
+    use crate::window::rule::{WindowLocation, WindowOpeningProperties, WindowRules};
 
     #[test_case("top" => Direction::TOP; "top")]
     #[test_case("bottom" => Direction::BOTTOM; "bottom")]
@@ -370,6 +469,102 @@ mod tests {
         toml::from_str::<Wrapper>(&format!("unit = {}", s))
             .unwrap()
             .unit
+    }
+
+    #[test_case("\"maximized\"" => WindowRole::Maximized; "maximized")]
+    #[test_case("\"fullscreen\"" => WindowRole::Fullscreen; "fullscreen")]
+    #[test_case("\"swap-source\"" => WindowRole::SwapSource; "swap_source")]
+    #[test_case("\"swap-target\"" => WindowRole::SwapTarget; "swap_target")]
+    fn test_window_role_valid(s: &str) -> WindowRole {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            role: WindowRole,
+        }
+        toml::from_str::<Wrapper>(&format!("role = {}", s))
+            .unwrap()
+            .role
+    }
+
+    #[test_case("\"normal\""; "normal")]
+    #[test_case("\"foo\""; "unknown")]
+    #[test_case("\"MAXIMIZED\""; "wrong case")]
+    fn test_window_role_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            role: WindowRole,
+        }
+        toml::from_str::<Wrapper>(&format!("role = {}", s)).unwrap_err();
+    }
+
+    #[test_case("is-maximized = true" => Some(WindowRole::Maximized); "is_maximized")]
+    #[test_case("is-fullscreen = true" => Some(WindowRole::Fullscreen); "is_fullscreen")]
+    #[test_case("is-swap-source = true" => Some(WindowRole::SwapSource); "is_swap_source")]
+    #[test_case("is-swap-target = true" => Some(WindowRole::SwapTarget); "is_swap_target")]
+    fn test_window_rule_match_role(s: &str) -> Option<WindowRole> {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            #[serde(flatten)]
+            m: WindowRuleMatch,
+        }
+        toml::from_str::<Wrapper>(s).unwrap().m.role
+    }
+
+    #[test_case("" => None; "no fields")]
+    #[test_case("is-maximized = false" => None; "false means unset")]
+    #[test_case("is-fullscreen = false" => None; "fullscreen false")]
+    fn test_window_rule_match_no_role(s: &str) -> Option<WindowRole> {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            #[serde(flatten)]
+            m: WindowRuleMatch,
+        }
+        toml::from_str::<Wrapper>(s).unwrap().m.role
+    }
+
+    #[test_case("is-maximized = true\nis-fullscreen = true"; "maximized_and_fullscreen")]
+    #[test_case("is-swap-source = true\nis-swap-target = true"; "swap_source_and_swap_target")]
+    #[test_case("is-maximized = true\nis-fullscreen = true\nis-swap-source = true"; "three at once")]
+    fn test_window_rule_match_conflicting(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            #[serde(flatten)]
+            m: WindowRuleMatch,
+        }
+        toml::from_str::<Wrapper>(s).unwrap_err();
+    }
+
+    #[test]
+    fn test_window_rule_match_deny_unknown() {
+        let toml = r#"
+            [[window-rules]]
+            is-bogus = true
+        "#;
+        toml::from_str::<WindowRules>(toml).unwrap_err();
+    }
+
+    #[test_case("open-as = \"maximized\"" => Some(WindowRole::Maximized); "maximized")]
+    #[test_case("open-as = \"fullscreen\"" => Some(WindowRole::Fullscreen); "fullscreen")]
+    fn test_open_as_valid(s: &str) -> Option<WindowRole> {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            #[serde(flatten)]
+            p: WindowOpeningProperties,
+        }
+        toml::from_str::<Wrapper>(s).unwrap().p.open_as
+    }
+
+    #[test_case("open-as = \"normal\""; "normal")]
+    #[test_case("open-as = \"foo\""; "unknown")]
+    fn test_open_as_invalid(s: &str) {
+        #[derive(Deserialize, Debug)]
+        struct Wrapper {
+            #[allow(unused)]
+            #[serde(flatten)]
+            p: WindowOpeningProperties,
+        }
+        toml::from_str::<Wrapper>(s).unwrap_err();
     }
 
     #[test_case("a" => KeyCombo::new(KeyModifiers::empty(), Keysym::a); "no modifier")]

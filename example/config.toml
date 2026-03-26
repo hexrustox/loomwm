@@ -28,24 +28,6 @@ matches = [{ is-swap-target = true }]
 border = { width = 2, color = "90a959" }
 opacity = 0.8
 
-# [[window-rules]]
-# matches = [
-#   { app-id-pattern = "", title-pattern = "" },
-#   { is-focused = true },
-#   { is-floating = true },
-#   { is-maximized = true },
-#   { is-fullscreen = true },
-#   { in-workspace = 1 },
-# ]
-# open-with-focus = true
-# open-as-floating = { location = "center", size = [800, 600] }
-# open-maximized = true
-# open-fullscreen = true
-# open-in-workspace = 1
-# decoration = "client_side"
-# border = { width = 2, color = "6a9fb5" }
-# opacity = 0.8
-
 [layouts]
 master = { nodes = [{ ratio = 1.5 }, { layout = "slaves" }] }
 slaves = { split = "horizontal", nodes = [{ repeat = 3 }] }

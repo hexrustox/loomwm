@@ -85,6 +85,52 @@ opacity = 0.5
             assert_eq!(mapped.get_opacity(), 0.5);
         }; "opacity"
     )]
+#[test_case(
+        r#"[[window-rules]]
+open-as = "maximized"
+"#,
+        |data| {
+            let mapped = get_window(data);
+            assert!(mapped.is_maximized());
+        }; "open_maximized"
+    )]
+#[test_case(
+        r#"[[window-rules]]
+open-as = "fullscreen"
+"#,
+        |data| {
+            let mapped = get_window(data);
+            assert!(mapped.is_fullscreen());
+        }; "open_fullscreen"
+    )]
+#[test_case(
+        r#"[[window-rules]]
+open-as = "maximized"
+
+[[window-rules]]
+matches = [{ is-maximized = true }]
+opacity = 0.5
+"#,
+        |data| {
+            let mapped = get_window(data);
+            assert!(mapped.is_maximized());
+            assert_eq!(mapped.get_opacity(), 0.5);
+        }; "match_is_maximized"
+    )]
+#[test_case(
+        r#"[[window-rules]]
+open-as = "fullscreen"
+
+[[window-rules]]
+matches = [{ is-fullscreen = true }]
+opacity = 0.5
+"#,
+        |data| {
+            let mapped = get_window(data);
+            assert!(mapped.is_fullscreen());
+            assert_eq!(mapped.get_opacity(), 0.5);
+        }; "match_is_fullscreen"
+    )]
 fn test_window_rule(config: &str, assertion: impl Fn(&mut CompositorData) + Send + 'static) {
     let handle = run_compositor_test(
         toml::from_str(config).unwrap(),

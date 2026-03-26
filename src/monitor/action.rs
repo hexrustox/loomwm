@@ -9,7 +9,9 @@ use crate::{
     utils::Direction,
     window::{
         MappedWindow,
-        rule::{WindowLocation, WindowOpeningProperties, WindowProperties, WindowState},
+        rule::{
+            WindowLocation, WindowOpeningProperties, WindowProperties, WindowRole, WindowState,
+        },
     },
 };
 
@@ -19,8 +21,7 @@ impl WindowManagerState {
     pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
         let Some(WindowOpeningProperties {
             open_with_focus,
-            open_maximized,
-            open_fullscreen,
+            open_as,
             layout_state,
             open_in_workspace,
         }) = properties.opening
@@ -33,12 +34,14 @@ impl WindowManagerState {
             WindowState::Float { .. } => true,
             WindowState::Tile { .. } => false,
         };
+        let is_maximized = matches!(open_as, Some(WindowRole::Maximized));
+        let is_fullscreen = matches!(open_as, Some(WindowRole::Fullscreen));
         let mut mapped = MappedWindow::new(
             window,
             open_with_focus.unwrap(),
             floating,
-            open_maximized.unwrap_or(false),
-            open_fullscreen.unwrap_or(false),
+            is_maximized,
+            is_fullscreen,
         );
 
         let monitor = self.monitors.get_monitor_mut();
