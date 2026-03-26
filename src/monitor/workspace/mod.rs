@@ -320,10 +320,6 @@ impl Workspace {
         }
     }
 
-    pub fn get_fullscreen(&self) -> Option<MappedWindow> {
-        self.fullscreen.as_ref().map(|f| f.mapped.clone())
-    }
-
     pub fn set_fullscreen(&mut self, mut mapped: MappedWindow, value: Option<bool>) {
         match (value, mapped.is_fullscreen()) {
             (Some(true), _) | (None, false) => {

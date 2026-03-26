@@ -258,17 +258,6 @@ impl WindowManagerState {
         }
     }
 
-    pub fn update_workspaces_tiling_windows_size(&mut self) {
-        let monitor = self.monitors.get_monitor_mut();
-        for workspace in &mut monitor.workspaces {
-            if let Some(mut mapped) = workspace.get_fullscreen() {
-                mapped.set_size(workspace.get_output_size());
-                continue;
-            }
-            workspace.update_tiling_windows_size();
-        }
-    }
-
     pub fn update_workspaces_tiling_layout(&mut self, layout_name: &str) {
         let monitor = self.monitors.get_monitor_mut();
         for workspace in &mut monitor.workspaces {

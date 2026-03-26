@@ -48,14 +48,12 @@ impl Winit {
             use WinitEvent::*;
             match event {
                 Resized { size, .. } => {
-                    // FIXME
                     data.backend.winit().output.change_current_state(
                         Some(Mode { size, refresh: 60 }),
                         None,
                         None,
                         None,
                     );
-                    data.compositor.update_workspaces_tiling_windows_size();
                 }
                 Input(event) => data.compositor.process_input_event(event),
                 // Redraw => {}
