@@ -10,7 +10,7 @@ use smithay::{
 };
 
 use crate::{
-    monitor::workspace::tile::{TileInsertion, TileTree},
+    monitor::workspace::tile::TileTree,
     utils::{
         Direction,
         types::{RenderElements, Renderer},
@@ -97,11 +97,8 @@ impl Workspace {
         mapped: MappedWindow,
         ratio: Option<TileRatio>,
     ) -> Option<MappedWindow> {
-        if let Some(insertion) = self.tiling.insert(TileInsertion::Window {
-            window: mapped.clone(),
-            ratio,
-        }) {
-            return Some(insertion.into_window());
+        if let Some(window) = self.tiling.insert(mapped.clone(), ratio) {
+            return Some(window);
         } else {
             self.insert_into_focus_queue(mapped);
             self.update_tiling_windows_size();

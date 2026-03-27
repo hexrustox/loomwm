@@ -37,23 +37,16 @@ struct Tile<T> {
 }
 
 impl<T> Tile<T> {
-    fn into_window(self) -> T {
-        match self.kind {
-            TileKind::Window(window) => window,
-            _ => unreachable!(),
-        }
-    }
-
     fn as_window(&self) -> &T {
         match &self.kind {
-            TileKind::Window(window) => window,
+            TileKind::Window { window, .. } => window,
             _ => unreachable!(),
         }
     }
 
     fn as_window_mut(&mut self) -> &mut T {
         match &mut self.kind {
-            TileKind::Window(window) => window,
+            TileKind::Window { window, .. } => window,
             _ => unreachable!(),
         }
     }
@@ -85,7 +78,10 @@ impl<T> Tile<T> {
 
 #[derive(Debug, Clone)]
 enum TileKind<T> {
-    Window(T),
+    Window {
+        window: T,
+        ratio: Option<TileRatio>,
+    },
     Layout {
         schema: String,
         schema_index: usize,
@@ -193,35 +189,6 @@ impl Default for LayoutNode {
             layout: None,
             repeat: 1,
             ratio: 1.,
-        }
-    }
-}
-
-pub enum TileInsertion<T> {
-    Id(TileId),
-    Window { window: T, ratio: Option<TileRatio> },
-}
-
-impl<T> TileInsertion<T> {
-    pub fn into_window(self) -> T {
-        match self {
-            Self::Window { window, .. } => window,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<T> From<TileId> for TileInsertion<T> {
-    fn from(value: TileId) -> Self {
-        Self::Id(value)
-    }
-}
-
-impl<T: TileTreeWindow> From<T> for TileInsertion<T> {
-    fn from(value: T) -> Self {
-        Self::Window {
-            window: value,
-            ratio: None,
         }
     }
 }
@@ -351,9 +318,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn insert(&mut self, item: impl Into<TileInsertion<T>>) -> Option<TileInsertion<T>> {
-        let item = item.into();
-
+    pub fn insert(&mut self, window: T, ratio: Option<TileRatio>) -> Option<T> {
         let TileKind::Layout {
             schema,
             schema_index,
@@ -361,7 +326,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             ..
         } = &self.arena[self.current_tile].kind
         else {
-            return Some(item);
+            return Some(window);
         };
         let schema = schema.clone();
 
@@ -398,26 +363,18 @@ impl<T: TileTreeWindow> TileTree<T> {
                         .push(tile_id);
 
                     self.current_tile = tile_id;
-                    return self.insert(item);
+                    return self.insert(window, ratio);
                 } else {
-                    match item {
-                        TileInsertion::Id(id) => {
-                            self.arena[id].parent = Some(self.current_tile);
-                            self.arena[self.current_tile].as_layout_tiles_mut().push(id);
-                        }
-                        TileInsertion::Window { window, ratio } => {
-                            let new_tile = Tile {
-                                kind: TileKind::Window(window),
-                                ratio: ratio.unwrap_or(node.ratio),
-                                parent: Some(self.current_tile),
-                            };
-                            let tile_id = self.arena.insert(new_tile);
+                    let new_tile = Tile {
+                        kind: TileKind::Window { window, ratio },
+                        ratio: ratio.unwrap_or(node.ratio),
+                        parent: Some(self.current_tile),
+                    };
+                    let tile_id = self.arena.insert(new_tile);
 
-                            self.arena[self.current_tile]
-                                .as_layout_tiles_mut()
-                                .push(tile_id);
-                        }
-                    }
+                    self.arena[self.current_tile]
+                        .as_layout_tiles_mut()
+                        .push(tile_id);
 
                     self.count += 1;
 
@@ -429,7 +386,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
 
         let Some(parent_id) = self.arena[self.current_tile].parent else {
-            return Some(item);
+            return Some(window);
         };
         self.current_tile = parent_id;
 
@@ -449,79 +406,45 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
         }
 
-        self.insert(item)
+        self.insert(window, ratio)
     }
 
-    // FIXME
     pub fn remove<'a>(&mut self, key: impl SearchKey<'a>) -> Option<T> {
-        fn traverse<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            layout_id: TileId,
-            key: TileTreeSearchKey<'_>,
-            window_ids: &mut Vec<TileId>,
-            layout_ids: &mut Vec<TileId>,
-        ) -> Option<TileId> {
-            let mut result = None;
-            for tile_id in arena[layout_id].as_layout_tiles() {
-                match &arena[*tile_id].kind {
-                    TileKind::Window(window) => {
-                        if window.match_id(key) {
-                            result = Some(*tile_id);
-                        } else {
-                            window_ids.push(*tile_id);
-                        }
-                    }
-                    TileKind::Layout { .. } => {
-                        layout_ids.push(*tile_id);
-                        if let inner_result @ Some(_) =
-                            traverse(arena, *tile_id, key, window_ids, layout_ids)
-                        {
-                            result = inner_result;
-                        }
-                    }
-                }
+        let key = key.into();
+
+        let mut target = None;
+        let remaining = self.collect_windows_and_ratios(|w| {
+            if w.match_id(key) {
+                target = Some(w.clone());
+                false
+            } else {
+                true
             }
-            result
+        });
+
+        let target = target?;
+
+        let TileKind::Layout { ref schema, .. } = self.arena[self.root].kind else {
+            unreachable!()
+        };
+        let schema = schema.to_string();
+
+        self.arena.clear();
+        self.root = Self::create_layout_tile(
+            &mut self.arena,
+            &self.layouts.borrow().get(&schema),
+            schema,
+            1.0,
+            None,
+        );
+        self.current_tile = self.root;
+        self.count = 0;
+
+        for (window, ratio) in remaining {
+            self.insert(window, ratio);
         }
 
-        let mut window_ids = Vec::new();
-        let mut layout_ids = Vec::new();
-
-        if let Some(target_id) = traverse(
-            &self.arena,
-            self.root,
-            key.into(),
-            &mut window_ids,
-            &mut layout_ids,
-        ) {
-            let TileKind::Layout { ref schema, .. } = self.arena[self.root].kind else {
-                unreachable!()
-            };
-            let schema = schema.to_string();
-
-            layout_ids.push(self.root);
-            for id in layout_ids {
-                self.arena.remove(id);
-            }
-
-            self.root = Self::create_layout_tile(
-                &mut self.arena,
-                &self.layouts.borrow().get(&schema),
-                schema,
-                1.0,
-                None,
-            );
-            self.current_tile = self.root;
-            self.count = 0;
-
-            for id in window_ids {
-                self.insert(TileInsertion::Id(id));
-            }
-
-            return self.arena.remove(target_id).map(|tile| tile.into_window());
-        }
-
-        None
+        Some(target)
     }
 
     pub fn windows_iter(&self) -> impl Iterator<Item = &T> + Clone + '_ {
@@ -538,7 +461,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 while let Some(tile_id) = self.stack.pop() {
                     match &self.arena[tile_id] {
                         Tile {
-                            kind: TileKind::Window(window),
+                            kind: TileKind::Window { window, .. },
                             ..
                         } => return Some(window),
                         _ => {
@@ -567,8 +490,36 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.count
     }
 
+    fn collect_windows_and_ratios(
+        &mut self,
+        mut filter: impl FnMut(&T) -> bool,
+    ) -> Vec<(T, Option<TileRatio>)> {
+        fn collect<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            id: TileId,
+            filter: &mut impl FnMut(&T) -> bool,
+            result: &mut Vec<(T, Option<TileRatio>)>,
+        ) {
+            match &arena[id].kind {
+                TileKind::Window { window, ratio } if filter(window) => {
+                    result.push((window.clone(), *ratio));
+                }
+                TileKind::Layout { tiles, .. } => {
+                    for &child_id in tiles {
+                        collect(arena, child_id, filter, result);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut result = Vec::new();
+        collect(&self.arena, self.root, &mut filter, &mut result);
+        result
+    }
+
     pub fn update_layout(&mut self, layout_name: &str) {
-        let windows = self.windows_iter().cloned().collect::<Vec<_>>();
+        let windows = self.collect_windows_and_ratios(|_| true);
         self.arena.clear();
         self.root = Self::create_layout_tile(
             &mut self.arena,
@@ -580,8 +531,8 @@ impl<T: TileTreeWindow> TileTree<T> {
         self.current_tile = self.root;
         self.count = 0;
 
-        for window in windows {
-            self.insert(window);
+        for (window, ratio) in windows {
+            self.insert(window, ratio);
         }
     }
 
@@ -635,7 +586,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 };
 
                 match &arena[tid].kind {
-                    TileKind::Window(_) => updates.push(Update::Win(tid, location, t_sz)),
+                    TileKind::Window { .. } => updates.push(Update::Win(tid, location, t_sz)),
                     TileKind::Layout { .. } => traverse(arena, tid, location, t_sz, updates),
                 }
 
@@ -675,7 +626,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             key: TileTreeSearchKey,
         ) -> Option<TileId> {
             match &arena[current_id].kind {
-                TileKind::Window(window) => {
+                TileKind::Window { window, .. } => {
                     if window.match_id(key) {
                         return Some(current_id);
                     }
@@ -807,7 +758,7 @@ impl<T: TileTreeWindow> TileTree<T> {
 
         fn get_rect_from_tile<T: TileTreeWindow>(arena: &TileArena<T>, id: TileId) -> Rect {
             match &arena[id].kind {
-                TileKind::Window(window) => {
+                TileKind::Window { window, .. } => {
                     Rect::new(Rectangle::new(window.get_location(), window.get_size()))
                 }
                 TileKind::Layout { rect, .. } => Rect::new(*rect),
@@ -822,8 +773,8 @@ impl<T: TileTreeWindow> TileTree<T> {
             results: &mut Vec<&'a T>,
         ) {
             match &arena[id].kind {
-                TileKind::Window(x) => {
-                    results.push(x);
+                TileKind::Window { window, .. } => {
+                    results.push(window);
                 }
                 TileKind::Layout {
                     tiles,
@@ -971,7 +922,7 @@ impl<T: TileTreeWindow> TileTree<T> {
             };
 
             let kind_size = |k: &TileKind<T>| match k {
-                TileKind::Window(w) => w.get_size(),
+                TileKind::Window { window, .. } => window.get_size(),
                 TileKind::Layout { rect, .. } => rect.size,
             };
 
@@ -1156,7 +1107,9 @@ mod tests {
                 }
 
                 match (&tile_a.kind, &tile_b.kind) {
-                    (TileKind::Window(w1), TileKind::Window(w2)) => w1 == w2,
+                    (TileKind::Window { window: w1, .. }, TileKind::Window { window: w2, .. }) => {
+                        w1 == w2
+                    }
                     (
                         TileKind::Layout {
                             schema_index: _,
@@ -1234,8 +1187,8 @@ mod tests {
             f.push_str(marker);
 
             match &tile.kind {
-                TileKind::Window(window) => {
-                    let inner = window.inner.borrow();
+                TileKind::Window { window, .. } => {
+                    let borrowed = window.inner.borrow();
                     f.push_str(&format!(
                         "Window {}[loc: ({}, {}), size: ({}, {}), ratio: {}]\n",
                         if let Some(id) = window.inner.borrow().id {
@@ -1243,10 +1196,10 @@ mod tests {
                         } else {
                             "".to_string()
                         },
-                        inner.rect.loc.x,
-                        inner.rect.loc.y,
-                        inner.rect.size.w,
-                        inner.rect.size.h,
+                        borrowed.rect.loc.x,
+                        borrowed.rect.loc.y,
+                        borrowed.rect.size.w,
+                        borrowed.rect.size.h,
                         tile.ratio
                     ));
                 }
@@ -1321,7 +1274,7 @@ mod tests {
             let mut ratio = 1.0;
             tile_tree!(@window_opt window ratio $($opts)*);
             $arena.insert(Tile {
-                kind: TileKind::Window(window),
+                kind: TileKind::Window { window, ratio: None },
                 ratio,
                 parent: $parent,
             })
@@ -1718,7 +1671,7 @@ mod tests {
         };
         let mut tree = TileTree::<TestWindow>::new(Rc::new(RefCell::new(layouts)), layout_name);
         for _ in 0..tiles {
-            tree.insert(TestWindow::new());
+            tree.insert(TestWindow::new(), None);
         }
         assert_tree_eq!(tree, expected);
         if !tree.arena[tree.root].as_layout_tiles().is_empty() {
@@ -1740,10 +1693,7 @@ mod tests {
             "root",
         );
         for i in 1..=3 {
-            tree.insert(TileInsertion::Window {
-                window: TestWindow::new(),
-                ratio: Some(i as f64),
-            });
+            tree.insert(TestWindow::new(), Some(i as f64));
         }
         let expected = tile_tree!(layout() [
             window(ratio: 1),
@@ -1764,12 +1714,12 @@ mod tests {
         let mut tree = TileTree::new(layouts, layout_name);
         for i in 0..tiles - 1 {
             assert!(
-                tree.insert(TestWindow::new()).is_none(),
+                tree.insert(TestWindow::new(), None).is_none(),
                 "Number {:?} insert failed",
                 i
             );
         }
-        tree.insert(TestWindow::new()).is_none()
+        tree.insert(TestWindow::new(), None).is_none()
     }
 
     #[test_case(
@@ -1963,12 +1913,15 @@ mod tests {
         };
         let mut tree = TileTree::<TestWindow>::new(Rc::new(RefCell::new(layouts)), layout_name);
         for i in 0..tiles {
-            tree.insert(TestWindow {
-                inner: Rc::new(RefCell::new(TestWindowInner {
-                    id: Some(i),
-                    ..Default::default()
-                })),
-            });
+            tree.insert(
+                TestWindow {
+                    inner: Rc::new(RefCell::new(TestWindowInner {
+                        id: Some(i),
+                        ..Default::default()
+                    })),
+                },
+                None,
+            );
         }
         assert_eq!(
             tree.remove(remove).map(|t| t.inner.borrow().id),
@@ -1984,12 +1937,15 @@ mod tests {
         let mut tree = TileTree::<TestWindow>::new(layouts, "windows");
 
         for i in 0..2 {
-            tree.insert(TestWindow {
-                inner: Rc::new(RefCell::new(TestWindowInner {
-                    id: Some(i),
-                    ..Default::default()
-                })),
-            });
+            tree.insert(
+                TestWindow {
+                    inner: Rc::new(RefCell::new(TestWindowInner {
+                        id: Some(i),
+                        ..Default::default()
+                    })),
+                },
+                None,
+            );
         }
 
         assert_eq!(tree.remove(99), None);
@@ -1999,6 +1955,58 @@ mod tests {
             window(id: 1),
         ]);
         assert_tree_eq!(tree, expected);
+    }
+
+    #[test]
+    fn test_remove_preserves_custom_window_ratios() {
+        let layouts = Rc::new(RefCell::new(LayoutSet(HashMap::from_iter([(
+            "root".to_string(),
+            schema!(nodes: [node!(win, repeat: 3)]),
+        )]))));
+        let mut tree = TileTree::<TestWindow>::new(layouts, "root");
+        tree.insert(
+            TestWindow {
+                inner: Rc::new(RefCell::new(TestWindowInner {
+                    id: Some(0),
+                    ..Default::default()
+                })),
+            },
+            Some(0.5),
+        );
+        tree.insert(
+            TestWindow {
+                inner: Rc::new(RefCell::new(TestWindowInner {
+                    id: Some(1),
+                    ..Default::default()
+                })),
+            },
+            None,
+        );
+        tree.insert(
+            TestWindow {
+                inner: Rc::new(RefCell::new(TestWindowInner {
+                    id: Some(2),
+                    ..Default::default()
+                })),
+            },
+            None,
+        );
+        tree.remove(1u32);
+        for (_, tile) in tree.arena.iter() {
+            if let TileKind::Window { window, ratio } = &tile.kind {
+                match window.inner.borrow().id {
+                    Some(0) => {
+                        assert_eq!(*ratio, Some(0.5));
+                        assert_eq!(tile.ratio, 0.5);
+                    }
+                    Some(2) => {
+                        assert_eq!(*ratio, None);
+                        assert_eq!(tile.ratio, 1.0);
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     #[test_case(
