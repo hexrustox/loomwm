@@ -5,8 +5,8 @@ LoomWM is a Wayland compositor built with the Smithay library, featuring dynamic
 ## Build/Test Commands
 
 ```bash
-# Build the project
-cargo build
+# Build the project (use CARGO_INCREMENTAL=0 if compiler crashes)
+CARGO_INCREMENTAL=0 cargo build
 
 # Build for release
 cargo build --release
@@ -19,6 +19,9 @@ cargo test test_resize_tile
 
 # Run tests with output visible
 cargo test -- --nocapture
+
+# Run integration tests
+cargo test --test integration_tests
 
 # Lint with clippy
 cargo clippy
@@ -49,18 +52,42 @@ cargo rm <crate>
 - **Edition**: Rust 2024 edition
 - **Formatter**: Use `rustfmt` with default settings
 - **Linter**: All code must pass `cargo clippy` without warnings
-- **MSRV**: Defined in Cargo.toml
+- **MSRV**: Defined in Cargo.toml (check `rust-toolchain.toml` if present)
 
 ### Project Structure
+```
+loomwm/
+├── src/
+│   ├── backend/        # Backend implementation (display, window management)
+│   ├── handlers/       # Wayland protocol handlers
+│   ├── input/          # Input handling (keyboard, mouse)
+│   ├── monitor/        # Monitor management
+│   ├── window/         # Window types and management
+│   └── utils/          # Utility modules
+├── assistant/          # AI assistant module (workspace member)
+├── tests/              # Integration tests
+└── example/            # Example configurations
+```
 - **Type**: Wayland compositor using Smithay library
 - **Architecture**: Modular design with backend, handlers, input, monitor, window, and utils modules
-- **Key Dependencies**: Smithay (Wayland), slotmap (arena allocation), serde (config), anyhow (errors)
+- **Key Dependencies**: Smithay (Wayland), slotmap (arena allocation), serde (config), anyhow (errors), burn (ML/tensor operations)
 
 ### Import Organization
 Group imports in this order with blank lines between groups:
 1. Standard library (`std::`)
 2. External crates (e.g., `smithay::`, `serde::`)
 3. Local modules (`crate::`)
+
+Example:
+```rust
+use std::sync::Arc;
+
+use smithay::input::keyboard::KeyboardInputEvent;
+use serde::{Deserialize, Serialize};
+
+use crate::backend::display::DisplayManager;
+use crate::window::WindowState;
+```
 
 ### Naming Conventions
 - **Types/Traits/Enums**: PascalCase (e.g., `WindowManagerState`, `TileTree`)
@@ -80,6 +107,7 @@ Group imports in this order with blank lines between groups:
 - Derive common traits: `Debug`, `Clone`, `Default`, `PartialEq`, `Eq` where appropriate
 - Use `#[serde(...)]` attributes for configuration deserialization
 - Implement custom traits (e.g., `TileTreeWindow`) for domain-specific behavior
+- Use `bitflags` for flag types (see existing usage)
 
 ### Safety & Unsafe Code
 - Minimize unsafe code; document why it is necessary
@@ -88,9 +116,21 @@ Group imports in this order with blank lines between groups:
 ### Testing
 - **Framework**: Uses `test-case` crate for parameterized tests
 - **Location**: Tests are inline in source files under `#[cfg(test)]` modules
+- **Integration Tests**: Located in `tests/integration_tests.rs`
 - **Macros**: Custom macros like `tile_tree!` and `assert_tree_eq!` for test construction
 - **Running**: Use `cargo test <pattern>` to run specific tests
 - **Test Case Policy**: Use `#[test_case()]` macro as much as possible. Only use `#[test]` macro when there is exactly 1 test case and it is unlikely additional test cases will be added.
 
 ### Code Generation Policy
 - **Comments**: Generated code must have 0 comments unless explicitly specified
+- **Documentation**: Add doc comments (`///`) for public APIs and important types
+
+### Working with Smithay
+- Smithay APIs often require specific lifetimes and unsafe blocks for FFI
+- Follow existing patterns in the codebase for Wayland protocol handling
+- Use Smithay's built-in types for coordinates (`Point`, `Rect`, `Size`)
+
+### AI/Assistant Module
+- The `assistant/` workspace member handles AI functionality
+- Uses `burn` for tensor operations
+- Follows the same code style as the main crate
