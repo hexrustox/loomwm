@@ -90,6 +90,8 @@ impl XdgShellHandler for WindowManagerState {
             && let Some(pointer) = seat.get_pointer()
             && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
             && mapped.is_floating()
+            && !mapped.is_maximized()
+            && !mapped.is_fullscreen()
         {
             let grab = MoveGrab::new(start_data, mapped.clone(), mapped.get_location().to_f64());
             pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -118,6 +120,8 @@ impl XdgShellHandler for WindowManagerState {
             && let Some(pointer) = seat.get_pointer()
             && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
             && mapped.is_floating()
+            && !mapped.is_maximized()
+            && !mapped.is_fullscreen()
         {
             let grab = FloatingResizeGrab::new(
                 start_data,
@@ -139,7 +143,7 @@ impl XdgShellHandler for WindowManagerState {
 
     // TODO minimize, maximize, fullscreen
     fn maximize_request(&mut self, toplevel: ToplevelSurface) {
-        if !self.general_config.allow_resize_request {
+        if !self.general_config.allow_maximize_request {
             warn!("Client maximize request ignored");
             return;
         }
@@ -151,7 +155,7 @@ impl XdgShellHandler for WindowManagerState {
     }
 
     fn fullscreen_request(&mut self, toplevel: ToplevelSurface, _output: Option<WlOutput>) {
-        if !self.general_config.allow_resize_request {
+        if !self.general_config.allow_fullscreen_request {
             warn!("Client fullscreen request ignored");
             return;
         }

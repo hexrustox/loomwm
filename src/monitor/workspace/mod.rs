@@ -87,6 +87,20 @@ impl Workspace {
         &self.name
     }
 
+    pub fn has_occupant(&self) -> bool {
+        self.occupant.is_some()
+    }
+
+    pub fn occupant_role(&self) -> Option<WindowRole> {
+        self.occupant.as_ref().map(|o| o.mapped.role())
+    }
+
+    pub fn occupant_is_floating(&self) -> bool {
+        self.occupant
+            .as_ref()
+            .is_some_and(|o| o.mapped.is_floating())
+    }
+
     pub fn add_floating_window(&mut self, mapped: MappedWindow) {
         self.insert_into_focus_queue(mapped.clone());
         self.floating.insert(0, mapped);
@@ -131,6 +145,42 @@ impl Workspace {
 
     pub fn windows_count(&self) -> usize {
         self.floating.len() + self.tiling.windows_count() as usize
+    }
+
+    fn visible_floating_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
+        if self.hide_floating {
+            Box::new(std::iter::empty())
+        } else {
+            Box::new(self.floating.iter())
+        }
+    }
+
+    fn visible_floating_excluding_occupant(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
+        if self.hide_floating
+            || self
+                .occupant
+                .as_ref()
+                .is_some_and(|o| o.mapped.is_floating())
+        {
+            return Box::new(std::iter::empty());
+        }
+        Box::new(self.floating.iter())
+    }
+
+    pub fn visible_windows_iter(&self) -> Box<dyn Iterator<Item = &MappedWindow> + '_> {
+        if let Some(Occupant { mapped, .. }) = &self.occupant {
+            if mapped.role() == WindowRole::Fullscreen {
+                return Box::new(std::iter::once(mapped));
+            }
+            return Box::new(
+                self.visible_floating_excluding_occupant()
+                    .chain(std::iter::once(mapped)),
+            );
+        }
+        Box::new(
+            self.visible_floating_iter()
+                .chain(self.tiling.windows_iter()),
+        )
     }
 
     pub fn find_window(&self, surface: &WlSurface) -> Option<&MappedWindow> {
@@ -258,7 +308,7 @@ impl Workspace {
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(&MappedWindow, Point<i32, Logical>)> {
-        self.windows_iter().find_map(|mapped| {
+        self.visible_windows_iter().find_map(|mapped| {
             let render_location = mapped.render_location();
             if mapped
                 .window()
@@ -354,34 +404,9 @@ impl Workspace {
     where
         <R as RendererSuper>::TextureId: Clone + 'static,
     {
-        let iter: Box<dyn Iterator<Item = _>> = {
-            use std::iter::*;
-            if let Some(Occupant { mapped, .. }) = self.occupant.as_ref() {
-                if mapped.role() == WindowRole::Fullscreen {
-                    Box::new(once(mapped))
-                } else {
-                    Box::new(
-                        (if mapped.is_floating() {
-                            Box::new(empty()) as Box<dyn Iterator<Item = _>>
-                        } else {
-                            Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
-                        })
-                        .chain(once(mapped)),
-                    )
-                }
-            } else {
-                Box::new(
-                    if self.hide_floating {
-                        Box::new(empty()) as Box<dyn Iterator<Item = _>>
-                    } else {
-                        Box::new(self.floating.iter()) as Box<dyn Iterator<Item = _>>
-                    }
-                    .chain(self.tiling.windows_iter()),
-                )
-            }
-        };
         let scale = self.output.current_scale().fractional_scale().into();
-        iter.flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
+        self.visible_windows_iter()
+            .flat_map(|mapped| mapped.render_elements::<R>(renderer, scale))
             .collect()
     }
 }

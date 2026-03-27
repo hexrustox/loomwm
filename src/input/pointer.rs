@@ -18,6 +18,7 @@ use crate::input::{
 use crate::monitor::{FoundMappedWindow, TileTreeWindow};
 use crate::state::WindowManagerState;
 use crate::utils::Direction;
+use crate::window::WindowRole;
 
 pub type PointerBindings = HashMap<PointerCombo, PointerActions>;
 
@@ -101,55 +102,51 @@ impl WindowManagerState {
             })
         {
             use PointerActions::*;
-            match action {
-                Move => {
-                    if let Some(FoundMappedWindow { mapped, .. }) =
-                        self.find_mapped_window_under(pointer.current_location())
-                        && !pointer.is_grabbed()
-                    {
-                        {
-                            let location = pointer.current_location();
-                            let start_data = PointerGrabStartData {
-                                focus: None,
-                                button,
-                                location,
-                            };
-                            if mapped.is_floating() {
-                                let grab = MoveGrab::new(
-                                    start_data,
-                                    mapped.clone(),
-                                    mapped.get_location().to_f64(),
+            if !pointer.is_grabbed()
+                && let Some(FoundMappedWindow { mapped, .. }) =
+                    self.find_mapped_window_under(pointer.current_location())
+                && {
+                    let monitor = self.monitors.get_monitor();
+                    let ws_name = monitor.get_active_workspace_name().clone();
+                    let workspace = monitor.get_workspace(&ws_name);
+                    !workspace.has_occupant()
+                        || (workspace.occupant_role() == Some(WindowRole::Maximized)
+                            && !workspace.occupant_is_floating()
+                            && mapped.is_floating())
+                }
+            {
+                let location = pointer.current_location();
+                let start_data = PointerGrabStartData {
+                    focus: None,
+                    button,
+                    location,
+                };
+
+                match action {
+                    Move => {
+                        if mapped.is_floating() {
+                            let grab = MoveGrab::new(
+                                start_data,
+                                mapped.clone(),
+                                mapped.get_location().to_f64(),
+                            );
+                            pointer.set_grab(self, grab, serial, Focus::Clear);
+                        } else {
+                            let hidden = self.get_focused_workspace_floating_window_hidden();
+                            if !hidden {
+                                self.set_focused_workspace_floating_window_hidden(
+                                    Some(true),
+                                    Some(false),
                                 );
-                                pointer.set_grab(self, grab, serial, Focus::Clear);
-                            } else {
-                                let hidden = self.get_focused_workspace_floating_window_hidden();
-                                if !hidden {
-                                    self.set_focused_workspace_floating_window_hidden(
-                                        Some(true),
-                                        Some(false),
-                                    );
-                                }
-
-                                mapped.set_swap_source(true);
-
-                                let grab = SwapGrab::new(start_data, mapped.clone(), hidden);
-                                pointer.set_grab(self, grab, serial, Focus::Clear);
                             }
+
+                            mapped.set_swap_source(true);
+
+                            let grab = SwapGrab::new(start_data, mapped.clone(), hidden);
+                            pointer.set_grab(self, grab, serial, Focus::Clear);
                         }
                     }
-                }
-                Resize => {
-                    if let Some(FoundMappedWindow { mapped, .. }) =
-                        self.find_mapped_window_under(pointer.current_location())
-                        && !pointer.is_grabbed()
-                    {
-                        let location = pointer.current_location();
-                        let start_data = PointerGrabStartData {
-                            focus: None,
-                            button,
-                            location,
-                        };
-
+                    Resize => {
                         let direction = match self.pointer_config.resize {
                             ResizeLocation::Corner => {
                                 let center = mapped.center_location().to_f64();

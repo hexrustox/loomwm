@@ -214,6 +214,15 @@ impl WindowManagerState {
         let Some(surface) = keyboard.current_focus() else {
             return;
         };
+        let occupant_role = self.find_mapped_window(&surface).and_then(|f| {
+            if f.mapped.is_maximized() {
+                Some(WindowRole::Maximized)
+            } else if f.mapped.is_fullscreen() {
+                Some(WindowRole::Fullscreen)
+            } else {
+                None
+            }
+        });
         let Some(FoundMappedWindow {
             mapped,
             workspace_name: old_workspace_name,
@@ -242,7 +251,14 @@ impl WindowManagerState {
             workspace.add_floating_window(mapped.clone());
         } else {
             let mapped = workspace.add_tiling_window(mapped.clone(), None);
+            // FIXME
             self.handle_tiling_layout_full(mapped);
+        }
+
+        if let Some(role) = occupant_role {
+            let monitor = self.monitors.get_monitor_mut();
+            let workspace = monitor.get_workspace_mut(&workspace_name);
+            workspace.set_occupant(OccupantAction::Set(mapped.clone()), role);
         }
 
         if focus {
@@ -293,8 +309,18 @@ impl WindowManagerState {
         value: Option<bool>,
         focus: Option<bool>,
     ) {
-        let monitor = self.monitors.get_monitor_mut();
+        let monitor = self.monitors.get_monitor();
         let workspace_name = monitor.get_active_workspace_name().clone();
+        let workspace = monitor.get_workspace(&workspace_name);
+        if workspace.has_occupant() {
+            let is_maximized_tiling = workspace.occupant_role() == Some(WindowRole::Maximized)
+                && !workspace.occupant_is_floating();
+            if !is_maximized_tiling {
+                return;
+            }
+        }
+
+        let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
         workspace.set_floating_window_hidden(value);
         if focus.unwrap_or(true) || workspace.get_floating_window_hidden() {
@@ -334,6 +360,9 @@ impl WindowManagerState {
         }
         let monitor = self.monitors.get_monitor();
         let workspace = monitor.get_workspace(&workspace_name);
+        if workspace.has_occupant() {
+            return;
+        }
         if let Some(mapped) = workspace.last_focused_tiling_window_in_direction(&surface, direction)
         {
             self.focus_window(&mapped.wl_surface());
@@ -358,6 +387,13 @@ impl WindowManagerState {
         if mapped_lhs.is_floating() || mapped_rhs.is_floating() {
             return;
         }
+        {
+            let monitor = self.monitors.get_monitor();
+            let workspace = monitor.get_workspace(&workspace_name);
+            if workspace.has_occupant() {
+                return;
+            }
+        }
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
@@ -381,6 +417,13 @@ impl WindowManagerState {
         };
         if mapped_lhs.is_floating() {
             return;
+        }
+        {
+            let monitor = self.monitors.get_monitor();
+            let workspace = monitor.get_workspace(&workspace_name);
+            if workspace.has_occupant() {
+                return;
+            }
         }
 
         let monitor = self.monitors.get_monitor_mut();
@@ -414,6 +457,13 @@ impl WindowManagerState {
         };
         if mapped.is_floating() {
             return;
+        }
+        {
+            let monitor = self.monitors.get_monitor();
+            let workspace = monitor.get_workspace(&workspace_name);
+            if workspace.has_occupant() {
+                return;
+            }
         }
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
