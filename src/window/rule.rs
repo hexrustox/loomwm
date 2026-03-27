@@ -117,16 +117,10 @@ impl WindowRules {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct WindowRule {
-    #[serde(default = "default_window_rule_matches")]
-    matches: Vec<WindowRuleMatch>,
-    #[serde(flatten)]
-    properties: WindowProperties,
-}
-
-fn default_window_rule_matches() -> Vec<WindowRuleMatch> {
-    vec![WindowRuleMatch::default()]
+#[derive(Debug)]
+pub struct WindowRule {
+    pub matches: Vec<WindowRuleMatch>,
+    pub properties: WindowProperties,
 }
 
 impl WindowRule {
@@ -176,11 +170,9 @@ struct WindowRuleCandidate {
     workspace_name: WorkspaceName,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WindowProperties {
-    #[serde(flatten)]
     pub opening: Option<WindowOpeningProperties>,
-    #[serde(default, flatten)]
     pub dynamic: WindowDynamicProperties,
 }
 
@@ -193,17 +185,15 @@ impl Default for WindowProperties {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct WindowOpeningProperties {
     pub open_with_focus: Option<bool>,
-    #[serde(flatten)]
     pub layout_state: Option<WindowState>,
     pub open_as: Option<WindowRole>,
     pub open_in_workspace: Option<WorkspaceName>,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct WindowDynamicProperties {
     pub decoration: Option<WindowDecoration>,
     pub border: Option<WindowBorder>,

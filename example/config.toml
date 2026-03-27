@@ -1,6 +1,7 @@
 [general]
 allow-move-request = true
 allow-resize-request = true
+allow-maximize-request = true
 allow-fullscreen-request = true
 
 [[window-rules]]

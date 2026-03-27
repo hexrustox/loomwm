@@ -6,11 +6,14 @@ use smithay::input::keyboard::xkb;
 
 use crate::{
     input::{KeyCombo, KeyModifiers, PointerCombo, WindowUnit},
-    monitor::WorkspaceName,
+    monitor::{TileRatio, WorkspaceName},
     utils::{Direction, RGBAColor},
     window::{
         WindowRole,
-        rule::{WindowLocation, WindowRuleMatch},
+        rule::{
+            WindowBorder, WindowDecoration, WindowDynamicProperties, WindowLocation,
+            WindowOpeningProperties, WindowProperties, WindowRule, WindowRuleMatch, WindowState,
+        },
     },
 };
 
@@ -222,6 +225,79 @@ impl<'de> Deserialize<'de> for WindowRuleMatch {
     }
 }
 
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+struct WindowRuleDe {
+    matches: Vec<WindowRuleMatch>,
+    open_with_focus: Option<bool>,
+    open_as: Option<WindowRole>,
+    open_as_floating: Option<FloatingConfig>,
+    open_as_tiling: Option<TilingConfig>,
+    open_in_workspace: Option<WorkspaceName>,
+    decoration: Option<WindowDecoration>,
+    border: Option<WindowBorder>,
+    opacity: Option<f32>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+struct FloatingConfig {
+    location: Option<WindowLocation>,
+    size: Option<(i32, i32)>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct TilingConfig {
+    ratio: Option<TileRatio>,
+}
+
+impl WindowRuleDe {
+    fn try_into_rule(self) -> Result<WindowRule, String> {
+        if self.open_as_floating.is_some() && self.open_as_tiling.is_some() {
+            return Err("open-as-floating and open-as-tiling are mutually exclusive".into());
+        }
+
+        let layout_state = if let Some(f) = self.open_as_floating {
+            Some(WindowState::Float {
+                location: f.location,
+                size: f.size,
+            })
+        } else {
+            self.open_as_tiling
+                .map(|t| WindowState::Tile { ratio: t.ratio })
+        };
+
+        Ok(WindowRule {
+            matches: if self.matches.is_empty() {
+                vec![WindowRuleMatch::default()]
+            } else {
+                self.matches
+            },
+            properties: WindowProperties {
+                opening: Some(WindowOpeningProperties {
+                    open_with_focus: self.open_with_focus,
+                    layout_state,
+                    open_as: self.open_as,
+                    open_in_workspace: self.open_in_workspace,
+                }),
+                dynamic: WindowDynamicProperties {
+                    decoration: self.decoration,
+                    border: self.border,
+                    opacity: self.opacity,
+                },
+            },
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for WindowRule {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let de = WindowRuleDe::deserialize(deserializer)?;
+        de.try_into_rule().map_err(de::Error::custom)
+    }
+}
+
 impl<'de> Deserialize<'de> for WindowUnit {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -393,9 +469,10 @@ mod tests {
     use test_case::test_case;
 
     use super::*;
+    use crate::config::Config;
     use crate::input::{KeyCombo, KeyModifiers, PointerCombo};
     use crate::utils::Direction;
-    use crate::window::rule::{WindowLocation, WindowOpeningProperties, WindowRules};
+    use crate::window::rule::WindowLocation;
 
     #[test_case("top" => Direction::TOP; "top")]
     #[test_case("bottom" => Direction::BOTTOM; "bottom")]
@@ -542,32 +619,23 @@ mod tests {
     fn test_window_rule_match_deny_unknown() {
         let toml = r#"
             [[window-rules]]
-            is-bogus = true
+            foo = true
         "#;
-        toml::from_str::<WindowRules>(toml).unwrap_err();
+        toml::from_str::<Config>(toml).unwrap_err();
     }
 
-    #[test_case("open-as = \"maximized\"" => Some(WindowRole::Maximized); "maximized")]
-    #[test_case("open-as = \"fullscreen\"" => Some(WindowRole::Fullscreen); "fullscreen")]
-    fn test_open_as_valid(s: &str) -> Option<WindowRole> {
-        #[derive(Deserialize)]
-        struct Wrapper {
-            #[serde(flatten)]
-            p: WindowOpeningProperties,
-        }
-        toml::from_str::<Wrapper>(s).unwrap().p.open_as
+    #[test_case("open-as = \"maximized\""; "maximized")]
+    #[test_case("open-as = \"fullscreen\""; "fullscreen")]
+    fn test_open_as_valid(s: &str) {
+        let toml = format!("[[window-rules]]\n{s}");
+        toml::from_str::<Config>(&toml).unwrap();
     }
 
     #[test_case("open-as = \"normal\""; "normal")]
     #[test_case("open-as = \"foo\""; "unknown")]
     fn test_open_as_invalid(s: &str) {
-        #[derive(Deserialize, Debug)]
-        struct Wrapper {
-            #[allow(unused)]
-            #[serde(flatten)]
-            p: WindowOpeningProperties,
-        }
-        toml::from_str::<Wrapper>(s).unwrap_err();
+        let toml = format!("[[window-rules]]\n{s}");
+        toml::from_str::<Config>(&toml).unwrap_err();
     }
 
     #[test_case("a" => KeyCombo::new(KeyModifiers::empty(), Keysym::a); "no modifier")]

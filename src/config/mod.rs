@@ -12,7 +12,7 @@ use crate::{
 mod parse;
 
 // TODO run command at start up
-#[derive(Deserialize, Default)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Config {
@@ -35,7 +35,7 @@ impl Config {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(default)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GeneralConfig {
@@ -56,7 +56,7 @@ impl Default for GeneralConfig {
     }
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct LayoutConfig {
     #[serde(flatten)]
@@ -64,7 +64,7 @@ pub struct LayoutConfig {
     pub default: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct KeyConfig {
     pub repeat_delay: u32,
@@ -82,7 +82,7 @@ impl Default for KeyConfig {
     }
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PointerConfig {
     pub bindings: PointerBindings,
@@ -90,7 +90,7 @@ pub struct PointerConfig {
     pub resize: ResizeLocation,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AssistantConfig {
     pub enable: bool,
