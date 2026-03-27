@@ -13,10 +13,10 @@ use crate::{
     },
 };
 
-pub use super::workspace::{OccupantAction, TileTreeWindow, WorkspaceName};
+pub use super::workspace::{SpecialWindowAction, TileTreeWindow, WorkspaceName};
 
 impl WindowManagerState {
-    pub fn add_window(&mut self, window: Window, properties: WindowProperties) {
+    pub fn register_new_window(&mut self, window: Window, properties: WindowProperties) {
         let Some(WindowOpeningProperties {
             open_with_focus,
             open_as,
@@ -69,11 +69,11 @@ impl WindowManagerState {
                 }
                 mapped.set_size(mapped.clamp_size(window_size));
 
-                workspace.add_floating_window(mapped.clone());
+                workspace.add_floating(mapped.clone());
             }
             WindowState::Tile { ratio } => {
-                let mapped = workspace.add_tiling_window(mapped.clone(), ratio);
-                self.handle_tiling_layout_full(mapped.clone());
+                let mapped = workspace.add_tiling(mapped.clone(), ratio);
+                self.fallback_if_tiling_fails(mapped.clone());
                 if mapped.is_some() {
                     return;
                 }
@@ -81,42 +81,34 @@ impl WindowManagerState {
         }
 
         if mapped.is_focused() {
-            self.focus_window(&mapped.wl_surface());
+            self.focus_to_window(&mapped.wl_surface());
         }
         if mapped.is_maximized() {
-            self.toggle_window_occupant(&mapped.wl_surface(), WindowRole::Maximized, Some(true));
+            self.toggle_window_role(&mapped.wl_surface(), WindowRole::Maximized, Some(true));
         }
         if mapped.is_fullscreen() {
-            self.toggle_window_occupant(&mapped.wl_surface(), WindowRole::Fullscreen, Some(true));
+            self.toggle_window_role(&mapped.wl_surface(), WindowRole::Fullscreen, Some(true));
         }
 
         self.save_layout_history();
     }
 
-    fn handle_tiling_layout_full(&mut self, mapped: Option<MappedWindow>) {
-        let Some(mapped) = mapped else {
+    pub fn send_close_to_window(&mut self) {
+        let keyboard = self.get_keyboard();
+        let Some(surface) = keyboard.current_focus() else {
+            return;
+        };
+        let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window_by_surface(&surface)
+        else {
             return;
         };
 
-        let workspace_name = self
-            .monitors
-            .get_monitor()
-            .get_active_workspace_name()
-            .clone();
+        mapped.toplevel().send_close();
 
-        let properties = self.window_rules.get_opening_properties(
-            &mapped.wl_surface(),
-            workspace_name,
-            Some(WindowState::Float {
-                location: None,
-                size: None,
-            }),
-        );
-
-        self.add_window(mapped.window(), properties);
+        self.save_layout_history();
     }
 
-    pub fn focus_window(&mut self, surface: &WlSurface) {
+    pub fn focus_to_window(&mut self, surface: &WlSurface) {
         let keyboard = self.get_keyboard();
 
         if let Some(old_surface) = keyboard.current_focus() {
@@ -127,7 +119,7 @@ impl WindowManagerState {
                 mapped,
                 workspace_name: _,
                 ..
-            }) = self.find_mapped_window(&old_surface)
+            }) = self.find_mapped_window_by_surface(&old_surface)
             {
                 mapped.set_focus(false);
                 mapped.window().set_activated(false);
@@ -138,7 +130,7 @@ impl WindowManagerState {
             mapped,
             workspace_name,
             ..
-        }) = self.find_mapped_window(surface)
+        }) = self.find_mapped_window_by_surface(surface)
         else {
             return;
         };
@@ -147,32 +139,32 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.append_to_focus_queue(mapped.clone());
+        workspace.push_focus_queue_back(mapped.clone());
         if mapped.is_floating() {
-            workspace.raise_floating_window(surface);
+            workspace.bring_floating_to_front(surface);
         }
     }
 
-    pub fn restore_workspace_focus(&mut self, workspace_name: &WorkspaceName) {
+    pub fn focus_last_window_in_workspace(&mut self, workspace_name: &WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
         if let Some(mapped) = monitor
             .get_workspace(workspace_name)
             .get_last_focused_window()
             .cloned()
         {
-            self.focus_window(&mapped.wl_surface());
+            self.focus_to_window(&mapped.wl_surface());
         } else {
             self.get_keyboard()
                 .set_focus(self, None, SERIAL_COUNTER.next_serial());
         }
     }
 
-    pub fn switch_or_create_active_workspace(&mut self, workspace_name: WorkspaceName) {
+    pub fn switch_workspace(&mut self, workspace_name: WorkspaceName) {
         let monitor = self.monitors.get_monitor_mut();
 
         let old_workspace_name = monitor.get_active_workspace_name().clone();
         let old_workspace = monitor.get_workspace(&old_workspace_name);
-        if old_workspace.windows_count() == 0 {
+        if old_workspace.window_count() == 0 {
             monitor.remove_workspace(&old_workspace_name);
         }
 
@@ -183,10 +175,10 @@ impl WindowManagerState {
         );
         monitor.active_workspace = workspace_name.clone();
 
-        self.restore_workspace_focus(&workspace_name);
+        self.focus_last_window_in_workspace(&workspace_name);
     }
 
-    fn goto_workspace_by_delta(&mut self, delta: i32) {
+    fn next_workspace_by_delta(&mut self, delta: i32) {
         let monitor = self.monitors.get_monitor_mut();
 
         let old_workspace_name = monitor.get_active_workspace_name();
@@ -198,23 +190,23 @@ impl WindowManagerState {
         let new_index = (index as i32 + delta).rem_euclid(len) as usize;
 
         let new_workspace_name = monitor.workspaces[new_index].get_name().clone();
-        self.switch_or_create_active_workspace(new_workspace_name);
+        self.switch_workspace(new_workspace_name);
     }
 
-    pub fn goto_next_workspace(&mut self) {
-        self.goto_workspace_by_delta(1);
+    pub fn next_workspace(&mut self) {
+        self.next_workspace_by_delta(1);
     }
 
-    pub fn goto_prev_workspace(&mut self) {
-        self.goto_workspace_by_delta(-1);
+    pub fn prev_workspace(&mut self) {
+        self.next_workspace_by_delta(-1);
     }
 
-    pub fn move_focused_window_to_workspace(&mut self, workspace_name: WorkspaceName, focus: bool) {
+    pub fn move_window_to_workspace(&mut self, workspace_name: WorkspaceName, focus: bool) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
         };
-        let occupant_role = self.find_mapped_window(&surface).and_then(|f| {
+        let occupant_role = self.find_mapped_window_by_surface(&surface).and_then(|f| {
             if f.mapped.is_maximized() {
                 Some(WindowRole::Maximized)
             } else if f.mapped.is_fullscreen() {
@@ -233,7 +225,7 @@ impl WindowManagerState {
         };
 
         if !focus {
-            self.restore_workspace_focus(&old_workspace_name);
+            self.focus_last_window_in_workspace(&old_workspace_name);
         }
 
         let monitor = self.monitors.get_monitor_mut();
@@ -248,27 +240,27 @@ impl WindowManagerState {
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
         if mapped.is_floating() {
-            workspace.add_floating_window(mapped.clone());
+            workspace.add_floating(mapped.clone());
         } else {
-            let mapped = workspace.add_tiling_window(mapped.clone(), None);
+            let mapped = workspace.add_tiling(mapped.clone(), None);
             // FIXME
-            self.handle_tiling_layout_full(mapped);
+            self.fallback_if_tiling_fails(mapped);
         }
 
         if let Some(role) = occupant_role {
             let monitor = self.monitors.get_monitor_mut();
             let workspace = monitor.get_workspace_mut(&workspace_name);
-            workspace.set_occupant(OccupantAction::Set(mapped.clone()), role);
+            workspace.set_special_window(SpecialWindowAction::Set(mapped.clone()), role);
         }
 
         if focus {
-            self.focus_window(&mapped.wl_surface());
+            self.focus_to_window(&mapped.wl_surface());
         }
 
         self.save_layout_history();
     }
 
-    pub fn toggle_focused_window_floating(&mut self, value: Option<bool>) {
+    pub fn toggle_window_floating_state(&mut self, value: Option<bool>) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -288,33 +280,30 @@ impl WindowManagerState {
         let workspace = monitor.get_workspace_mut(&workspace_name);
 
         if mapped.is_floating() {
-            workspace.add_floating_window(mapped);
+            workspace.add_floating(mapped);
         } else {
-            let mapped = workspace.add_tiling_window(mapped, None);
-            self.handle_tiling_layout_full(mapped);
+            let mapped = workspace.add_tiling(mapped, None);
+            self.fallback_if_tiling_fails(mapped);
         }
 
         self.save_layout_history();
     }
 
-    pub fn get_focused_workspace_floating_window_hidden(&self) -> bool {
+    pub fn is_floating_window_hidden(&self) -> bool {
         let monitor = self.monitors.get_monitor();
         let workspace_name = monitor.get_active_workspace_name().clone();
         let workspace = monitor.get_workspace(&workspace_name);
-        workspace.get_floating_window_hidden()
+        workspace.is_floating_hidden()
     }
 
-    pub fn set_focused_workspace_floating_window_hidden(
-        &mut self,
-        value: Option<bool>,
-        focus: Option<bool>,
-    ) {
+    pub fn set_floating_window_visibility(&mut self, value: Option<bool>, focus: Option<bool>) {
         let monitor = self.monitors.get_monitor();
         let workspace_name = monitor.get_active_workspace_name().clone();
         let workspace = monitor.get_workspace(&workspace_name);
-        if workspace.has_occupant() {
-            let is_maximized_tiling = workspace.occupant_role() == Some(WindowRole::Maximized)
-                && !workspace.occupant_is_floating();
+        if workspace.has_special_window() {
+            let is_maximized_tiling = workspace.get_special_window_role()
+                == Some(WindowRole::Maximized)
+                && !workspace.special_window_is_floating();
             if !is_maximized_tiling {
                 return;
             }
@@ -322,27 +311,36 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.set_floating_window_hidden(value);
-        if focus.unwrap_or(true) || workspace.get_floating_window_hidden() {
-            self.restore_workspace_focus(&workspace_name);
+        workspace.hide_floating(value);
+        if focus.unwrap_or(true) || workspace.is_floating_hidden() {
+            self.focus_last_window_in_workspace(&workspace_name);
         }
     }
 
-    pub fn close_focused_window(&mut self) {
-        let keyboard = self.get_keyboard();
-        let Some(surface) = keyboard.current_focus() else {
-            return;
-        };
-        let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(&surface) else {
+    fn fallback_if_tiling_fails(&mut self, mapped: Option<MappedWindow>) {
+        let Some(mapped) = mapped else {
             return;
         };
 
-        mapped.toplevel().send_close();
+        let workspace_name = self
+            .monitors
+            .get_monitor()
+            .get_active_workspace_name()
+            .clone();
 
-        self.save_layout_history();
+        let properties = self.window_rules.get_opening_properties(
+            &mapped.wl_surface(),
+            workspace_name,
+            Some(WindowState::Float {
+                location: None,
+                size: None,
+            }),
+        );
+
+        self.register_new_window(mapped.window(), properties);
     }
 
-    pub fn focus_tiling_window_in_direction(&mut self, direction: Direction) {
+    pub fn focus_adjacent_tiling_window(&mut self, direction: Direction) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -351,21 +349,22 @@ impl WindowManagerState {
             mapped,
             workspace_name,
             ..
-        }) = self.find_mapped_window(&surface)
+        }) = self.find_mapped_window_by_surface(&surface)
         else {
             return;
         };
         if mapped.is_floating() {
             return;
         }
+
         let monitor = self.monitors.get_monitor();
         let workspace = monitor.get_workspace(&workspace_name);
-        if workspace.has_occupant() {
+        if workspace.has_special_window() {
             return;
         }
-        if let Some(mapped) = workspace.last_focused_tiling_window_in_direction(&surface, direction)
-        {
-            self.focus_window(&mapped.wl_surface());
+
+        if let Some(mapped) = workspace.last_focused_tiling_window(&surface, direction) {
+            self.focus_to_window(&mapped.wl_surface());
         }
     }
 
@@ -374,35 +373,34 @@ impl WindowManagerState {
             mapped: mapped_lhs,
             workspace_name,
             ..
-        }) = self.find_mapped_window(lhs)
+        }) = self.find_mapped_window_by_surface(lhs)
         else {
             return;
         };
         let Some(FoundMappedWindow {
             mapped: mapped_rhs, ..
-        }) = self.find_mapped_window(rhs)
+        }) = self.find_mapped_window_by_surface(rhs)
         else {
             return;
         };
         if mapped_lhs.is_floating() || mapped_rhs.is_floating() {
             return;
         }
-        {
-            let monitor = self.monitors.get_monitor();
-            let workspace = monitor.get_workspace(&workspace_name);
-            if workspace.has_occupant() {
-                return;
-            }
+
+        let monitor = self.monitors.get_monitor();
+        let workspace = monitor.get_workspace(&workspace_name);
+        if workspace.has_special_window() {
+            return;
         }
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.swap_tiling_window(lhs, rhs);
+        workspace.swap_tiling_windows(lhs, rhs);
 
         self.save_layout_history();
     }
 
-    pub fn swap_focused_tiling_window_in_direction(&mut self, direction: Direction) {
+    pub fn swap_with_adjacent_tiling_window(&mut self, direction: Direction) {
         let keyboard = self.get_keyboard();
         let Some(surface) = keyboard.current_focus() else {
             return;
@@ -411,34 +409,33 @@ impl WindowManagerState {
             mapped: mapped_lhs,
             workspace_name,
             ..
-        }) = self.find_mapped_window(&surface)
+        }) = self.find_mapped_window_by_surface(&surface)
         else {
             return;
         };
         if mapped_lhs.is_floating() {
             return;
         }
-        {
-            let monitor = self.monitors.get_monitor();
-            let workspace = monitor.get_workspace(&workspace_name);
-            if workspace.has_occupant() {
-                return;
-            }
+
+        let monitor = self.monitors.get_monitor();
+        let workspace = monitor.get_workspace(&workspace_name);
+        if workspace.has_special_window() {
+            return;
         }
 
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
         if let Some(mapped_rhs) = workspace
-            .last_focused_tiling_window_in_direction(&surface, direction)
+            .last_focused_tiling_window(&surface, direction)
             .cloned()
         {
-            workspace.swap_tiling_window(&mapped_lhs.wl_surface(), &mapped_rhs.wl_surface());
+            workspace.swap_tiling_windows(&mapped_lhs.wl_surface(), &mapped_rhs.wl_surface());
         }
 
         self.save_layout_history();
     }
 
-    pub fn resize_focused_tiling_window(
+    pub fn resize_adjacent_tiling_window(
         &mut self,
         direction: Direction,
         unit: impl Into<TileResizeUnit>,
@@ -451,26 +448,26 @@ impl WindowManagerState {
             mapped,
             workspace_name,
             ..
-        }) = self.find_mapped_window(&surface)
+        }) = self.find_mapped_window_by_surface(&surface)
         else {
             return;
         };
         if mapped.is_floating() {
             return;
         }
-        {
-            let monitor = self.monitors.get_monitor();
-            let workspace = monitor.get_workspace(&workspace_name);
-            if workspace.has_occupant() {
-                return;
-            }
+
+        let monitor = self.monitors.get_monitor();
+        let workspace = monitor.get_workspace(&workspace_name);
+        if workspace.has_special_window() {
+            return;
         }
+
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.resize_tiling_window(&surface, direction, unit);
+        workspace.resize_tiling(&surface, direction, unit);
     }
 
-    pub fn toggle_window_occupant(
+    pub fn toggle_window_role(
         &mut self,
         surface: &WlSurface,
         role: WindowRole,
@@ -480,17 +477,17 @@ impl WindowManagerState {
             mapped,
             workspace_name,
             ..
-        }) = self.find_mapped_window(surface)
+        }) = self.find_mapped_window_by_surface(surface)
         else {
             return;
         };
         let action = match value {
-            Some(true) => OccupantAction::Set(mapped),
-            Some(false) => OccupantAction::Unset,
-            None => OccupantAction::Toggle(mapped),
+            Some(true) => SpecialWindowAction::Set(mapped),
+            Some(false) => SpecialWindowAction::Unset,
+            None => SpecialWindowAction::Toggle(mapped),
         };
         let monitor = self.monitors.get_monitor_mut();
         let workspace = monitor.get_workspace_mut(&workspace_name);
-        workspace.set_occupant(action, role);
+        workspace.set_special_window(action, role);
     }
 }

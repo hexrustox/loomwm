@@ -64,7 +64,7 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
             let new_width = (self.initial_size.w as f64 + adjusted_x) as i32;
 
             if new_width != self.last_size.w {
-                data.resize_focused_tiling_window(
+                data.resize_adjacent_tiling_window(
                     self.direction
                         .intersection(Direction::LEFT | Direction::RIGHT),
                     new_width,
@@ -86,7 +86,7 @@ impl PointerGrab<WindowManagerState> for TilingResizeGrab {
             let new_height = (self.initial_size.h as f64 + adjusted_y) as i32;
 
             if new_height != self.last_size.h {
-                data.resize_focused_tiling_window(
+                data.resize_adjacent_tiling_window(
                     self.direction
                         .intersection(Direction::TOP | Direction::BOTTOM),
                     new_height,

@@ -88,7 +88,7 @@ impl XdgShellHandler for WindowManagerState {
 
         if let Some(start_data) = check_grab(&seat, surface, serial)
             && let Some(pointer) = seat.get_pointer()
-            && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
+            && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window_by_surface(surface)
             && mapped.is_floating()
             && !mapped.is_maximized()
             && !mapped.is_fullscreen()
@@ -118,7 +118,7 @@ impl XdgShellHandler for WindowManagerState {
 
         if let Some(start_data) = check_grab(&seat, surface, serial)
             && let Some(pointer) = seat.get_pointer()
-            && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(surface)
+            && let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window_by_surface(surface)
             && mapped.is_floating()
             && !mapped.is_maximized()
             && !mapped.is_fullscreen()
@@ -137,7 +137,7 @@ impl XdgShellHandler for WindowManagerState {
         if let Some(FoundMappedWindow { workspace_name, .. }) =
             self.remove_mapped_window(toplevel.wl_surface())
         {
-            self.restore_workspace_focus(&workspace_name);
+            self.focus_last_window_in_workspace(&workspace_name);
         };
     }
 
@@ -147,11 +147,11 @@ impl XdgShellHandler for WindowManagerState {
             warn!("Client maximize request ignored");
             return;
         }
-        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Maximized, Some(true));
+        self.toggle_window_role(toplevel.wl_surface(), WindowRole::Maximized, Some(true));
     }
 
     fn unmaximize_request(&mut self, toplevel: ToplevelSurface) {
-        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Maximized, Some(false));
+        self.toggle_window_role(toplevel.wl_surface(), WindowRole::Maximized, Some(false));
     }
 
     fn fullscreen_request(&mut self, toplevel: ToplevelSurface, _output: Option<WlOutput>) {
@@ -159,11 +159,11 @@ impl XdgShellHandler for WindowManagerState {
             warn!("Client fullscreen request ignored");
             return;
         }
-        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Fullscreen, Some(true));
+        self.toggle_window_role(toplevel.wl_surface(), WindowRole::Fullscreen, Some(true));
     }
 
     fn unfullscreen_request(&mut self, toplevel: ToplevelSurface) {
-        self.toggle_window_occupant(toplevel.wl_surface(), WindowRole::Fullscreen, Some(false));
+        self.toggle_window_role(toplevel.wl_surface(), WindowRole::Fullscreen, Some(false));
     }
 
     // TODO
@@ -201,7 +201,7 @@ impl WindowManagerState {
         let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
             return;
         };
-        let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(&root) else {
+        let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window_by_surface(&root) else {
             return;
         };
 

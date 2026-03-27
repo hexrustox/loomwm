@@ -165,7 +165,7 @@ impl WindowManagerState {
     fn train_model(&self) {
         let mut workspace_windows = Vec::new();
         for workspace in &self.monitors.get_monitor().workspaces {
-            let mappeds = workspace.tiling_windows_iter().cloned().collect::<Vec<_>>();
+            let mappeds = workspace.iter_tiling_windows().cloned().collect::<Vec<_>>();
             if mappeds.len() > 1 {
                 workspace_windows.push(mappeds);
             }
@@ -211,7 +211,7 @@ impl WindowManagerState {
 
         let monitor = self.monitors.get_monitor();
         let workspace = monitor.get_workspace(monitor.get_active_workspace_name());
-        let iter = workspace.tiling_windows_iter().cloned();
+        let iter = workspace.iter_tiling_windows().cloned();
         let mappeds = iter.clone().collect::<Vec<_>>();
 
         if mappeds.len() <= 1 {

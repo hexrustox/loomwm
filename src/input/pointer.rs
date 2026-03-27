@@ -67,7 +67,7 @@ impl WindowManagerState {
 
         let pointer = self.get_pointer();
 
-        let under = self.find_surface_under(location);
+        let under = self.find_surface_at_point(location);
 
         pointer.motion(
             self,
@@ -90,9 +90,9 @@ impl WindowManagerState {
 
         if button_state == ButtonState::Pressed
             && let Some(FoundMappedWindow { mapped, .. }) =
-                self.find_mapped_window_under(pointer.current_location())
+                self.find_mapped_window_at_point(pointer.current_location())
         {
-            self.focus_window(&mapped.wl_surface());
+            self.focus_to_window(&mapped.wl_surface());
         }
 
         if button_state == ButtonState::Pressed
@@ -104,14 +104,14 @@ impl WindowManagerState {
             use PointerActions::*;
             if !pointer.is_grabbed()
                 && let Some(FoundMappedWindow { mapped, .. }) =
-                    self.find_mapped_window_under(pointer.current_location())
+                    self.find_mapped_window_at_point(pointer.current_location())
                 && {
                     let monitor = self.monitors.get_monitor();
                     let ws_name = monitor.get_active_workspace_name().clone();
                     let workspace = monitor.get_workspace(&ws_name);
-                    !workspace.has_occupant()
-                        || (workspace.occupant_role() == Some(WindowRole::Maximized)
-                            && !workspace.occupant_is_floating()
+                    !workspace.has_special_window()
+                        || (workspace.get_special_window_role() == Some(WindowRole::Maximized)
+                            && !workspace.special_window_is_floating()
                             && mapped.is_floating())
                 }
             {
@@ -132,12 +132,9 @@ impl WindowManagerState {
                             );
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                         } else {
-                            let hidden = self.get_focused_workspace_floating_window_hidden();
+                            let hidden = self.is_floating_window_hidden();
                             if !hidden {
-                                self.set_focused_workspace_floating_window_hidden(
-                                    Some(true),
-                                    Some(false),
-                                );
+                                self.set_floating_window_visibility(Some(true), Some(false));
                             }
 
                             mapped.set_swap_source(true);

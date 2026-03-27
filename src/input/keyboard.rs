@@ -179,44 +179,44 @@ impl WindowManagerState {
         use KeyAction::*;
         match &action {
             PrevWorkspace => {
-                self.goto_prev_workspace();
+                self.prev_workspace();
             }
             NextWorkspace => {
-                self.goto_next_workspace();
+                self.next_workspace();
             }
             SwitchWorkspace { name } => {
-                self.switch_or_create_active_workspace(name.clone());
+                self.switch_workspace(name.clone());
             }
             MoveToWorkspace { name, focus } => {
-                self.move_focused_window_to_workspace(name.clone(), *focus);
+                self.move_window_to_workspace(name.clone(), *focus);
             }
             FocusWindow { direction } => {
-                self.focus_tiling_window_in_direction(*direction);
+                self.focus_adjacent_tiling_window(*direction);
             }
             SwapWindow { direction } => {
-                self.swap_focused_tiling_window_in_direction(*direction);
+                self.swap_with_adjacent_tiling_window(*direction);
             }
             ResizeWindow { direction, unit } => {
-                self.resize_focused_tiling_window(*direction, *unit);
+                self.resize_adjacent_tiling_window(*direction, *unit);
             }
             ToggleFloating { value } => {
-                self.toggle_focused_window_floating(*value);
+                self.toggle_window_floating_state(*value);
             }
             ToggleFloatingHidden { value, focus } => {
-                self.set_focused_workspace_floating_window_hidden(*value, *focus);
+                self.set_floating_window_visibility(*value, *focus);
             }
             ToggleMaximize { value } => {
                 if let Some(surface) = self.get_keyboard().current_focus() {
-                    self.toggle_window_occupant(&surface, WindowRole::Maximized, *value);
+                    self.toggle_window_role(&surface, WindowRole::Maximized, *value);
                 }
             }
             ToggleFullscreen { value } => {
                 if let Some(surface) = self.get_keyboard().current_focus() {
-                    self.toggle_window_occupant(&surface, WindowRole::Fullscreen, *value);
+                    self.toggle_window_role(&surface, WindowRole::Fullscreen, *value);
                 }
             }
             CloseWindow => {
-                self.close_focused_window();
+                self.send_close_to_window();
             }
             Execute { command: args } => {
                 // TODO dump stdout & err

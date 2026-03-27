@@ -48,7 +48,7 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
             mapped,
             workspace_name: _,
             ..
-        }) = data.find_mapped_window_under(event.location)
+        }) = data.find_mapped_window_at_point(event.location)
         {
             if self.last_mapped.as_ref().is_some_and(|w| *w == mapped) {
                 return;
@@ -94,7 +94,7 @@ impl PointerGrab<WindowManagerState> for SwapGrab {
                 data.swap_tiling_window(&mapped.wl_surface(), &self.mapped.wl_surface());
             }
             self.mapped.set_swap_source(false);
-            data.set_focused_workspace_floating_window_hidden(Some(self.hidden), Some(false));
+            data.set_floating_window_visibility(Some(self.hidden), Some(false));
             handle.unset_grab(self, data, event.serial, event.time, true);
         }
     }

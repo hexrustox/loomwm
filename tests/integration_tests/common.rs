@@ -157,7 +157,7 @@ pub fn get_active_workspace(data: &loomwm::CompositorData) -> &Workspace {
 }
 
 pub fn active_workspace_has_n_windows(data: &CompositorData, expected: usize) -> bool {
-    get_active_workspace(data).windows_count() == expected
+    get_active_workspace(data).window_count() == expected
 }
 
 pub fn workspace_has_n_windows(
@@ -169,7 +169,7 @@ pub fn workspace_has_n_windows(
         .monitors
         .get_monitor()
         .get_workspace(&workspace_name)
-        .windows_count()
+        .window_count()
         == count
 }
 
@@ -180,14 +180,14 @@ pub fn get_next_window_in_workspace(
     let monitor = data.compositor.monitors.get_monitor();
     monitor
         .get_workspace(&workspace_name)
-        .windows_iter()
+        .iter_all_windows()
         .next()
         .unwrap()
 }
 
 pub fn get_window(data: &CompositorData) -> MappedWindow {
     get_active_workspace(data)
-        .windows_iter()
+        .iter_all_windows()
         .next()
         .unwrap()
         .clone()
@@ -195,23 +195,23 @@ pub fn get_window(data: &CompositorData) -> MappedWindow {
 
 pub fn get_floating_window(data: &CompositorData) -> MappedWindow {
     get_active_workspace(data)
-        .floating_windows_iter()
+        .iter_floating_windows()
         .next()
         .unwrap()
         .clone()
 }
 
 pub fn get_floating_windows_count(data: &CompositorData) -> usize {
-    get_active_workspace(data).floating_windows_iter().count()
+    get_active_workspace(data).iter_floating_windows().count()
 }
 
 pub fn get_tiling_windows_count(data: &CompositorData) -> usize {
-    get_active_workspace(data).tiling_windows_iter().count()
+    get_active_workspace(data).iter_tiling_windows().count()
 }
 
 pub fn get_tiling_window(data: &CompositorData, index: usize) -> MappedWindow {
     get_active_workspace(data)
-        .tiling_windows_iter()
+        .iter_tiling_windows()
         .nth(index)
         .unwrap()
         .clone()
@@ -239,7 +239,7 @@ pub fn assert_window_focused_in_workspace(data: &CompositorData, workspace_name:
 }
 
 pub fn assert_tiling_windows_title(data: &CompositorData, expected_titles: Vec<String>) {
-    let iter = get_active_workspace(data).tiling_windows_iter();
+    let iter = get_active_workspace(data).iter_tiling_windows();
 
     for (mapped, expected_title) in iter.zip(expected_titles) {
         let surface = mapped.wl_surface();

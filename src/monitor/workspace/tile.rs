@@ -277,7 +277,26 @@ impl Rect {
 }
 
 impl<T: TileTreeWindow> TileTree<T> {
-    fn create_layout_tile(
+    pub fn new(layouts: Rc<RefCell<LayoutSet>>, layout_name: &str) -> Self {
+        let mut arena = SlotMap::with_key();
+        let root = Self::insert_layout_tile(
+            &mut arena,
+            &layouts.borrow().get(layout_name),
+            layout_name.to_string(),
+            1.0,
+            None,
+        );
+
+        Self {
+            arena,
+            root,
+            current_tile: root,
+            layouts,
+            count: 0,
+        }
+    }
+
+    fn insert_layout_tile(
         arena: &mut TileArena<T>,
         layout: &LayoutSchema,
         schema: String,
@@ -297,25 +316,6 @@ impl<T: TileTreeWindow> TileTree<T> {
             ratio,
             parent,
         })
-    }
-
-    pub fn new(layouts: Rc<RefCell<LayoutSet>>, layout_name: &str) -> Self {
-        let mut arena = SlotMap::with_key();
-        let root = Self::create_layout_tile(
-            &mut arena,
-            &layouts.borrow().get(layout_name),
-            layout_name.to_string(),
-            1.0,
-            None,
-        );
-
-        Self {
-            arena,
-            root,
-            current_tile: root,
-            layouts,
-            count: 0,
-        }
     }
 
     pub fn insert(&mut self, window: T, ratio: Option<TileRatio>) -> Option<T> {
@@ -350,7 +350,7 @@ impl<T: TileTreeWindow> TileTree<T> {
                 }
 
                 if let Some(layout_name) = &node.layout {
-                    let tile_id = Self::create_layout_tile(
+                    let tile_id = Self::insert_layout_tile(
                         &mut self.arena,
                         &self.layouts.borrow().get(layout_name),
                         layout_name.clone(),
@@ -413,7 +413,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         let key = key.into();
 
         let mut target = None;
-        let remaining = self.collect_windows_and_ratios(|w| {
+        let remaining = self.collect_all_windows(|w| {
             if w.match_id(key) {
                 target = Some(w.clone());
                 false
@@ -430,7 +430,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         let schema = schema.to_string();
 
         self.arena.clear();
-        self.root = Self::create_layout_tile(
+        self.root = Self::insert_layout_tile(
             &mut self.arena,
             &self.layouts.borrow().get(&schema),
             schema,
@@ -447,7 +447,7 @@ impl<T: TileTreeWindow> TileTree<T> {
         Some(target)
     }
 
-    pub fn windows_iter(&self) -> impl Iterator<Item = &T> + Clone + '_ {
+    pub fn iter_windows(&self) -> impl Iterator<Item = &T> + Clone + '_ {
         #[derive(Clone)]
         struct WindowsIter<'a, T> {
             arena: &'a TileArena<T>,
@@ -486,166 +486,11 @@ impl<T: TileTreeWindow> TileTree<T> {
         }
     }
 
-    pub fn windows_count(&self) -> u32 {
+    pub fn window_count(&self) -> u32 {
         self.count
     }
 
-    fn collect_windows_and_ratios(
-        &mut self,
-        mut filter: impl FnMut(&T) -> bool,
-    ) -> Vec<(T, Option<TileRatio>)> {
-        fn collect<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            id: TileId,
-            filter: &mut impl FnMut(&T) -> bool,
-            result: &mut Vec<(T, Option<TileRatio>)>,
-        ) {
-            match &arena[id].kind {
-                TileKind::Window { window, ratio } if filter(window) => {
-                    result.push((window.clone(), *ratio));
-                }
-                TileKind::Layout { tiles, .. } => {
-                    for &child_id in tiles {
-                        collect(arena, child_id, filter, result);
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let mut result = Vec::new();
-        collect(&self.arena, self.root, &mut filter, &mut result);
-        result
-    }
-
-    pub fn update_layout(&mut self, layout_name: &str) {
-        let windows = self.collect_windows_and_ratios(|_| true);
-        self.arena.clear();
-        self.root = Self::create_layout_tile(
-            &mut self.arena,
-            &self.layouts.borrow().get(layout_name),
-            layout_name.to_string(),
-            1.0,
-            None,
-        );
-        self.current_tile = self.root;
-        self.count = 0;
-
-        for (window, ratio) in windows {
-            self.insert(window, ratio);
-        }
-    }
-
-    // TODO improve efficiency
-    pub fn update_tile_size(&mut self, location: Point<i32, Logical>, size: Size<i32, Logical>) {
-        enum Update {
-            Win(TileId, Point<i32, Logical>, Size<i32, Logical>),
-            Lay(TileId, Rectangle<i32, Logical>),
-        }
-
-        fn traverse<T>(
-            arena: &TileArena<T>,
-            id: TileId,
-            mut location: Point<i32, Logical>,
-            size: Size<i32, Logical>,
-            updates: &mut Vec<Update>,
-        ) {
-            updates.push(Update::Lay(id, Rectangle::new(location, size)));
-
-            let TileKind::Layout {
-                split,
-                orientation,
-                ref tiles,
-                ..
-            } = arena[id].kind
-            else {
-                return;
-            };
-
-            let total_ratio: f64 = tiles.iter().map(|&tid| arena[tid].ratio).sum();
-            let total_len = match split {
-                TileSplit::Vertical => size.w,
-                TileSplit::Horizontal => size.h,
-            };
-
-            let floats: Vec<_> = tiles
-                .iter()
-                .map(|&tid| total_len as f64 * arena[tid].ratio / total_ratio)
-                .collect();
-            let ints = floats_to_ints(&floats, total_len);
-
-            let mut children: Vec<_> = tiles.iter().copied().zip(ints).collect();
-            if matches!(orientation, TileOrientation::TopLeft) {
-                children.reverse();
-            }
-
-            for (tid, t_len) in children {
-                let t_sz = match split {
-                    TileSplit::Vertical => Size::new(t_len, size.h),
-                    TileSplit::Horizontal => Size::new(size.w, t_len),
-                };
-
-                match &arena[tid].kind {
-                    TileKind::Window { .. } => updates.push(Update::Win(tid, location, t_sz)),
-                    TileKind::Layout { .. } => traverse(arena, tid, location, t_sz, updates),
-                }
-
-                match split {
-                    TileSplit::Vertical => location.x += t_len,
-                    TileSplit::Horizontal => location.y += t_len,
-                }
-            }
-        }
-
-        let mut updates = Vec::new();
-        traverse(&self.arena, self.root, location, size, &mut updates);
-
-        for update in updates {
-            match update {
-                Update::Win(id, loc, sz) => {
-                    let window = self.arena[id].as_window_mut();
-                    window.set_location(loc);
-                    window.set_size(sz);
-                }
-                Update::Lay(id, rect) => {
-                    if let TileKind::Layout {
-                        rect: layout_rect, ..
-                    } = &mut self.arena[id].kind
-                    {
-                        *layout_rect = rect;
-                    }
-                }
-            }
-        }
-    }
-
-    fn find_tile_id(&self, key: TileTreeSearchKey) -> Option<TileId> {
-        fn traverse<T: TileTreeWindow>(
-            arena: &TileArena<T>,
-            current_id: TileId,
-            key: TileTreeSearchKey,
-        ) -> Option<TileId> {
-            match &arena[current_id].kind {
-                TileKind::Window { window, .. } => {
-                    if window.match_id(key) {
-                        return Some(current_id);
-                    }
-                }
-                TileKind::Layout { tiles, .. } => {
-                    for &child_id in tiles.iter() {
-                        if let res @ Some(_) = traverse(arena, child_id, key) {
-                            return res;
-                        }
-                    }
-                }
-            }
-            None
-        }
-
-        traverse(&self.arena, self.root, key)
-    }
-
-    pub fn swap_window<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {
+    pub fn swap_windows<'a>(&mut self, lhs: impl SearchKey<'a>, rhs: impl SearchKey<'a>) {
         let Some(lhs_id) = self.find_tile_id(lhs.into()) else {
             return;
         };
@@ -681,6 +526,60 @@ impl<T: TileTreeWindow> TileTree<T> {
         lhs_inner.swap_location_size(&mut rhs_inner);
     }
 
+    fn collect_all_windows(
+        &mut self,
+        mut filter: impl FnMut(&T) -> bool,
+    ) -> Vec<(T, Option<TileRatio>)> {
+        fn collect<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            id: TileId,
+            filter: &mut impl FnMut(&T) -> bool,
+            result: &mut Vec<(T, Option<TileRatio>)>,
+        ) {
+            match &arena[id].kind {
+                TileKind::Window { window, ratio } if filter(window) => {
+                    result.push((window.clone(), *ratio));
+                }
+                TileKind::Layout { tiles, .. } => {
+                    for &child_id in tiles {
+                        collect(arena, child_id, filter, result);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut result = Vec::new();
+        collect(&self.arena, self.root, &mut filter, &mut result);
+        result
+    }
+
+    fn find_tile_id(&self, key: TileTreeSearchKey) -> Option<TileId> {
+        fn traverse<T: TileTreeWindow>(
+            arena: &TileArena<T>,
+            current_id: TileId,
+            key: TileTreeSearchKey,
+        ) -> Option<TileId> {
+            match &arena[current_id].kind {
+                TileKind::Window { window, .. } => {
+                    if window.match_id(key) {
+                        return Some(current_id);
+                    }
+                }
+                TileKind::Layout { tiles, .. } => {
+                    for &child_id in tiles.iter() {
+                        if let res @ Some(_) = traverse(arena, child_id, key) {
+                            return res;
+                        }
+                    }
+                }
+            }
+            None
+        }
+
+        traverse(&self.arena, self.root, key)
+    }
+
     fn find_parent_with_split(
         &self,
         start_id: TileId,
@@ -702,38 +601,140 @@ impl<T: TileTreeWindow> TileTree<T> {
         None
     }
 
-    fn get_neighbor_id(
-        &self,
-        parent_id: TileId,
-        child_id: TileId,
-        direction: Direction,
-    ) -> Option<TileId> {
-        let TileKind::Layout {
-            tiles, orientation, ..
-        } = &self.arena[parent_id].kind
-        else {
-            return None;
-        };
-        let offset = {
-            let dir_offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
-                1
-            } else {
-                -1
-            };
-            let orient_offset = if matches!(orientation, TileOrientation::BottomRight) {
-                1
-            } else {
-                -1
-            };
-            dir_offset * orient_offset
-        };
-        let child_index = self.arena[parent_id].as_layout_tiles_get_index(child_id) as i32;
-        let other_index = child_index + offset;
-        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
-        in_bounds.then(|| tiles[other_index as usize])
+    pub fn update_layout(&mut self, layout_name: &str) {
+        let windows = self.collect_all_windows(|_| true);
+        self.arena.clear();
+        self.root = Self::insert_layout_tile(
+            &mut self.arena,
+            &self.layouts.borrow().get(layout_name),
+            layout_name.to_string(),
+            1.0,
+            None,
+        );
+        self.current_tile = self.root;
+        self.count = 0;
+
+        for (window, ratio) in windows {
+            self.insert(window, ratio);
+        }
     }
 
-    fn find_windows_in_direction(
+    // TODO improve efficiency
+    pub fn recalculate_all_sizes(
+        &mut self,
+        location: Point<i32, Logical>,
+        size: Size<i32, Logical>,
+    ) {
+        enum Update {
+            Window(TileId, Rectangle<i32, Logical>),
+            Layout(TileId, Rectangle<i32, Logical>),
+        }
+
+        fn traverse<T>(
+            arena: &TileArena<T>,
+            id: TileId,
+            mut location: Point<i32, Logical>,
+            size: Size<i32, Logical>,
+            updates: &mut Vec<Update>,
+        ) {
+            updates.push(Update::Layout(id, Rectangle::new(location, size)));
+
+            let TileKind::Layout {
+                split,
+                orientation,
+                ref tiles,
+                ..
+            } = arena[id].kind
+            else {
+                return;
+            };
+
+            let total_ratio: f64 = tiles.iter().map(|&tid| arena[tid].ratio).sum();
+            let total_len = match split {
+                TileSplit::Vertical => size.w,
+                TileSplit::Horizontal => size.h,
+            };
+
+            let floats: Vec<_> = tiles
+                .iter()
+                .map(|&tid| total_len as f64 * arena[tid].ratio / total_ratio)
+                .collect();
+            let ints = floats_to_ints(&floats, total_len);
+
+            let mut children: Vec<_> = tiles.iter().copied().zip(ints).collect();
+            if matches!(orientation, TileOrientation::TopLeft) {
+                children.reverse();
+            }
+
+            for (tid, t_len) in children {
+                let t_sz = match split {
+                    TileSplit::Vertical => Size::new(t_len, size.h),
+                    TileSplit::Horizontal => Size::new(size.w, t_len),
+                };
+
+                match &arena[tid].kind {
+                    TileKind::Window { .. } => {
+                        updates.push(Update::Window(tid, Rectangle::new(location, t_sz)))
+                    }
+                    TileKind::Layout { .. } => traverse(arena, tid, location, t_sz, updates),
+                }
+
+                match split {
+                    TileSplit::Vertical => location.x += t_len,
+                    TileSplit::Horizontal => location.y += t_len,
+                }
+            }
+        }
+
+        let mut updates = Vec::new();
+        traverse(&self.arena, self.root, location, size, &mut updates);
+
+        for update in updates {
+            match update {
+                Update::Window(id, rect) => {
+                    let window = self.arena[id].as_window_mut();
+                    window.set_location(rect.loc);
+                    window.set_size(rect.size);
+                }
+                Update::Layout(id, rect) => {
+                    if let TileKind::Layout {
+                        rect: layout_rect, ..
+                    } = &mut self.arena[id].kind
+                    {
+                        *layout_rect = rect;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn find_windows_in_direction<'a>(
+        &self,
+        key: impl SearchKey<'a>,
+        direction: Direction,
+    ) -> Vec<&T> {
+        #[cfg(test)]
+        assert!(direction.bits().count_ones() == 1);
+
+        let Some(target_id) = self.find_tile_id(key.into()) else {
+            return Vec::new();
+        };
+        let target_window = &self.arena[target_id].as_window();
+        let target_rect = Rect::new(Rectangle::new(
+            target_window.get_location(),
+            target_window.get_size(),
+        ));
+
+        if direction.intersects(Direction::TOP | Direction::BOTTOM) {
+            let direction = direction.intersection(Direction::TOP | Direction::BOTTOM);
+            self.collect_windows_in_direction(target_id, direction, &target_rect)
+        } else {
+            let direction = direction.intersection(Direction::LEFT | Direction::RIGHT);
+            self.collect_windows_in_direction(target_id, direction, &target_rect)
+        }
+    }
+
+    fn collect_windows_in_direction(
         &self,
         target_id: TileId,
         direction: Direction,
@@ -857,33 +858,88 @@ impl<T: TileTreeWindow> TileTree<T> {
         results
     }
 
-    pub fn find_nearest_windows_in_direction<'a>(
+    fn get_neighbor_id(
         &self,
+        parent_id: TileId,
+        child_id: TileId,
+        direction: Direction,
+    ) -> Option<TileId> {
+        let TileKind::Layout {
+            tiles, orientation, ..
+        } = &self.arena[parent_id].kind
+        else {
+            return None;
+        };
+        let offset = {
+            let dir_offset = if direction.intersects(Direction::BOTTOM_RIGHT) {
+                1
+            } else {
+                -1
+            };
+            let orient_offset = if matches!(orientation, TileOrientation::BottomRight) {
+                1
+            } else {
+                -1
+            };
+            dir_offset * orient_offset
+        };
+        let child_index = self.arena[parent_id].as_layout_tiles_get_index(child_id) as i32;
+        let other_index = child_index + offset;
+        let in_bounds = (0..tiles.len() as i32).contains(&other_index);
+        in_bounds.then(|| tiles[other_index as usize])
+    }
+
+    pub fn resize_window<'a>(
+        &mut self,
         key: impl SearchKey<'a>,
         direction: Direction,
-    ) -> Vec<&T> {
-        #[cfg(test)]
-        assert!(direction.bits().count_ones() == 1);
-
-        let Some(target_id) = self.find_tile_id(key.into()) else {
-            return Vec::new();
+        unit: impl Into<TileResizeUnit>,
+    ) {
+        let Some(window_id) = self.find_tile_id(key.into()) else {
+            return;
         };
-        let target_window = &self.arena[target_id].as_window();
-        let target_rect = Rect::new(Rectangle::new(
-            target_window.get_location(),
-            target_window.get_size(),
-        ));
+        let Some(parent_id) = self.arena[window_id].parent else {
+            return;
+        };
+        let TileKind::Layout { split, .. } = &self.arena[parent_id].kind else {
+            return;
+        };
 
+        let split = *split;
+        let unit = unit.into();
         if direction.intersects(Direction::TOP | Direction::BOTTOM) {
             let direction = direction.intersection(Direction::TOP | Direction::BOTTOM);
-            self.find_windows_in_direction(target_id, direction, &target_rect)
-        } else {
+            match split {
+                TileSplit::Vertical => {
+                    if let Some((parent_id, child_id)) =
+                        self.find_parent_with_split(window_id, TileSplit::Horizontal)
+                    {
+                        self.adjust_neighbor_ratios(parent_id, child_id, direction, unit, false);
+                    }
+                }
+                TileSplit::Horizontal => {
+                    self.adjust_neighbor_ratios(parent_id, window_id, direction, unit, false);
+                }
+            }
+        }
+        if direction.intersects(Direction::LEFT | Direction::RIGHT) {
             let direction = direction.intersection(Direction::LEFT | Direction::RIGHT);
-            self.find_windows_in_direction(target_id, direction, &target_rect)
+            match split {
+                TileSplit::Vertical => {
+                    self.adjust_neighbor_ratios(parent_id, window_id, direction, unit, false);
+                }
+                TileSplit::Horizontal => {
+                    if let Some((parent_id, child_id)) =
+                        self.find_parent_with_split(window_id, TileSplit::Vertical)
+                    {
+                        self.adjust_neighbor_ratios(parent_id, child_id, direction, unit, false);
+                    }
+                }
+            }
         }
     }
 
-    fn adjust_adjacent_ratios(
+    fn adjust_neighbor_ratios(
         &mut self,
         parent_id: TileId,
         child_id: TileId,
@@ -969,59 +1025,9 @@ impl<T: TileTreeWindow> TileTree<T> {
             }
         } else if let Some((ancestor_id, refer_id)) = self.find_parent_with_split(parent_id, *split)
         {
-            self.adjust_adjacent_ratios(ancestor_id, refer_id, direction, unit, false);
+            self.adjust_neighbor_ratios(ancestor_id, refer_id, direction, unit, false);
         } else if !in_loop && !matches!(unit, TileResizeUnit::Exact(..)) {
-            self.adjust_adjacent_ratios(parent_id, child_id, direction.opposite(), -unit, true);
-        }
-    }
-
-    pub fn resize_tile<'a>(
-        &mut self,
-        key: impl SearchKey<'a>,
-        direction: Direction,
-        unit: impl Into<TileResizeUnit>,
-    ) {
-        let Some(window_id) = self.find_tile_id(key.into()) else {
-            return;
-        };
-        let Some(parent_id) = self.arena[window_id].parent else {
-            return;
-        };
-        let TileKind::Layout { split, .. } = &self.arena[parent_id].kind else {
-            return;
-        };
-
-        let split = *split;
-        let unit = unit.into();
-        if direction.intersects(Direction::TOP | Direction::BOTTOM) {
-            let direction = direction.intersection(Direction::TOP | Direction::BOTTOM);
-            match split {
-                TileSplit::Vertical => {
-                    if let Some((parent_id, child_id)) =
-                        self.find_parent_with_split(window_id, TileSplit::Horizontal)
-                    {
-                        self.adjust_adjacent_ratios(parent_id, child_id, direction, unit, false);
-                    }
-                }
-                TileSplit::Horizontal => {
-                    self.adjust_adjacent_ratios(parent_id, window_id, direction, unit, false);
-                }
-            }
-        }
-        if direction.intersects(Direction::LEFT | Direction::RIGHT) {
-            let direction = direction.intersection(Direction::LEFT | Direction::RIGHT);
-            match split {
-                TileSplit::Vertical => {
-                    self.adjust_adjacent_ratios(parent_id, window_id, direction, unit, false);
-                }
-                TileSplit::Horizontal => {
-                    if let Some((parent_id, child_id)) =
-                        self.find_parent_with_split(window_id, TileSplit::Vertical)
-                    {
-                        self.adjust_adjacent_ratios(parent_id, child_id, direction, unit, false);
-                    }
-                }
-            }
+            self.adjust_neighbor_ratios(parent_id, child_id, direction.opposite(), -unit, true);
         }
     }
 }
@@ -2083,7 +2089,7 @@ mod tests {
         "nested layouts mixed split and orientation"
     )]
     fn test_update_tile_size(mut tree: TileTree<TestWindow>, expected: TileTree<TestWindow>) {
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected);
     }
 
@@ -2246,12 +2252,12 @@ mod tests {
         rhs: u32,
         expected: TileTree<TestWindow>,
     ) {
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (100, 100).into());
         let clone = tree.clone();
-        tree.swap_window(lhs, rhs);
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
+        tree.swap_windows(lhs, rhs);
+        tree.recalculate_all_sizes((0, 0).into(), (100, 100).into());
         assert_tree_eq!(tree, expected);
-        tree.swap_window(lhs, rhs);
+        tree.swap_windows(lhs, rhs);
         assert_tree_eq!(tree, clone);
     }
 
@@ -2507,10 +2513,10 @@ mod tests {
         direction: Direction,
         expected: Vec<u32>,
     ) {
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (100, 100).into());
         println!("{}", tree.visualize());
         assert_eq!(
-            tree.find_nearest_windows_in_direction(id, direction)
+            tree.find_windows_in_direction(id, direction)
                 .iter()
                 .map(|w| w.inner.borrow().id.unwrap())
                 .collect::<Vec<_>>(),
@@ -2524,10 +2530,10 @@ mod tests {
             window(id: 0),
             window(id: 1),
         ]);
-        tree.update_tile_size((0, 0).into(), (100, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (100, 100).into());
 
         let result: Vec<u32> = tree
-            .find_nearest_windows_in_direction(99, Direction::RIGHT)
+            .find_windows_in_direction(99, Direction::RIGHT)
             .iter()
             .map(|w| w.inner.borrow().id.unwrap())
             .collect();
@@ -2860,9 +2866,9 @@ mod tests {
         px: i32,
         expected: TileTree<TestWindow>,
     ) {
-        tree.update_tile_size((0, 0).into(), (200, 100).into());
-        tree.resize_tile(id, direction, WindowUnit::Px(px));
-        tree.update_tile_size((0, 0).into(), (200, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (200, 100).into());
+        tree.resize_window(id, direction, WindowUnit::Px(px));
+        tree.recalculate_all_sizes((0, 0).into(), (200, 100).into());
         assert_tree_eq!(tree, expected)
     }
 
@@ -2965,9 +2971,9 @@ mod tests {
         ratio: f64,
         expected: TileTree<TestWindow>,
     ) {
-        tree.update_tile_size((0, 0).into(), (200, 100).into());
-        tree.resize_tile(id, direction, TileResizeUnit::Ratio(ratio));
-        tree.update_tile_size((0, 0).into(), (200, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (200, 100).into());
+        tree.resize_window(id, direction, TileResizeUnit::Ratio(ratio));
+        tree.recalculate_all_sizes((0, 0).into(), (200, 100).into());
         assert_tree_eq!(tree, expected)
     }
 
@@ -3116,9 +3122,9 @@ mod tests {
         px: i32,
         expected: TileTree<TestWindow>,
     ) {
-        tree.update_tile_size((0, 0).into(), (200, 100).into());
-        tree.resize_tile(id, direction, px);
-        tree.update_tile_size((0, 0).into(), (200, 100).into());
+        tree.recalculate_all_sizes((0, 0).into(), (200, 100).into());
+        tree.resize_window(id, direction, px);
+        tree.recalculate_all_sizes((0, 0).into(), (200, 100).into());
         assert_tree_eq!(tree, expected)
     }
 }

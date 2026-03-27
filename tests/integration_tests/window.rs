@@ -95,7 +95,7 @@ fn test_close_window_keeps_focus_on_remaining() {
             let (_, title) = get_app_id_and_title(&mapped.wl_surface());
             assert_eq!(title, "1");
 
-            data.compositor.close_focused_window();
+            data.compositor.send_close_to_window();
             TestState::Running(1)
         }
         1 if active_workspace_has_n_windows(data, 1) => done(|data| {

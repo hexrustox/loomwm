@@ -18,8 +18,7 @@ use crate::integration_tests::common::{
 fn test_workspace_switch() {
     let handle = run_compositor_test(default_config(), 0, |data, phase| match phase {
         0 if active_workspace_has_n_windows(data, 1) => {
-            data.compositor
-                .switch_or_create_active_workspace(WorkspaceName::Id(2));
+            data.compositor.switch_workspace(WorkspaceName::Id(2));
             TestState::Running(1)
         }
         1 => {
@@ -29,14 +28,12 @@ fn test_workspace_switch() {
         }
         2 if active_workspace_has_n_windows(data, 1) => {
             assert_window_focused_in_workspace(data, WorkspaceName::Id(2));
-            data.compositor
-                .switch_or_create_active_workspace(WorkspaceName::Id(1));
+            data.compositor.switch_workspace(WorkspaceName::Id(1));
             TestState::Running(3)
         }
         3 => {
             assert_window_focused_in_workspace(data, WorkspaceName::Id(1));
-            data.compositor
-                .switch_or_create_active_workspace(WorkspaceName::Id(2));
+            data.compositor.switch_workspace(WorkspaceName::Id(2));
             TestState::Running(4)
         }
         4 => done(|data| {
@@ -57,7 +54,7 @@ fn test_move_window_to_workspace() {
             assert_window_focused_in_workspace(data, WorkspaceName::Id(1));
 
             data.compositor
-                .move_focused_window_to_workspace(WorkspaceName::Id(2), true);
+                .move_window_to_workspace(WorkspaceName::Id(2), true);
             TestState::Running(1)
         }
         1 => {
@@ -67,7 +64,7 @@ fn test_move_window_to_workspace() {
             assert_window_focused_in_workspace(data, WorkspaceName::Id(2));
 
             data.compositor
-                .move_focused_window_to_workspace(WorkspaceName::Id(1), false);
+                .move_window_to_workspace(WorkspaceName::Id(1), false);
             TestState::Running(2)
         }
         2 => done(|data| {
@@ -95,7 +92,7 @@ fn test_focus_window_in_direction() {
                 let mapped = get_tiling_window(data, 1);
                 assert!(is_focused(data, mapped.wl_surface()));
                 data.compositor
-                    .focus_tiling_window_in_direction(Direction::LEFT);
+                    .focus_adjacent_tiling_window(Direction::LEFT);
                 TestState::Running(1)
             }
             1 => done(|data| {
@@ -124,7 +121,7 @@ fn test_swap_window_in_direction() {
                 let mapped = get_tiling_window(data, 1);
                 assert!(is_focused(data, mapped.wl_surface()));
                 data.compositor
-                    .swap_focused_tiling_window_in_direction(Direction::LEFT);
+                    .swap_with_adjacent_tiling_window(Direction::LEFT);
                 TestState::Running(1)
             }
             1 => {
@@ -158,7 +155,7 @@ fn test_resize_window_in_direction() {
                 let mapped = get_tiling_window(data, 1);
                 assert_eq!(mapped.get_size(), (50, 100).into());
                 data.compositor
-                    .resize_focused_tiling_window(Direction::LEFT, WindowUnit::Px(10));
+                    .resize_adjacent_tiling_window(Direction::LEFT, WindowUnit::Px(10));
                 TestState::Running(1)
             }
             1 => done(|data| {
@@ -187,7 +184,7 @@ fn test_toggle_window_floating() {
                 0 if active_workspace_has_n_windows(data, 1) => {
                     assert_eq!(get_floating_windows_count(data), 0);
                     assert_eq!(get_tiling_windows_count(data), 1);
-                    data.compositor.toggle_focused_window_floating(None);
+                    data.compositor.toggle_window_floating_state(None);
                     TestState::Running(1)
                 }
                 1 => done(|data| {
@@ -218,12 +215,12 @@ fn test_toggle_floating_window_hidden() {
                     let renderer = data.backend.headless().get_renderer();
                     *elems.borrow_mut() = workspace.render_elements(renderer).len();
 
-                    assert!(!workspace.get_floating_window_hidden());
+                    assert!(!workspace.is_floating_hidden());
                     let mapped = get_floating_window(data);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
-                        .set_focused_workspace_floating_window_hidden(None, Some(true));
+                        .set_floating_window_visibility(None, Some(true));
                     TestState::Running(1)
                 }
                 1 => {
@@ -233,22 +230,22 @@ fn test_toggle_floating_window_hidden() {
                     let renderer = data.backend.headless().get_renderer();
                     assert!(*elems.borrow() > workspace.render_elements(renderer).len());
 
-                    assert!(workspace.get_floating_window_hidden());
+                    assert!(workspace.is_floating_hidden());
                     let mapped = get_tiling_window(data, 0);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
-                        .set_focused_workspace_floating_window_hidden(None, Some(true));
+                        .set_floating_window_visibility(None, Some(true));
                     TestState::Running(2)
                 }
                 2 => {
                     let workspace = get_active_workspace(data);
-                    assert!(!workspace.get_floating_window_hidden());
+                    assert!(!workspace.is_floating_hidden());
                     let mapped = get_floating_window(data);
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
-                        .set_focused_workspace_floating_window_hidden(Some(true), Some(false));
+                        .set_floating_window_visibility(Some(true), Some(false));
                     TestState::Running(3)
                 }
                 3 => {
@@ -257,7 +254,7 @@ fn test_toggle_floating_window_hidden() {
                     assert!(is_focused(data, mapped.wl_surface()));
 
                     data.compositor
-                        .set_focused_workspace_floating_window_hidden(Some(false), Some(false));
+                        .set_floating_window_visibility(Some(false), Some(false));
                     TestState::Running(4)
                 }
                 4 => done(|data| {

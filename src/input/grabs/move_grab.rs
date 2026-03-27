@@ -48,7 +48,7 @@ impl PointerGrab<WindowManagerState> for MoveGrab {
         let delta = event.location - self.start_data.location;
         let new_location = self.last_location + delta;
         if let Some(FoundMappedWindow { mut mapped, .. }) =
-            data.find_mapped_window(&self.mapped.wl_surface())
+            data.find_mapped_window_by_surface(&self.mapped.wl_surface())
         {
             mapped.set_location(new_location.to_i32_round());
         }

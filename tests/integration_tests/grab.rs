@@ -181,7 +181,7 @@ fn test_swap_grab() {
                 let mapped = get_tiling_window(data, 0);
                 let hidden = data
                     .compositor
-                    .get_focused_workspace_floating_window_hidden();
+                    .is_floating_window_hidden();
 
                 let pointer = data.compositor.get_pointer();
                 let pointer_location = pointer.current_location();

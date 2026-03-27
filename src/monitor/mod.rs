@@ -143,14 +143,14 @@ pub struct FoundMappedWindow {
 }
 
 impl WindowManagerState {
-    pub fn find_mapped_window(&self, surface: &WlSurface) -> Option<FoundMappedWindow> {
+    pub fn find_mapped_window_by_surface(&self, surface: &WlSurface) -> Option<FoundMappedWindow> {
         self.monitors
             .get_monitor()
             .workspaces
             .iter()
             .find_map(|workspace| {
                 workspace
-                    .find_window(surface)
+                    .find_window_by_surface(surface)
                     .map(|mapped| FoundMappedWindow {
                         mapped: mapped.clone(),
                         workspace_name: workspace.get_name().clone(),
@@ -167,7 +167,7 @@ impl WindowManagerState {
             .find_map(|workspace| {
                 let workspace_name = workspace.get_name().clone();
                 workspace
-                    .remove_window(surface)
+                    .remove_window_by_surface(surface)
                     .map(|mapped| FoundMappedWindow {
                         mapped,
                         workspace_name,
@@ -176,7 +176,7 @@ impl WindowManagerState {
             })
     }
 
-    pub fn find_mapped_window_under(
+    pub fn find_mapped_window_at_point(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<FoundMappedWindow> {
@@ -184,7 +184,7 @@ impl WindowManagerState {
         let workspace_name = monitor.get_active_workspace_name();
         monitor
             .get_workspace(workspace_name)
-            .find_mapped_window_under(point)
+            .window_at_point(point)
             .map(|(mapped, location)| FoundMappedWindow {
                 mapped: mapped.clone(),
                 workspace_name: workspace_name.clone(),
@@ -192,11 +192,11 @@ impl WindowManagerState {
             })
     }
 
-    pub fn find_surface_under(
+    pub fn find_surface_at_point(
         &self,
         point: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.find_mapped_window_under(point).and_then(
+        self.find_mapped_window_at_point(point).and_then(
             |FoundMappedWindow {
                  mapped, location, ..
              }| {
@@ -215,7 +215,7 @@ impl WindowManagerState {
         let monitor = self.monitors.get_monitor();
         for workspace in &monitor.workspaces {
             let workspace_name = workspace.get_name();
-            for mapped in workspace.windows_iter() {
+            for mapped in workspace.iter_all_windows() {
                 let properties = self
                     .window_rules
                     .get_dynamic_properties(mapped, workspace_name.clone());
@@ -258,7 +258,7 @@ impl WindowManagerState {
         }
     }
 
-    pub fn update_workspaces_tiling_layout(&mut self, layout_name: &str) {
+    pub fn update_tiling_layout(&mut self, layout_name: &str) {
         let monitor = self.monitors.get_monitor_mut();
         for workspace in &mut monitor.workspaces {
             workspace.update_tiling_layout(layout_name);
@@ -268,7 +268,7 @@ impl WindowManagerState {
     pub fn refresh_windows(&self) {
         let monitor = self.monitors.get_monitor();
         for workspace in &monitor.workspaces {
-            workspace.refresh();
+            workspace.refresh_windows();
         }
     }
 
@@ -278,7 +278,7 @@ impl WindowManagerState {
             let output = workspace.get_output();
             let time = get_monotonic_time();
 
-            workspace.windows_iter().for_each(|mapped| {
+            workspace.iter_all_windows().for_each(|mapped| {
                 mapped
                     .window()
                     .send_frame(&output, time, None, |_, _| Some(output.clone()))

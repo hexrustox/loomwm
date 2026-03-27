@@ -56,7 +56,7 @@ impl CompositorHandler for WindowManagerState {
                     };
 
                     window.on_commit();
-                    self.add_window(window, properties);
+                    self.register_new_window(window, properties);
                 } else {
                     let unmapped = entry.get();
 
@@ -95,7 +95,9 @@ impl CompositorHandler for WindowManagerState {
             }
 
             // previously-mapped root
-            if let Some(FoundMappedWindow { mut mapped, .. }) = self.find_mapped_window(surface) {
+            if let Some(FoundMappedWindow { mut mapped, .. }) =
+                self.find_mapped_window_by_surface(surface)
+            {
                 mapped.window().on_commit();
                 mapped.resize_handle_commit();
 
@@ -105,7 +107,9 @@ impl CompositorHandler for WindowManagerState {
         }
 
         // non-root
-        if let Some(FoundMappedWindow { mapped, .. }) = self.find_mapped_window(&root_surface) {
+        if let Some(FoundMappedWindow { mapped, .. }) =
+            self.find_mapped_window_by_surface(&root_surface)
+        {
             mapped.window().on_commit();
 
             return;

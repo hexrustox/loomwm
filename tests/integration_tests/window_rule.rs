@@ -41,7 +41,7 @@ open-in-workspace = 2
         |data| {
             let workspace = get_active_workspace(data);
             assert_eq!(workspace.get_name(), &WorkspaceName::Id(2));
-            assert_eq!(workspace.windows_count(), 1);
+            assert_eq!(workspace.window_count(), 1);
         }; "workspace"
     )]
 #[test_case(
