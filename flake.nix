@@ -45,31 +45,6 @@
                 name = "codebook-lsp";
               }
               {
-                pkg = uv;
-                extraOpts = [
-                  "-t"
-                  "--workdir=$(pwd)"
-                ];
-              }
-              {
-                name = "ruff";
-                bin = "uv";
-                args = [
-                  "tool"
-                  "run"
-                  "ruff"
-                ];
-              }
-              {
-                name = "ty";
-                bin = "uv";
-                args = [
-                  "tool"
-                  "run"
-                  "ty"
-                ];
-              }
-              {
                 name = "rust-analyzer";
               }
               {
