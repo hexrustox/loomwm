@@ -28,15 +28,28 @@ impl<'de> Deserialize<'de> for Direction {
             type Value = Direction;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("one of the following flags: top, bottom, left, right, top_left, bottom_left, top_right, bottom_right")
+                formatter.write_str("one of: top, bottom, left, right, top_left, bottom_left, top_right, bottom_right")
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
-                Direction::from_name(&value.to_uppercase())
-                    .ok_or(E::invalid_value(de::Unexpected::Str(value), &self))
+                Direction::from_name(&value.to_uppercase()).ok_or_else(|| {
+                    E::unknown_variant(
+                        value,
+                        &[
+                            "top",
+                            "bottom",
+                            "left",
+                            "right",
+                            "top_left",
+                            "bottom_left",
+                            "top_right",
+                            "bottom_right",
+                        ],
+                    )
+                })
             }
         }
 
@@ -90,7 +103,7 @@ impl<'de> Deserialize<'de> for WindowLocation {
             type Value = WindowLocation;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str(r#""center" or [x, y]"#)
+                formatter.write_str("'center' or [x, y]")
             }
 
             fn visit_str<E>(self, value: &str) -> Result<WindowLocation, E>
@@ -309,7 +322,7 @@ impl<'de> Deserialize<'de> for WindowUnit {
             type Value = WindowUnit;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a size unit")
+                formatter.write_str(r#"a pixel string (e.g. "10px") or a ratio number"#)
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -319,7 +332,7 @@ impl<'de> Deserialize<'de> for WindowUnit {
                 v.strip_suffix("px")
                     .and_then(|px| px.parse().ok())
                     .map(|px: i32| WindowUnit::Px(px))
-                    .ok_or(E::custom("invalid pixel"))
+                    .ok_or(E::invalid_value(de::Unexpected::Str(v), &self))
             }
 
             fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
@@ -407,7 +420,7 @@ impl<'de> Deserialize<'de> for KeyCombo {
     {
         deserialize_combo(
             deserializer,
-            "a keybinding string",
+            "a keybinding string (e.g. 'ctrl+shift+a')",
             |s| {
                 let key = xkb::keysym_from_name(s, xkb::KEYSYM_CASE_INSENSITIVE);
                 if key == xkb::Keysym::NoSymbol {
@@ -428,7 +441,7 @@ impl<'de> Deserialize<'de> for PointerCombo {
     {
         deserialize_combo(
             deserializer,
-            "a pointer binding string",
+            "a pointer binding string (e.g. 'alt+btn_left')",
             |s| {
                 KeyCode::from_str(&s.to_uppercase())
                     .map_err(|_| format!("{} is not a valid key code", s))
@@ -451,10 +464,7 @@ where
             "alt" => modifiers |= KeyModifiers::ALT,
             "super" => modifiers |= KeyModifiers::SUPER,
             _ => {
-                return Err(E::invalid_value(
-                    de::Unexpected::Str(m),
-                    &"a valid modifier (ctrl, shift, alt, super)",
-                ));
+                return Err(E::unknown_variant(m, &["ctrl", "shift", "alt", "super"]));
             }
         }
     }
