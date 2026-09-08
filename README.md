@@ -12,13 +12,12 @@
 
 LoomWM is a desktop environment for Linux that keeps your windows perfectly organized — no overlapping, no dragging, no resizing by hand. Open as many apps as you like: LoomWM arranges each one into a tidy slot on screen, so you always see everything at a glance.
 
-And it has a trick up its sleeve: LoomWM quietly learns which arrangement you prefer and can tidy your windows for you with a single keystroke.
-
 <p align="center">
   <img src="assets/screenshot.png" alt="LoomWM tiling windows into a neat grid" width="100%">
 </p>
 
-One keystroke hands your windows to the AI assistant. Before: a scattered mess. After: everything snapped into the arrangement it has learned from you.
+And it has a trick up its sleeve: LoomWM quietly learns which arrangement you prefer and can tidy your windows for you with a single keystroke.
+One press of the assistant's shortcut later:
 
 **Before:**
 
