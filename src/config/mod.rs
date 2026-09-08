@@ -1,6 +1,9 @@
 use anyhow::anyhow;
 use serde::Deserialize;
-use std::{fs::read_to_string, path::PathBuf};
+use std::{
+    fs::read_to_string,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     input::{KeyBindings, PointerBindings, ResizeLocation},
@@ -26,7 +29,7 @@ pub struct Config {
 
 impl Config {
     pub fn path() -> PathBuf {
-        config_dir().join("config.toml")
+        Path::new("./example/config.toml").to_path_buf()
     }
 
     pub fn read() -> anyhow::Result<Self> {

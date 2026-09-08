@@ -30,7 +30,7 @@ border = { width = 2, color = "90a959" }
 opacity = 0.8
 
 [layouts]
-master = { nodes = [{ ratio = 1.5 }, { layout = "slaves" }] }
+master = { nodes = [{ }, { layout = "slaves" }] }
 slaves = { split = "horizontal", nodes = [{ repeat = 3 }] }
 default = "master"
 # main = { nodes = [{ layout = "sub", repeat = 2 }] }
@@ -77,6 +77,7 @@ repeat-rate = 25
 "alt+f" = { action = "toggle_fullscreen" }
 "alt+q" = { action = "close_window" }
 "alt+return" = { action = "execute", command = ["alacritty"] }
+"alt+x" = { action = "execute", command = ["firefox"] }
 "alt+a" = { action = "assistant" }
 
 [pointer.bindings]

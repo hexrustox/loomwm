@@ -89,7 +89,7 @@ impl Winit {
             let (renderer, mut framebuffer) = self.backend.bind().unwrap();
 
             self.damage_tracker
-                .render_output(renderer, &mut framebuffer, 0, &elements, [0.; 4])
+                .render_output(renderer, &mut framebuffer, 0, &elements, [1., 1., 1., 1.])
                 .unwrap()
         };
 

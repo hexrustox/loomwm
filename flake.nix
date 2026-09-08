@@ -21,102 +21,6 @@
       system:
       let
         pkgs = import nixpkgs { overlays = [ rust-overlay.overlays.default ]; };
-        host-pkgs = import <nixpkgs> { };
-        capsule-lib = capsule.lib {
-          inherit pkgs;
-          name = "loomwm";
-          devTools =
-            with host-pkgs;
-            [
-              nil
-              nixfmt
-              taplo
-              {
-                pkg = opencode;
-                extraOpts = [
-                  "-t"
-                ];
-
-              }
-            ]
-            ++ (with pkgs; [
-              {
-                pkg = codebook;
-                name = "codebook-lsp";
-              }
-              {
-                name = "rust-analyzer";
-              }
-              {
-                name = "cargo";
-                extraOpts = [
-                  "-t"
-                  "--workdir=$(pwd)"
-                ];
-              }
-            ]);
-          runtimeDeps =
-            with host-pkgs;
-            [ nix ]
-            ++ (with pkgs; [
-              clang
-              mold
-              (rust-bin.stable."1.93.1".default.override {
-                extensions = [
-                  "rust-src" # for rust-analyzer
-                  "rust-analyzer"
-                ];
-              })
-
-              cargo-deny
-              cargo-edit
-              cargo-machete
-
-              pkg-config
-
-              alacritty
-              firefox
-              weston
-            ]);
-          extraOpts = [
-            "--pid host"
-            "--uts host"
-
-            "--env=HOME"
-
-            "--env=COLORTERM=truecolor"
-            "--env=TERM=xterm-256color"
-
-            "--env=LIBRARY_PATH"
-            "--env=PKG_CONFIG_PATH"
-            "--env=LD_LIBRARY_PATH"
-            "--env=GBM_BACKENDS_PATH"
-            "--env=LIBGL_DRIVERS_PATH"
-            "--env=__EGL_VENDOR_LIBRARY_FILENAMES"
-            "--env=VK_ICD_FILENAMES"
-
-            "--tmpfs=/tmp"
-
-            "--volume=/etc/fonts:/etc/fonts:ro"
-            "--volume=/etc/static/ssl/certs:/etc/ssl/certs:ro"
-            "--volume=\"${pkgs.libdrm}/share/libdrm/amdgpu.ids\":/opt/amdgpu/share/libdrm/amdgpu.ids:ro"
-
-            "--volume=home:\"$HOME\""
-            "--volume=\"$HOME/.cargo\":\"$HOME/.cargo\""
-            "--volume=\"./example\":\"$HOME/.config/loomwm\""
-
-            "--env=WAYLAND_DISPLAY"
-            "--env=XDG_RUNTIME_DIR=/tmp/runtime"
-            "--volume=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/runtime/$WAYLAND_DISPLAY:ro"
-
-            "--device=/dev/dri"
-            "--device=/dev/kfd"
-
-            "--cap-add=CAP_SYS_PTRACE"
-          ];
-          removeOpts = ["--cap-drop=all"];
-          image = "ubuntu:latest";
-        };
       in
       {
         devShells.default =
@@ -131,10 +35,21 @@
             ];
           in
           pkgs.mkShellNoCC {
-            inherit (capsule-lib) packages;
-            shellHook = ''
-              ${capsule-lib.shellHook}
-            '';
+            packages = with pkgs; [
+              clang
+              mold
+              (rust-bin.stable."1.93.1".default.override {
+                extensions = [
+                  "rust-src" # for rust-analyzer
+                  "rust-analyzer"
+                ];
+              })
+              pkg-config
+
+              alacritty
+              firefox
+              fastfetch
+            ];
 
             LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [ pkgs.libxkbcommon ]}";
             PKG_CONFIG_PATH = "${pkgs.lib.makeSearchPath "lib/pkgconfig" [ pkgs.libxkbcommon ]}";
