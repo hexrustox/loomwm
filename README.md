@@ -20,14 +20,9 @@ And it has a trick up its sleeve: LoomWM quietly learns which arrangement you pr
 
 One keystroke hands your windows to the AI assistant. Before: a scattered mess. After: everything snapped into the arrangement it has learned from you.
 
-<p align="center">
-  <strong>Before</strong><br>
-  <img src="assets/before_assistant.png" alt="Windows scattered before the AI assistant" width="49%">
-  &nbsp;
-  <img src="assets/after_assistant.png" alt="Windows arranged by the AI assistant" width="49%">
-  <br>
-  <strong>After</strong>
-</p>
+| Before | After |
+| :---: | :---: |
+| ![Windows scattered before the AI assistant](assets/before_assistant.png) | ![Windows arranged by the AI assistant](assets/after_assistant.png) |
 
 ## Features
 
